@@ -12,7 +12,10 @@ def test_ingest_and_query_literature(workspace):
           "authors": ["Ada Lovelace", "Grace Hopper"],
           "year": 2026,
           "venue": "arXiv",
-          "problem": "Understand how dropout changes optimization and generalization in vision transformers.",
+          "problem": (
+              "Understand how dropout changes optimization and generalization "
+              "in vision transformers."
+          ),
           "method": "Benchmark head-wise and layer-wise dropout schedules across ViT sizes.",
           "claimed_results": "Head-wise dropout improves top-1 accuracy by 0.7 on ImageNet-1k.",
           "assumptions": "ImageNet-scale supervised training.",
@@ -27,4 +30,3 @@ def test_ingest_and_query_literature(workspace):
 
   assert rows[0]["paper_id"] == "arxiv:1234.5678"
   assert baselines[0]["paper_id"] == "arxiv:1234.5678"
-

@@ -5,6 +5,7 @@ interface UseWebSocketOptions {
   onMessage?: (event: MessageEvent<string>) => void
   onClose?: () => void
   onError?: () => void
+  retryDelayMs?: number
 }
 
 export function useWebSocket(url: string, options: UseWebSocketOptions) {
@@ -41,9 +42,10 @@ export function useWebSocket(url: string, options: UseWebSocketOptions) {
       socket.onmessage = (event) => handleMessage(event)
       socket.onerror = () => handleError()
       socket.onclose = () => {
+        socketRef.current = null
         handleClose()
         if (!disposed) {
-          retryRef.current = window.setTimeout(connect, 1000)
+          retryRef.current = window.setTimeout(connect, options.retryDelayMs ?? 1000)
         }
       }
     }
@@ -58,8 +60,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions) {
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [url])
+  }, [url, options.retryDelayMs])
 
   return socketRef
 }
-

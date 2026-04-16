@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS mem_edges (
 CREATE INDEX IF NOT EXISTS idx_mem_edges_src ON mem_edges(src);
 CREATE INDEX IF NOT EXISTS idx_mem_edges_dst ON mem_edges(dst);
 
+CREATE TABLE IF NOT EXISTS mem_snapshots (
+  snapshot_id TEXT PRIMARY KEY,
+  label TEXT NOT NULL DEFAULT '',
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mem_snapshots_created_at ON mem_snapshots(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS mem_failures (
   failure_id INTEGER PRIMARY KEY AUTOINCREMENT,
   trigger TEXT NOT NULL,
@@ -114,4 +123,3 @@ CREATE TRIGGER IF NOT EXISTS mem_lit_compressed_au AFTER UPDATE ON mem_lit_compr
   INSERT INTO mem_lit_fts(rowid, title, problem, method, claimed_results)
   VALUES (new.rowid, coalesce(new.title, ''), coalesce(new.problem, ''), coalesce(new.method, ''), coalesce(new.claimed_results, ''));
 END;
-

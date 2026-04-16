@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -17,6 +18,8 @@ TOOL_NAMES = [
     "get_ancestors",
     "record_failure",
     "match_signatures",
+    "find_contradictions",
+    "snapshot",
     "ingest_paper",
     "query_literature",
     "find_baselines_for",
@@ -54,8 +57,126 @@ def _emit_event(con, kind: str, payload: dict) -> None:
             "INSERT INTO cockpit_events(kind, payload, created_at) VALUES(?,?,?)",
             (kind, json.dumps(payload, ensure_ascii=True), datetime.now(timezone.utc).isoformat()),
         )
-    except Exception:
-        pass
+    except sqlite3.Error:
+        return
+
+
+def _rows_to_dicts(rows) -> list[dict]:
+    return [dict(row) for row in rows]
+
+
+def _graph_snapshot(con) -> tuple[list[dict], list[dict]]:
+    nodes = con.execute(
+        """
+        SELECT node_id, kind, text, state, created_at, created_by, parent_id
+        FROM mem_nodes
+        ORDER BY created_at ASC, node_id ASC
+        """
+    ).fetchall()
+    edges = con.execute(
+        """
+        SELECT edge_id, src, dst, relation, rationale, created_at
+        FROM mem_edges
+        ORDER BY created_at ASC, edge_id ASC
+        """
+    ).fetchall()
+    return _rows_to_dicts(nodes), _rows_to_dicts(edges)
+
+
+def _recent_failures(con, limit: int = 25) -> list[dict]:
+    rows = con.execute(
+        """
+        SELECT failure_id, trigger, symptom, root_cause, resolution, signature,
+               seen_count, first_seen, last_seen
+        FROM mem_failures
+        ORDER BY last_seen DESC, failure_id DESC
+        LIMIT ?
+        """,
+        (max(1, limit),),
+    ).fetchall()
+    return _rows_to_dicts(rows)
+
+
+def _find_contradictions(con) -> list[dict]:
+    explicit_rows = con.execute(
+        """
+        SELECT e.edge_id, e.src, src.kind AS src_kind, src.text AS src_text, src.state AS src_state,
+               e.dst, dst.kind AS dst_kind, dst.text AS dst_text, dst.state AS dst_state,
+               e.rationale, e.created_at
+        FROM mem_edges e
+        JOIN mem_nodes src ON src.node_id = e.src
+        JOIN mem_nodes dst ON dst.node_id = e.dst
+        WHERE e.relation = 'contradicts'
+        ORDER BY e.created_at DESC, e.edge_id DESC
+        """
+    ).fetchall()
+    evidence_rows = con.execute(
+        """
+        SELECT n.node_id, n.kind, n.text, n.state,
+               SUM(CASE WHEN e.relation = 'supports' THEN 1 ELSE 0 END) AS support_count,
+               SUM(CASE WHEN e.relation = 'refutes' THEN 1 ELSE 0 END) AS refute_count,
+               MAX(e.created_at) AS last_edge_at
+        FROM mem_nodes n
+        JOIN mem_edges e ON e.dst = n.node_id
+        JOIN mem_nodes ev ON ev.node_id = e.src
+        WHERE e.relation IN ('supports', 'refutes')
+          AND ev.kind = 'evidence'
+          AND ev.state = 'active'
+        GROUP BY n.node_id, n.kind, n.text, n.state
+        HAVING support_count > 0 AND refute_count > 0
+        ORDER BY last_edge_at DESC, n.node_id DESC
+        """
+    ).fetchall()
+
+    contradictions: list[dict] = []
+    for row in explicit_rows:
+        contradictions.append(
+            {
+                "type": "explicit_edge",
+                "edge_id": row["edge_id"],
+                "src_id": row["src"],
+                "src_kind": row["src_kind"],
+                "src_text": row["src_text"],
+                "src_state": row["src_state"],
+                "dst_id": row["dst"],
+                "dst_kind": row["dst_kind"],
+                "dst_text": row["dst_text"],
+                "dst_state": row["dst_state"],
+                "rationale": row["rationale"] or "",
+                "created_at": row["created_at"],
+            }
+        )
+
+    for row in evidence_rows:
+        evidence = con.execute(
+            """
+            SELECT ev.node_id, ev.text, e.relation, e.created_at
+            FROM mem_edges e
+            JOIN mem_nodes ev ON ev.node_id = e.src
+            WHERE e.dst = ?
+              AND e.relation IN ('supports', 'refutes')
+              AND ev.kind = 'evidence'
+              AND ev.state = 'active'
+            ORDER BY e.created_at DESC, ev.node_id DESC
+            LIMIT 8
+            """,
+            (row["node_id"],),
+        ).fetchall()
+        contradictions.append(
+            {
+                "type": "evidence_conflict",
+                "node_id": row["node_id"],
+                "kind": row["kind"],
+                "text": row["text"],
+                "state": row["state"],
+                "support_count": int(row["support_count"]),
+                "refute_count": int(row["refute_count"]),
+                "evidence": _rows_to_dicts(evidence),
+                "created_at": row["last_edge_at"],
+            }
+        )
+
+    return contradictions
 
 
 def propose_hypothesis(text: str, parent_id: str | None = None, rationale: str = "") -> dict:
@@ -70,7 +191,10 @@ def propose_hypothesis(text: str, parent_id: str | None = None, rationale: str =
             if parent is None:
                 raise ValueError(f"Unknown parent node: {parent_id}")
         con.execute(
-            "INSERT INTO mem_nodes(node_id, kind, text, state, created_by, parent_id) VALUES(?,?,?,?,?,?)",
+            """
+            INSERT INTO mem_nodes(node_id, kind, text, state, created_by, parent_id)
+            VALUES(?,?,?,?,?,?)
+            """,
             (node_id, "hypothesis", text, "active", "claude", parent_id),
         )
         if parent_id:
@@ -88,18 +212,28 @@ def attach_evidence(node_id: str, evidence_text: str, polarity: str) -> dict:
         raise ValueError("polarity must be one of: supports, refutes")
     evidence_id = _node_id("evidence")
     with tx() as con:
-        target = con.execute("SELECT node_id FROM mem_nodes WHERE node_id = ?", (node_id,)).fetchone()
+        target = con.execute(
+            "SELECT node_id FROM mem_nodes WHERE node_id = ?",
+            (node_id,),
+        ).fetchone()
         if target is None:
             raise ValueError(f"Unknown node: {node_id}")
         con.execute(
-            "INSERT INTO mem_nodes(node_id, kind, text, state, created_by, parent_id) VALUES(?,?,?,?,?,?)",
+            """
+            INSERT INTO mem_nodes(node_id, kind, text, state, created_by, parent_id)
+            VALUES(?,?,?,?,?,?)
+            """,
             (evidence_id, "evidence", evidence_text, "active", "claude", node_id),
         )
         con.execute(
             "INSERT INTO mem_edges(src, dst, relation, rationale) VALUES(?,?,?,?)",
             (evidence_id, node_id, polarity, evidence_text),
         )
-        _emit_event(con, "graph_delta", {"node_id": evidence_id, "kind": "evidence", "text": evidence_text})
+        _emit_event(
+            con,
+            "graph_delta",
+            {"node_id": evidence_id, "kind": "evidence", "text": evidence_text},
+        )
     return {"evidence_id": evidence_id}
 
 
@@ -115,7 +249,12 @@ def mark_refuted(node_id: str, reason: str, evidence_ids: list[str] | None = Non
         _emit_event(
             con,
             "graph_delta",
-            {"node_id": node_id, "kind": "refuted", "text": reason, "evidence_ids": evidence_ids or []},
+            {
+                "node_id": node_id,
+                "kind": "refuted",
+                "text": reason,
+                "evidence_ids": evidence_ids or [],
+            },
         )
     return {"node_id": node_id, "state": "refuted"}
 
@@ -169,7 +308,10 @@ def record_failure(trigger: str, symptom: str, root_cause: str = "", resolution:
     with tx() as con:
         cur = con.execute(
             """
-            INSERT INTO mem_failures(trigger, symptom, root_cause, resolution, signature, seen_count, first_seen, last_seen)
+            INSERT INTO mem_failures(
+              trigger, symptom, root_cause, resolution, signature,
+              seen_count, first_seen, last_seen
+            )
             VALUES(?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
             """,
             (trigger, symptom, root_cause, resolution, signature),
@@ -206,6 +348,61 @@ def match_signatures(situation: str, k: int = 5) -> list[dict]:
         return [dict(row) for row in rows]
     finally:
         con.close()
+
+
+def find_contradictions() -> list[dict]:
+    """Return places where the graph contains explicit or evidence-level conflicts."""
+    con = _connect()
+    try:
+        return _find_contradictions(con)
+    finally:
+        con.close()
+
+
+def snapshot(label: str = "") -> dict:
+    """Persist a point-in-time snapshot of the graph, failures, and contradiction summary."""
+    snapshot_id = f"snap_{uuid4().hex[:12]}"
+    with tx() as con:
+        nodes, edges = _graph_snapshot(con)
+        frontier = _rows_to_dicts(
+            con.execute(
+                """
+                SELECT node_id, kind, text, state, created_at, created_by, parent_id
+                FROM mem_nodes
+                WHERE state = 'active' AND kind IN ('question', 'hypothesis')
+                ORDER BY created_at DESC
+                LIMIT 50
+                """
+            ).fetchall()
+        )
+        contradictions = _find_contradictions(con)
+        failures = _recent_failures(con)
+        paper_count = int(con.execute("SELECT COUNT(*) FROM mem_lit_compressed").fetchone()[0])
+        payload = {
+            "nodes": nodes,
+            "edges": edges,
+            "active_frontier": frontier,
+            "contradictions": contradictions,
+            "recent_failures": failures,
+            "counts": {
+                "nodes": len(nodes),
+                "edges": len(edges),
+                "active_frontier": len(frontier),
+                "contradictions": len(contradictions),
+                "recent_failures": len(failures),
+                "papers": paper_count,
+            },
+        }
+        con.execute(
+            "INSERT INTO mem_snapshots(snapshot_id, label, payload) VALUES(?,?,?)",
+            (snapshot_id, label, json.dumps(payload, ensure_ascii=True)),
+        )
+        _emit_event(
+            con,
+            "snapshot_created",
+            {"snapshot_id": snapshot_id, "label": label, "counts": payload["counts"]},
+        )
+    return {"snapshot_id": snapshot_id, "label": label, "counts": payload["counts"]}
 
 
 def ingest_paper(paper_id: str, source: str, structured: dict) -> dict:
@@ -299,4 +496,3 @@ def find_baselines_for(method_description: str, k: int = 5) -> list[dict]:
 
 
 bootstrap()
-

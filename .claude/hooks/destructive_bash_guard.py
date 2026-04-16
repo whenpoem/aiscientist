@@ -34,7 +34,10 @@ def main() -> None:
             json.dumps(
                 {
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": "Destructive bash command blocked. Append # CONFIRM_DESTRUCTIVE to proceed.",
+                    "permissionDecisionReason": (
+                        "Destructive bash command blocked. "
+                        "Append # CONFIRM_DESTRUCTIVE to proceed."
+                    ),
                 }
             )
         )
@@ -44,4 +47,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -7,11 +7,10 @@ from fastmcp import FastMCP
 from . import impl
 
 mcp = FastMCP("verify")
-mcp.tool(impl.leakage_check)
-mcp.tool(impl.record_provenance)
-mcp.tool(impl.check_provenance)
+
+for tool_name in impl.TOOL_NAMES:
+    mcp.tool(getattr(impl, tool_name))
 
 
 if __name__ == "__main__":
     mcp.run()
-

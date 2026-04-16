@@ -1,15 +1,26 @@
-import { startTransition, useEffect, useEffectEvent, useState } from 'react'
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from 'react'
 
+import { resolveApiBase, resolveWsUrl } from './config'
 import { HypothesisGraph } from './components/HypothesisGraph'
 import { InterventionPanel } from './components/InterventionPanel'
 import { VerificationTable } from './components/VerificationTable'
 import { useWebSocket } from './hooks/useWebSocket'
-import type { FailureRecord, GraphResponse, WsEvent } from './types'
+import type { CockpitStateResponse, WsEvent } from './types'
 
-const API_BASE = 'http://localhost:7777'
-const WS_BASE = 'ws://localhost:7777/ws/state'
+const API_BASE = resolveApiBase()
+const WS_BASE = resolveWsUrl(API_BASE)
 
-const EMPTY_GRAPH: GraphResponse = { nodes: [], edges: [] }
+const EMPTY_STATE: CockpitStateResponse = {
+  graph: { nodes: [], edges: [] },
+  failures: [],
+  interventions: [],
+  meta: {
+    api_base_url: API_BASE,
+    ws_url: WS_BASE,
+    last_event_id: 0,
+    mcp: { transport: 'http', url: `${API_BASE}/mcp` },
+  },
+}
 
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`)
@@ -20,44 +31,99 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 export default function App() {
-  const [graph, setGraph] = useState<GraphResponse>(EMPTY_GRAPH)
-  const [failures, setFailures] = useState<FailureRecord[]>([])
+  const [cockpitState, setCockpitState] = useState<CockpitStateResponse>(EMPTY_STATE)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [connectionLabel, setConnectionLabel] = useState('offline')
+  const [streamLabel, setStreamLabel] = useState('offline')
+  const [syncLabel, setSyncLabel] = useState('loading')
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
+  const [errorNotice, setErrorNotice] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const refreshPromiseRef = useRef<Promise<void> | null>(null)
+  const refreshQueuedRef = useRef(false)
+
+  const graph = cockpitState.graph
+  const failures = cockpitState.failures
+  const interventions = cockpitState.interventions
+  const meta = cockpitState.meta
 
   const refreshAll = useEffectEvent(async () => {
-    try {
-      const [nextGraph, nextFailures] = await Promise.all([
-        fetchJson<GraphResponse>('/graph'),
-        fetchJson<FailureRecord[]>('/failures'),
-      ])
+    if (refreshPromiseRef.current) {
+      refreshQueuedRef.current = true
+      await refreshPromiseRef.current
+      return
+    }
 
-      startTransition(() => {
-        setGraph(nextGraph)
-        setFailures(nextFailures)
-        if (selectedNodeId && !nextGraph.nodes.some((node) => node.node_id === selectedNodeId)) {
-          setSelectedNodeId(null)
-        }
-      })
-    } catch {
-      setConnectionLabel('backend down')
+    const refreshTask = (async () => {
+      setIsRefreshing(true)
+      setSyncLabel((current) => (current === 'loading' ? current : 'syncing'))
+
+      try {
+        const nextState = await fetchJson<CockpitStateResponse>('/state')
+
+        startTransition(() => {
+          setCockpitState(nextState)
+          if (selectedNodeId && !nextState.graph.nodes.some((node) => node.node_id === selectedNodeId)) {
+            setSelectedNodeId(null)
+          }
+        })
+        setLastUpdatedAt(new Date().toLocaleTimeString())
+        setErrorNotice('')
+        setSyncLabel('synced')
+      } catch {
+        setSyncLabel('degraded')
+        setErrorNotice('Cockpit backend is not responding. The dashboard will keep retrying.')
+      } finally {
+        setIsRefreshing(false)
+      }
+    })()
+
+    refreshPromiseRef.current = refreshTask
+
+    try {
+      await refreshTask
+    } finally {
+      refreshPromiseRef.current = null
+
+      if (refreshQueuedRef.current) {
+        refreshQueuedRef.current = false
+        void refreshAll()
+      }
     }
   })
 
   useEffect(() => {
     void refreshAll()
+    const intervalId = window.setInterval(() => {
+      void refreshAll()
+    }, 15000)
+
+    return () => window.clearInterval(intervalId)
   }, [])
 
-  useWebSocket(WS_BASE, {
-    onOpen: () => setConnectionLabel('live'),
-    onClose: () => setConnectionLabel('reconnecting'),
-    onError: () => setConnectionLabel('offline'),
+  useWebSocket(meta.ws_url || WS_BASE, {
+    onOpen: () => {
+      setStreamLabel('live')
+      void refreshAll()
+    },
+    onClose: () => setStreamLabel('reconnecting'),
+    onError: () => setStreamLabel('offline'),
     onMessage: (event) => {
-      const message = JSON.parse(event.data) as WsEvent
-      if (['graph_delta', 'failure_added', 'turn_end', 'intervention'].includes(message.kind)) {
+      let message: WsEvent
+      try {
+        message = JSON.parse(event.data) as WsEvent
+      } catch {
+        setSyncLabel('degraded')
+        return
+      }
+
+      if (
+        ['graph_delta', 'failure_added', 'turn_end', 'intervention'].includes(message.kind) ||
+        message.id > meta.last_event_id
+      ) {
         void refreshAll()
       }
     },
+    retryDelayMs: 1000,
   })
 
   return (
@@ -73,26 +139,47 @@ export default function App() {
               Hypotheses stream in from memory, failures accumulate as evidence, and the next prompt can be steered without leaving the workspace.
             </p>
           </div>
-          <div className="grid gap-2 text-sm text-[#aeb7a8] sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-              <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">nodes</p>
-              <p className="mt-2 text-xl font-semibold text-[#eef2e8]">{graph.nodes.length}</p>
-            </div>
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-              <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">failures</p>
-              <p className="mt-2 text-xl font-semibold text-[#eef2e8]">{failures.length}</p>
-            </div>
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-              <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">socket</p>
-              <p className="mt-2 text-xl font-semibold text-[#eef2e8]">{connectionLabel}</p>
+          <div className="flex flex-col gap-3 lg:items-end">
+            <button
+              className="mono rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-[#dbe2d5] disabled:opacity-50"
+              disabled={isRefreshing}
+              onClick={() => void refreshAll()}
+              type="button"
+            >
+              {isRefreshing ? 'refreshing' : 'refresh state'}
+            </button>
+            <div className="grid gap-2 text-sm text-[#aeb7a8] sm:grid-cols-4">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">nodes</p>
+                <p className="mt-2 text-xl font-semibold text-[#eef2e8]">{graph.nodes.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">failures</p>
+                <p className="mt-2 text-xl font-semibold text-[#eef2e8]">{failures.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">stream</p>
+                <p className="mt-2 text-xl font-semibold text-[#eef2e8]">{streamLabel}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#7d877c]">mcp</p>
+                <p className="mt-2 text-sm font-semibold text-[#eef2e8]">{meta.mcp.transport}</p>
+                <p className="mono mt-1 text-[11px] text-[#8e9889]">/mcp</p>
+              </div>
             </div>
           </div>
         </header>
 
+        {errorNotice ? (
+          <div className="border-b border-[#6f2c30] bg-[#311619]/70 px-6 py-3 text-sm text-[#f1d4d8]">
+            {errorNotice}
+          </div>
+        ) : null}
+
         <div className="flex flex-1 flex-col gap-4 p-4 xl:flex-row">
           <div className="min-h-[420px] xl:w-3/5">
             <HypothesisGraph
-              connectionLabel={connectionLabel}
+              connectionLabel={`${streamLabel} / ${syncLabel}`}
               graph={graph}
               onSelectNode={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
@@ -104,12 +191,24 @@ export default function App() {
               <VerificationTable rows={failures} />
             </div>
             <div className="min-h-[280px] flex-1">
-              <InterventionPanel onQueued={() => void refreshAll()} selectedNodeId={selectedNodeId} />
+              <InterventionPanel
+                apiBase={meta.api_base_url || API_BASE}
+                interventions={interventions}
+                onQueued={() => void refreshAll()}
+                selectedNodeId={selectedNodeId}
+              />
             </div>
           </div>
         </div>
+
+        <footer className="flex flex-col gap-2 border-t border-white/6 px-6 py-4 text-sm text-[#8e9889] md:flex-row md:items-center md:justify-between">
+          <p>State snapshot comes from one backend request, with live refresh from the event stream when available.</p>
+          <div className="mono flex flex-col gap-1 text-[11px] uppercase tracking-[0.16em] text-[#7f897e] md:items-end">
+            <span>last sync {lastUpdatedAt ?? 'pending'}</span>
+            <span>{meta.mcp.url}</span>
+          </div>
+        </footer>
       </div>
     </main>
   )
 }
-

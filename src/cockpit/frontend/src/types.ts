@@ -44,3 +44,28 @@ export interface WsEvent {
 
 export type InterventionKind = 'reject' | 'approve' | 'redirect' | 'constrain' | 'halt'
 
+export interface InterventionRecord {
+  id: number
+  kind: string
+  target: string | null
+  payload: string
+  created_at: string
+  delivered_at: string | null
+}
+
+export interface CockpitMeta {
+  api_base_url: string
+  ws_url: string
+  last_event_id: number
+  mcp: {
+    transport: string
+    url: string
+  }
+}
+
+export interface CockpitStateResponse {
+  graph: GraphResponse
+  failures: FailureRecord[]
+  interventions: InterventionRecord[]
+  meta: CockpitMeta
+}

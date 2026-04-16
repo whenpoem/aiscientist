@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from pathlib import Path
 
-DB_PATH = Path(".research-agent/state.db")
+from claudescientist.runtime import (
+    apply_schema_migration,
+    cache_key,
+    connect_sqlite,
+    state_db_path,
+)
+
 VERIFY_SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -22,32 +27,43 @@ CREATE TABLE IF NOT EXISTS ver_provenance (
 
 CREATE INDEX IF NOT EXISTS idx_ver_provenance_claim ON ver_provenance(claim);
 CREATE INDEX IF NOT EXISTS idx_ver_provenance_session ON ver_provenance(session_id);
+
+CREATE TABLE IF NOT EXISTS ver_metric_pins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  claim TEXT NOT NULL,
+  value TEXT NOT NULL,
+  provenance_id INTEGER NOT NULL,
+  session_id TEXT NOT NULL,
+  source_command TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(provenance_id) REFERENCES ver_provenance(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ver_metric_pins_claim ON ver_metric_pins(claim);
+CREATE INDEX IF NOT EXISTS idx_ver_metric_pins_session ON ver_metric_pins(session_id);
+CREATE INDEX IF NOT EXISTS idx_ver_metric_pins_provenance ON ver_metric_pins(provenance_id);
 """
 
-_BOOTSTRAPPED = False
+_BOOTSTRAPPED: set[str] = set()
 
 
 def bootstrap() -> None:
-    global _BOOTSTRAPPED
-    if _BOOTSTRAPPED:
+    path = state_db_path()
+    key = cache_key(path)
+    if key in _BOOTSTRAPPED:
         return
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(DB_PATH), timeout=5.0, isolation_level=None)
+    con = connect_sqlite(path)
     try:
-        con.row_factory = sqlite3.Row
-        con.executescript(VERIFY_SCHEMA)
+        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA)
     finally:
         con.close()
-    _BOOTSTRAPPED = True
+    _BOOTSTRAPPED.add(key)
 
 
 def _connect() -> sqlite3.Connection:
     bootstrap()
-    con = sqlite3.connect(str(DB_PATH), timeout=5.0, isolation_level=None)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL;")
-    con.execute("PRAGMA foreign_keys=ON;")
-    return con
+    return connect_sqlite(state_db_path())
 
 
 @contextmanager
@@ -62,4 +78,3 @@ def tx() -> sqlite3.Connection:
         raise
     finally:
         con.close()
-

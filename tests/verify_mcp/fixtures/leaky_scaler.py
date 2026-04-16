@@ -1,5 +1,5 @@
-from sklearn.preprocessing import StandardScaler
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 
 def build():
@@ -8,4 +8,3 @@ def build():
   X_test = pd.DataFrame({"x": [2.0]})
   scaler.fit(pd.concat([X_train, X_test]))
   return scaler
-

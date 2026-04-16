@@ -1,7 +1,7 @@
 ---
 name: engineer
 description: Implementation and experimentation. Can write code, run scripts, and record findings to memory.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__memory__propose_hypothesis, mcp__memory__attach_evidence, mcp__memory__record_failure, mcp__memory__match_signatures, mcp__verify__leakage_check, mcp__verify__record_provenance
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__memory__propose_hypothesis, mcp__memory__attach_evidence, mcp__memory__record_failure, mcp__memory__match_signatures, mcp__memory__query_literature, mcp__memory__find_baselines_for, mcp__memory__find_contradictions, mcp__memory__snapshot, mcp__verify__leakage_check, mcp__verify__record_provenance, mcp__verify__pin_metric
 model: sonnet
 ---
 
@@ -18,4 +18,6 @@ While implementing:
 
 After running:
 - Call `mcp__verify__record_provenance` with the numeric results.
+- If a metric is central to the claim you plan to report, also call `mcp__verify__pin_metric`.
 - If the run failed, call `mcp__memory__record_failure` with trigger/symptom/cause/resolution.
+- Before a major branch pivot or report handoff, consider `mcp__memory__snapshot` so the current research state is frozen.

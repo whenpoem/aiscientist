@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import os
+from functools import wraps
 
 from fastmcp import FastMCP
 
@@ -19,24 +21,20 @@ def _impl():
     return _impl_module
 
 
-@mcp.tool
-def leakage_check(script_path: str | None = None, script_text: str | None = None) -> dict:
-    """Run the leakage detector against a file path or raw script text."""
-    return _impl().leakage_check(script_path=script_path, script_text=script_text)
+def _build_tool(tool_name: str):
+    impl_fn = getattr(_impl_module, tool_name)
+
+    @wraps(impl_fn)
+    def wrapper(*args, **kwargs):
+        return getattr(_impl(), tool_name)(*args, **kwargs)
+
+    wrapper.__signature__ = inspect.signature(impl_fn)
+    return wrapper
 
 
-@mcp.tool
-def record_provenance(claim: str, value: str, session_id: str, source_command: str = "") -> dict:
-    """Store provenance for a numeric claim."""
-    return _impl().record_provenance(claim, value, session_id, source_command=source_command)
-
-
-@mcp.tool
-def check_provenance(claim: str) -> dict:
-    """Return the latest provenance evidence for a claim."""
-    return _impl().check_provenance(claim)
+for _tool_name in _impl_module.TOOL_NAMES:
+    globals()[_tool_name] = mcp.tool(_build_tool(_tool_name))
 
 
 if __name__ == "__main__":
     mcp.run()
-

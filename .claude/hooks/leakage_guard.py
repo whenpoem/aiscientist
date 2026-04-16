@@ -8,10 +8,11 @@ import os
 import re
 import sqlite3
 import sys
-from pathlib import Path
 from typing import Iterator
 
-DB = Path(".research-agent/state.db")
+from claudescientist.runtime import state_db_path
+
+DB = state_db_path()
 HELDOUT_RE = re.compile(
     r"(?i)(?:\.research-agent[\\/]+held_out|%USERPROFILE%[\\/]+\.research-agent|~[\\/]+\.research-agent[\\/]+held_out)"
 )
@@ -75,10 +76,12 @@ def main() -> None:
         if numeric_values:
             missing = _missing_provenance(numeric_values)
             if missing:
-                _deny(f"Markdown write blocked. Missing provenance for numeric claims: {', '.join(missing[:5])}")
+                _deny(
+                    "Markdown write blocked. Missing provenance for numeric claims: "
+                    + ", ".join(missing[:5])
+                )
     print("{}")
 
 
 if __name__ == "__main__":
     main()
-

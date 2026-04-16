@@ -1,6 +1,6 @@
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 
-import type { InterventionKind } from '../types'
+import type { InterventionKind, InterventionRecord } from '../types'
 
 const KINDS: { kind: InterventionKind; label: string; placeholder: string }[] = [
   { kind: 'reject', label: 'Reject', placeholder: 'user rejected this hypothesis' },
@@ -11,15 +11,22 @@ const KINDS: { kind: InterventionKind; label: string; placeholder: string }[] = 
 ]
 
 interface InterventionPanelProps {
+  apiBase: string
+  interventions: InterventionRecord[]
   selectedNodeId: string | null
   onQueued: () => void
 }
 
-export function InterventionPanel({ selectedNodeId, onQueued }: InterventionPanelProps) {
+export function InterventionPanel({
+  apiBase,
+  interventions,
+  selectedNodeId,
+  onQueued,
+}: InterventionPanelProps) {
   const [payload, setPayload] = useState('')
   const [activeKind, setActiveKind] = useState<InterventionKind>('reject')
   const [notice, setNotice] = useState('')
-  const [isPending, startTransition] = useTransition()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const submit = async (kind: InterventionKind) => {
     if (!selectedNodeId) {
@@ -29,20 +36,28 @@ export function InterventionPanel({ selectedNodeId, onQueued }: InterventionPane
 
     const defaultPayload = KINDS.find((item) => item.kind === kind)?.placeholder ?? ''
     const message = payload.trim() || defaultPayload
-    const response = await fetch('http://localhost:7777/intervene', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind, target: selectedNodeId, payload: message }),
-    })
+    setIsSubmitting(true)
 
-    if (!response.ok) {
+    try {
+      const response = await fetch(new URL('/intervene', `${apiBase}/`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, target: selectedNodeId, payload: message }),
+      })
+
+      if (!response.ok) {
+        setNotice('Cockpit backend is unavailable.')
+        return
+      }
+
+      setNotice(`Queued ${kind} for ${selectedNodeId}.`)
+      setPayload('')
+      onQueued()
+    } catch {
       setNotice('Cockpit backend is unavailable.')
-      return
+    } finally {
+      setIsSubmitting(false)
     }
-
-    setNotice(`Queued ${kind} for ${selectedNodeId}.`)
-    setPayload('')
-    onQueued()
   }
 
   return (
@@ -83,22 +98,54 @@ export function InterventionPanel({ selectedNodeId, onQueued }: InterventionPane
         />
 
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-[#8e9889]">{notice || 'Queued interventions are delivered on the next prompt or turn stop.'}</p>
+          <p className="text-sm text-[#8e9889]">
+            {notice || 'Queued interventions are delivered on the next prompt or turn stop.'}
+          </p>
           <button
             className="mono rounded-full border border-[#d5dfb8]/30 bg-[#d5dfb8]/12 px-4 py-2 text-[11px] uppercase tracking-[0.24em] text-[#eef5db] disabled:opacity-50"
-            disabled={isPending}
-            onClick={() => {
-              startTransition(() => {
-                void submit(activeKind)
-              })
-            }}
+            disabled={isSubmitting || !selectedNodeId}
+            onClick={() => void submit(activeKind)}
             type="button"
           >
-            {isPending ? 'queueing' : 'queue action'}
+            {isSubmitting ? 'queueing' : 'queue action'}
           </button>
+        </div>
+
+        <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="mono text-[11px] uppercase tracking-[0.22em] text-[#879281]">Recent queue</p>
+              <p className="mt-2 text-sm text-[#a6aea0]">
+                The latest instructions waiting for delivery into the next Claude turn.
+              </p>
+            </div>
+            <span className="mono rounded-full border border-white/8 px-2 py-1 text-[11px] text-[#d0d6cb]">
+              {interventions.length}
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {interventions.length === 0 ? (
+              <p className="text-sm text-[#8e9889]">No interventions queued yet.</p>
+            ) : (
+              interventions.slice(0, 4).map((item) => (
+                <div key={item.id} className="rounded-2xl border border-white/8 bg-[#0f1411] px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="mono text-[11px] uppercase tracking-[0.18em] text-[#dbe2d5]">{item.kind}</p>
+                    <p className="mono text-[11px] uppercase tracking-[0.16em] text-[#7f897e]">
+                      {new Date(item.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-sm text-[#dbe2d5]">{item.payload}</p>
+                  <p className="mt-2 text-xs text-[#8e9889]">
+                    target: <span className="mono">{item.target ?? 'none'}</span>
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </section>
   )
 }
-

@@ -20,3 +20,14 @@ def extract_metric_tokens(text: str) -> list[str]:
         return values
     return NUMBER_RE.findall(text)
 
+
+def normalize_claim(claim: str) -> str:
+    return " ".join(claim.strip().split()).lower()
+
+
+def normalize_value(value: str | int | float) -> str:
+    text = str(value).strip()
+    match = NUMBER_RE.fullmatch(text)
+    if match:
+        return match.group(0)
+    return text

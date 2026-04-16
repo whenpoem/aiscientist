@@ -92,8 +92,13 @@ export function VerificationTable({ rows }: VerificationTableProps) {
                       {new Date(row.last_seen).toLocaleString()}
                     </p>
                   </td>
-                  <td className="max-w-[18rem] px-3 py-3 align-top text-[#b7c0b1]">{row.symptom}</td>
-                  <td className="max-w-[18rem] px-3 py-3 align-top text-[#b7c0b1]">{row.resolution || '—'}</td>
+                  <td className="max-w-[18rem] px-3 py-3 align-top text-[#b7c0b1]">
+                    <p>{row.symptom}</p>
+                    <p className="mt-2 text-xs leading-5 text-[#8e9889]">
+                      Root cause: {row.root_cause || 'not captured yet'}
+                    </p>
+                  </td>
+                  <td className="max-w-[18rem] px-3 py-3 align-top text-[#b7c0b1]">{row.resolution || 'pending'}</td>
                   <td className="rounded-r-2xl px-3 py-3 align-top">
                     <span className="mono rounded-full border border-white/8 px-2 py-1 text-[11px] text-[#d0d6cb]">
                       {row.seen_count}
@@ -108,4 +113,3 @@ export function VerificationTable({ rows }: VerificationTableProps) {
     </section>
   )
 }
-

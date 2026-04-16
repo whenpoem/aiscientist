@@ -6,9 +6,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from pathlib import Path
 
-DB = Path(".research-agent/state.db")
+from claudescientist.runtime import state_db_path
+
+DB = state_db_path()
 
 
 def drain() -> str:
@@ -38,7 +39,10 @@ def drain() -> str:
     ]
     placeholders = ",".join("?" for _ in ids)
     con.execute(
-        f"UPDATE cockpit_interventions SET delivered_at = datetime('now') WHERE id IN ({placeholders})",
+        (
+            "UPDATE cockpit_interventions "
+            f"SET delivered_at = datetime('now') WHERE id IN ({placeholders})"
+        ),
         ids,
     )
     con.commit()
@@ -57,4 +61,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
