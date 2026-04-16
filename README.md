@@ -1,0 +1,1 @@
+ClaudeScientist is a Research-Agent augmentation layer for Claude Code that adds persistent SQLite-backed memory, verification tools, intervention hooks, and a live cockpit UI for hypothesis-driven ML research workflows on Windows.

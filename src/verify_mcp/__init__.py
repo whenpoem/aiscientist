@@ -1,0 +1,2 @@
+"""Verification MCP package."""
+
