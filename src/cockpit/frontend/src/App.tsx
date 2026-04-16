@@ -176,8 +176,8 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="flex flex-1 flex-col gap-4 p-4 xl:flex-row">
-          <div className="min-h-[420px] xl:w-3/5">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 xl:flex-row">
+          <div className="min-h-[420px] min-w-0 xl:w-3/5">
             <HypothesisGraph
               connectionLabel={`${streamLabel} / ${syncLabel}`}
               graph={graph}
@@ -186,11 +186,11 @@ export default function App() {
             />
           </div>
 
-          <div className="flex flex-1 flex-col gap-4 xl:w-2/5">
-            <div className="min-h-[280px] flex-1">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 xl:w-2/5">
+            <div className="min-h-[280px] min-h-0 flex-1">
               <VerificationTable rows={failures} />
             </div>
-            <div className="min-h-[280px] flex-1">
+            <div className="min-h-[280px] min-h-0 flex-1">
               <InterventionPanel
                 apiBase={meta.api_base_url || API_BASE}
                 interventions={interventions}
@@ -201,7 +201,7 @@ export default function App() {
           </div>
         </div>
 
-        <footer className="flex flex-col gap-2 border-t border-white/6 px-6 py-4 text-sm text-[#8e9889] md:flex-row md:items-center md:justify-between">
+        <footer className="shrink-0 flex flex-col gap-2 border-t border-white/6 px-6 py-4 text-sm text-[#8e9889] md:flex-row md:items-center md:justify-between">
           <p>State snapshot comes from one backend request, with live refresh from the event stream when available.</p>
           <div className="mono flex flex-col gap-1 text-[11px] uppercase tracking-[0.16em] text-[#7f897e] md:items-end">
             <span>last sync {lastUpdatedAt ?? 'pending'}</span>

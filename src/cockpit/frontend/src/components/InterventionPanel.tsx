@@ -61,16 +61,16 @@ export function InterventionPanel({
   }
 
   return (
-    <section className="flex h-full flex-col rounded-[28px] border border-white/8 bg-[#111713]/85">
-      <header className="border-b border-white/6 px-5 py-4">
+    <section className="flex h-full min-h-0 flex-col rounded-[28px] border border-white/8 bg-[#111713]/85">
+      <header className="shrink-0 border-b border-white/6 px-5 py-4">
         <p className="mono text-[11px] uppercase tracking-[0.28em] text-[#8e9889]">Intervention queue</p>
         <h2 className="mt-2 text-lg font-semibold text-[#e5eadf]">Guide the next turn</h2>
         <p className="mt-2 text-sm text-[#a6aea0]">
           Selected target: <span className="mono text-[#d4dccd]">{selectedNodeId ?? 'none'}</span>
         </p>
       </header>
-      <div className="flex flex-1 flex-col gap-4 px-5 py-5">
-        <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-5">
+        <div className="shrink-0 grid grid-cols-2 gap-2 xl:grid-cols-3">
           {KINDS.map((item) => (
             <button
               key={item.kind}
@@ -91,14 +91,14 @@ export function InterventionPanel({
         </div>
 
         <textarea
-          className="min-h-32 flex-1 rounded-[22px] border border-white/8 bg-[#0f1411] px-4 py-4 text-sm leading-6 text-[#dbe2d5] outline-none placeholder:text-[#6d766d]"
+          className="min-h-32 max-h-44 shrink-0 rounded-[22px] border border-white/8 bg-[#0f1411] px-4 py-4 text-sm leading-6 text-[#dbe2d5] outline-none placeholder:text-[#6d766d]"
           onChange={(event) => setPayload(event.target.value)}
           placeholder={KINDS.find((item) => item.kind === activeKind)?.placeholder}
           value={payload}
         />
 
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-[#8e9889]">
+        <div className="shrink-0 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <p className="max-w-[30rem] text-sm text-[#8e9889]">
             {notice || 'Queued interventions are delivered on the next prompt or turn stop.'}
           </p>
           <button
@@ -111,7 +111,7 @@ export function InterventionPanel({
           </button>
         </div>
 
-        <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="mono text-[11px] uppercase tracking-[0.22em] text-[#879281]">Recent queue</p>
@@ -124,7 +124,7 @@ export function InterventionPanel({
             </span>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {interventions.length === 0 ? (
               <p className="text-sm text-[#8e9889]">No interventions queued yet.</p>
             ) : (
