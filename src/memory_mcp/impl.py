@@ -16,6 +16,8 @@ TOOL_NAMES = [
     "mark_refuted",
     "get_active_frontier",
     "get_ancestors",
+    "judge_hypotheses",
+    "record_judgement",
     "record_failure",
     "match_signatures",
     "find_contradictions",
@@ -68,7 +70,7 @@ def _rows_to_dicts(rows) -> list[dict]:
 def _graph_snapshot(con) -> tuple[list[dict], list[dict]]:
     nodes = con.execute(
         """
-        SELECT node_id, kind, text, state, created_at, created_by, parent_id
+        SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
         FROM mem_nodes
         ORDER BY created_at ASC, node_id ASC
         """
@@ -95,6 +97,21 @@ def _recent_failures(con, limit: int = 25) -> list[dict]:
         (max(1, limit),),
     ).fetchall()
     return _rows_to_dicts(rows)
+
+
+def _get_node(con: sqlite3.Connection, node_id: str) -> sqlite3.Row | None:
+    return con.execute(
+        """
+        SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
+        FROM mem_nodes
+        WHERE node_id = ?
+        """,
+        (node_id,),
+    ).fetchone()
+
+
+def _expected_score(rating_a: float, rating_b: float) -> float:
+    return 1.0 / (1.0 + 10 ** ((rating_b - rating_a) / 400.0))
 
 
 def _find_contradictions(con) -> list[dict]:
@@ -200,6 +217,10 @@ def propose_hypothesis(text: str, parent_id: str | None = None, rationale: str =
         if parent_id:
             con.execute(
                 "INSERT INTO mem_edges(src, dst, relation, rationale) VALUES(?,?,?,?)",
+                (parent_id, node_id, "parent_of", rationale),
+            )
+            con.execute(
+                "INSERT INTO mem_edges(src, dst, relation, rationale) VALUES(?,?,?,?)",
                 (parent_id, node_id, "refines", rationale),
             )
         _emit_event(con, "graph_delta", {"node_id": node_id, "kind": "hypothesis", "text": text})
@@ -224,6 +245,10 @@ def attach_evidence(node_id: str, evidence_text: str, polarity: str) -> dict:
             VALUES(?,?,?,?,?,?)
             """,
             (evidence_id, "evidence", evidence_text, "active", "claude", node_id),
+        )
+        con.execute(
+            "INSERT INTO mem_edges(src, dst, relation, rationale) VALUES(?,?,?,?)",
+            (node_id, evidence_id, "parent_of", evidence_text),
         )
         con.execute(
             "INSERT INTO mem_edges(src, dst, relation, rationale) VALUES(?,?,?,?)",
@@ -265,7 +290,7 @@ def get_active_frontier() -> list[dict]:
     try:
         rows = con.execute(
             """
-            SELECT node_id, kind, text, state, created_at, created_by, parent_id
+            SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
             FROM mem_nodes
             WHERE state = 'active' AND kind IN ('question', 'hypothesis')
             ORDER BY created_at DESC
@@ -286,7 +311,7 @@ def get_ancestors(node_id: str) -> list[dict]:
         while current:
             row = con.execute(
                 """
-                SELECT node_id, kind, text, state, created_at, created_by, parent_id
+                SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
                 FROM mem_nodes
                 WHERE node_id = ?
                 """,
@@ -300,6 +325,111 @@ def get_ancestors(node_id: str) -> list[dict]:
         return chain
     finally:
         con.close()
+
+
+def judge_hypotheses(
+    hypothesis_a_id: str,
+    hypothesis_b_id: str,
+    criteria: list[str] | None = None,
+) -> dict:
+    """Build a pairwise judging prompt for Elo-based hypothesis selection."""
+    criteria = criteria or ["novelty", "feasibility", "falsifiability"]
+    con = _connect()
+    try:
+        a_row = _get_node(con, hypothesis_a_id)
+        b_row = _get_node(con, hypothesis_b_id)
+        if a_row is None:
+            raise ValueError(f"Unknown hypothesis: {hypothesis_a_id}")
+        if b_row is None:
+            raise ValueError(f"Unknown hypothesis: {hypothesis_b_id}")
+        if a_row["kind"] != "hypothesis" or b_row["kind"] != "hypothesis":
+            raise ValueError("judge_hypotheses only supports hypothesis nodes")
+        prompt = (
+            "You are ranking two research hypotheses for the next experiment.\n"
+            "Compare them in order by: "
+            + ", ".join(criteria)
+            + ".\n"
+            'Return strict JSON with keys "winner_id" and "reason".\n\n'
+            f"Hypothesis A ({a_row['node_id']}): {a_row['text']}\n"
+            f"Hypothesis B ({b_row['node_id']}): {b_row['text']}\n"
+        )
+        return {
+            "hypothesis_a": dict(a_row),
+            "hypothesis_b": dict(b_row),
+            "criteria": criteria,
+            "prompt": prompt,
+        }
+    finally:
+        con.close()
+
+
+def record_judgement(
+    a_node_id: str,
+    b_node_id: str,
+    winner_node_id: str,
+    reason: str = "",
+    k_factor: float = 32.0,
+) -> dict:
+    """Store a pairwise judgement and update Elo scores."""
+    if winner_node_id not in {a_node_id, b_node_id}:
+        raise ValueError("winner_node_id must match one of the compared nodes")
+    if k_factor <= 0:
+        raise ValueError("k_factor must be positive")
+
+    with tx() as con:
+        a_row = _get_node(con, a_node_id)
+        b_row = _get_node(con, b_node_id)
+        if a_row is None:
+            raise ValueError(f"Unknown hypothesis: {a_node_id}")
+        if b_row is None:
+            raise ValueError(f"Unknown hypothesis: {b_node_id}")
+        if a_row["kind"] != "hypothesis" or b_row["kind"] != "hypothesis":
+            raise ValueError("record_judgement only supports hypothesis nodes")
+
+        rating_a = float(a_row["elo_score"])
+        rating_b = float(b_row["elo_score"])
+        expected_a = _expected_score(rating_a, rating_b)
+        expected_b = _expected_score(rating_b, rating_a)
+        score_a = 1.0 if winner_node_id == a_node_id else 0.0
+        score_b = 1.0 if winner_node_id == b_node_id else 0.0
+        new_rating_a = rating_a + (k_factor * (score_a - expected_a))
+        new_rating_b = rating_b + (k_factor * (score_b - expected_b))
+
+        cur = con.execute(
+            """
+            INSERT INTO mem_judgements(
+              a_node_id, b_node_id, winner_node_id, reason, k_factor
+            ) VALUES(?,?,?,?,?)
+            """,
+            (a_node_id, b_node_id, winner_node_id, reason.strip(), float(k_factor)),
+        )
+        judgement_id = int(cur.lastrowid)
+        con.execute(
+            "UPDATE mem_nodes SET elo_score = ? WHERE node_id = ?",
+            (new_rating_a, a_node_id),
+        )
+        con.execute(
+            "UPDATE mem_nodes SET elo_score = ? WHERE node_id = ?",
+            (new_rating_b, b_node_id),
+        )
+        _emit_event(
+            con,
+            "judgement_recorded",
+            {
+                "judgement_id": judgement_id,
+                "a_node_id": a_node_id,
+                "b_node_id": b_node_id,
+                "winner_node_id": winner_node_id,
+            },
+        )
+    return {
+        "judgement_id": judgement_id,
+        "winner_node_id": winner_node_id,
+        "scores": {
+            a_node_id: round(new_rating_a, 6),
+            b_node_id: round(new_rating_b, 6),
+        },
+    }
 
 
 def record_failure(trigger: str, symptom: str, root_cause: str = "", resolution: str = "") -> dict:
@@ -367,7 +497,7 @@ def snapshot(label: str = "") -> dict:
         frontier = _rows_to_dicts(
             con.execute(
                 """
-                SELECT node_id, kind, text, state, created_at, created_by, parent_id
+                SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
                 FROM mem_nodes
                 WHERE state = 'active' AND kind IN ('question', 'hypothesis')
                 ORDER BY created_at DESC
@@ -378,6 +508,7 @@ def snapshot(label: str = "") -> dict:
         contradictions = _find_contradictions(con)
         failures = _recent_failures(con)
         paper_count = int(con.execute("SELECT COUNT(*) FROM mem_lit_compressed").fetchone()[0])
+        judgement_count = int(con.execute("SELECT COUNT(*) FROM mem_judgements").fetchone()[0])
         payload = {
             "nodes": nodes,
             "edges": edges,
@@ -391,6 +522,7 @@ def snapshot(label: str = "") -> dict:
                 "contradictions": len(contradictions),
                 "recent_failures": len(failures),
                 "papers": paper_count,
+                "judgements": judgement_count,
             },
         }
         con.execute(

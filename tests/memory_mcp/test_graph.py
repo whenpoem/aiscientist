@@ -41,6 +41,6 @@ def test_graph_lifecycle(workspace):
   payload = json.loads(row["payload"])
   assert row["label"] == "post-refutation"
   assert payload["counts"]["nodes"] == 3
-  assert payload["counts"]["edges"] == 2
+  assert payload["counts"]["edges"] == 4
   assert payload["counts"]["active_frontier"] == 1
   assert payload["active_frontier"][0]["node_id"] == root

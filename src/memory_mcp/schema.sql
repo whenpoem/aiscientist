@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS mem_nodes (
   kind TEXT NOT NULL CHECK(kind IN ('question', 'hypothesis', 'experiment', 'evidence', 'conclusion')),
   text TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active', 'refuted', 'superseded', 'archived')),
+  elo_score REAL NOT NULL DEFAULT 1500.0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by TEXT NOT NULL DEFAULT 'claude',
   parent_id TEXT REFERENCES mem_nodes(node_id)
@@ -15,13 +16,27 @@ CREATE TABLE IF NOT EXISTS mem_edges (
   edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
   src TEXT NOT NULL REFERENCES mem_nodes(node_id),
   dst TEXT NOT NULL REFERENCES mem_nodes(node_id),
-  relation TEXT NOT NULL CHECK(relation IN ('refines', 'contradicts', 'supports', 'refutes', 'supersedes', 'blocks')),
+  relation TEXT NOT NULL CHECK(relation IN ('parent_of', 'refines', 'contradicts', 'supports', 'refutes', 'supersedes', 'blocks')),
   rationale TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_mem_edges_src ON mem_edges(src);
 CREATE INDEX IF NOT EXISTS idx_mem_edges_dst ON mem_edges(dst);
+
+CREATE TABLE IF NOT EXISTS mem_judgements (
+  judgement_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  a_node_id TEXT NOT NULL REFERENCES mem_nodes(node_id),
+  b_node_id TEXT NOT NULL REFERENCES mem_nodes(node_id),
+  winner_node_id TEXT NOT NULL REFERENCES mem_nodes(node_id),
+  reason TEXT DEFAULT '',
+  k_factor REAL NOT NULL DEFAULT 32.0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mem_judgements_a_node_id ON mem_judgements(a_node_id);
+CREATE INDEX IF NOT EXISTS idx_mem_judgements_b_node_id ON mem_judgements(b_node_id);
+CREATE INDEX IF NOT EXISTS idx_mem_judgements_winner_node_id ON mem_judgements(winner_node_id);
 
 CREATE TABLE IF NOT EXISTS mem_snapshots (
   snapshot_id TEXT PRIMARY KEY,

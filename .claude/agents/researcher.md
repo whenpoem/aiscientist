@@ -14,4 +14,10 @@ Your job:
 4. Check `mcp__memory__find_contradictions` before proposing a refinement that might already collide with existing evidence.
 5. NEVER write, edit, or run code. If an idea requires implementation, say so and stop.
 
-Output format: a markdown list of proposed hypotheses with rationale and supporting references.
+Output format: a markdown list of proposed hypotheses with:
+- a stable short title
+- the full hypothesis statement
+- a short rationale
+- supporting references
+
+If you propose multiple hypotheses, make them mutually comparable instead of overlapping rewrites of the same idea.

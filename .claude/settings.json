@@ -11,10 +11,9 @@
       "env": { "RESEARCH_AGENT_DEV": "1" }
     },
     "cockpit": {
-      "transport": {
-        "type": "http",
-        "url": "http://127.0.0.1:7777/mcp"
-      }
+      "command": "uv",
+      "args": ["run", "python", "-m", "cockpit.mcp_server"],
+      "env": { "RESEARCH_AGENT_DEV": "1" }
     },
     "arxiv": {
       "command": "uv",

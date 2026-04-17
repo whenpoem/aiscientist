@@ -1,0 +1,72 @@
+"""Pin metric modal."""
+
+from __future__ import annotations
+
+from textual.app import ComposeResult
+from textual.containers import Container, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Input, Label
+
+
+class PinMetricModal(ModalScreen[dict[str, str] | None]):
+    """Prompt for dataset, metric, and numeric value."""
+
+    DEFAULT_CSS = """
+    PinMetricModal {
+        align: center middle;
+    }
+    PinMetricModal #pin-dialog {
+        width: 72;
+        height: auto;
+        border: round #58a6ff;
+        background: #0d1117;
+        padding: 1 2;
+    }
+    PinMetricModal Input {
+        margin-top: 1;
+    }
+    """
+
+    def __init__(self, dataset: str = "") -> None:
+        super().__init__()
+        self._default_dataset = dataset
+
+    def compose(self) -> ComposeResult:
+        with Container(id="pin-dialog"):
+            with Vertical():
+                yield Label("Pin metric")
+                yield Input(value=self._default_dataset, placeholder="dataset", id="pin-dataset")
+                yield Input(placeholder="metric", id="pin-metric")
+                yield Input(placeholder="value", id="pin-value")
+                yield Label("Tab moves between fields. Enter on value submits.", id="pin-help")
+
+    def on_mount(self) -> None:
+        self.query_one("#pin-dataset", Input).focus()
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+            event.stop()
+            return
+        if event.key == "tab":
+            self.focus_next()
+            event.stop()
+            return
+        if event.key == "shift+tab":
+            self.focus_previous()
+            event.stop()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "pin-value":
+            self.focus_next()
+            return
+        dataset = self.query_one("#pin-dataset", Input).value.strip()
+        metric = self.query_one("#pin-metric", Input).value.strip()
+        value = self.query_one("#pin-value", Input).value.strip()
+        if not dataset or not metric or not value:
+            return
+        try:
+            float(value)
+        except ValueError:
+            return
+        self.dismiss({"dataset": dataset, "metric": metric, "value": value})

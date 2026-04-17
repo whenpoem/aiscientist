@@ -1,0 +1,60 @@
+Screen {
+    background: #0d1117;
+    color: #c9d1d9;
+}
+
+#status-bar {
+    dock: top;
+    height: 1;
+    padding: 0 1;
+    color: #c9d1d9;
+    background: #161b22;
+}
+
+#body-grid {
+    layout: grid;
+    grid-size: 2 2;
+    grid-columns: 1fr 1fr;
+    grid-rows: 1fr 1fr;
+    height: 1fr;
+    padding: 0 1;
+}
+
+.pane {
+    border: round #21262d;
+    padding: 0 1;
+    margin: 0 1 1 0;
+}
+
+.pane-active {
+    border: round #58a6ff;
+}
+
+#tree-pane,
+#detail-pane,
+#events-pane,
+#tabs-pane {
+    height: 1fr;
+}
+
+#command-line {
+    dock: bottom;
+    height: 3;
+    margin: 0 1 0 1;
+}
+
+#command-line.hidden {
+    display: none;
+}
+
+Footer {
+    dock: bottom;
+}
+
+RightTabsPane DataTable {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 0;
+}

@@ -8,14 +8,28 @@ import pytest
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    return {
+    monkeypatch.setenv("RESEARCH_AGENT_STATE_DIR", str(tmp_path / ".research-agent"))
+    module_names = [
+        "memory_mcp.db",
+        "memory_mcp.impl",
+        "verify_mcp.db",
+        "verify_mcp.impl",
+        "cockpit.db",
+    ]
+    optional_modules = [
+        "cockpit.data",
+        "cockpit.app",
+        "cockpit.mcp_server",
+    ]
+
+    loaded = {
         name: importlib.reload(importlib.import_module(name))
-        for name in [
-            "memory_mcp.db",
-            "memory_mcp.impl",
-            "verify_mcp.db",
-            "verify_mcp.impl",
-            "cockpit.db",
-            "cockpit.server",
-        ]
+        for name in module_names
     }
+    for name in optional_modules:
+        try:
+            loaded[name] = importlib.reload(importlib.import_module(name))
+        except ModuleNotFoundError:
+            continue
+    loaded["cockpit.db"].ensure()
+    return loaded

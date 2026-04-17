@@ -11,22 +11,22 @@ It currently provides:
 - persistent SQLite-backed memory
 - verification tools for leakage and provenance
 - Claude hooks for intervention and safety checks
-- a FastAPI + FastMCP cockpit backend
-- a Vite/React cockpit frontend
+- a Textual cockpit TUI
+- a stdio FastMCP cockpit bridge
 
 This repo is usable for local development and integration work.
 Do **not** describe it as "production-ready" without doing a fresh end-to-end check.
 
 ## Scope Reality
 
-The implementation in this repo matches the plan labeled `v0.1 / Phase 0-6`.
+The implementation in this repo is moving through the `v0.2` plan.
 Do not casually rename that to "V1.0 complete" unless you have verified the remaining product and operations expectations yourself.
 
 Known scope limits to remember:
 
-- The actual exposed verify tools are `leakage_check`, `record_provenance`, `check_provenance`, and `pin_metric`.
+- The exposed verify tools now include `leakage_check`, `record_provenance`, `check_provenance`, `pin_metric`, `seed_perturb`, `baseline_fairness`, and `query_heldout`.
 - The prover agent is still a stub. Lean MCP tools are not wired in this repo yet.
-- `snapshot` persists memory state, but cockpit does not yet browse historical snapshots as a first-class UI.
+- `snapshot` persists memory state, but cockpit still focuses on live state rather than first-class historical snapshot browsing.
 
 ## Important Paths
 
@@ -36,10 +36,10 @@ Known scope limits to remember:
 - Claude hooks: `.claude/hooks/`
 - memory MCP: `src/memory_mcp/`
 - verify MCP: `src/verify_mcp/`
-- cockpit backend: `src/cockpit/`
-- cockpit frontend: `src/cockpit/frontend/`
+- cockpit TUI + MCP bridge: `src/cockpit/`
+- held-out dataset CLI: `src/claudescientist/heldout.py` and `src/claudescientist/heldout_cli.py`
 - tests: `tests/`
-- project plan: `wiggly-leaping-lerdorf.md`
+- project plans: `wiggly-leaping-lerdorf.md`, `docs/plan-v0.2.md`
 
 ## How Things Actually Run
 
@@ -50,26 +50,11 @@ This repo uses `uv` and Python 3.11.
 Common commands:
 
 ```powershell
-uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/e2e
+uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/cockpit tests/e2e
 uv run ruff check
-uv run uvicorn cockpit.server:app --port 7777
+uv run python -m cockpit.tui
+uv run python -m cockpit.mcp_server
 ```
-
-### Frontend side
-
-Run from `src/cockpit/frontend`:
-
-```powershell
-npm ci
-npm run dev
-npm run build
-```
-
-Default local URLs:
-
-- cockpit backend: `http://127.0.0.1:7777`
-- cockpit frontend: `http://localhost:5173`
-- cockpit MCP mount: `http://127.0.0.1:7777/mcp`
 
 ## MCP and Tooling Notes
 
@@ -84,8 +69,8 @@ The Claude settings are already wired for these MCP servers:
 Important detail:
 
 - `openalex-research-mcp` is configured through `npx -y openalex-research-mcp`, not `uv`, because the real package is a Node CLI in this environment.
-- The cockpit MCP is mounted over HTTP at `http://127.0.0.1:7777/mcp`.
-- The frontend lockfile is the contract. Use `npm ci`, not an unlocked `npm install`, unless you are intentionally updating the pinned stack.
+- The cockpit MCP runs over stdio through `uv run python -m cockpit.mcp_server`.
+- The cockpit UI is terminal-first in v0.2. There is no supported browser frontend in this repo.
 
 If you change `.claude/settings.json`, assume Claude Code may need a fresh session to reload MCP and hooks.
 
@@ -122,26 +107,26 @@ Minimum usual checks:
 
 ```powershell
 uv run ruff check
-uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/e2e
+uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/cockpit tests/e2e
 ```
 
-If frontend code changed, also run:
+If cockpit code changed, also smoke-test the TUI entrypoint:
 
 ```powershell
-npm run build
+uv run python -m cockpit.tui --once
 ```
 
 If integration points changed, also smoke-test the backend:
 
 ```powershell
-uv run python -c "import memory_mcp.server; import verify_mcp.server; from cockpit.server import app; print('OK')"
+uv run python -c "import memory_mcp.server; import verify_mcp.server; import cockpit.mcp_server; print('OK')"
 ```
 
 ## Known Fragile Areas
 
 - Hook behavior depends on the shared state DB and stop-flush state file under `.research-agent/`; if those files are missing or malformed, some protections degrade to permissive or fallback behavior.
-- The cockpit websocket uses polling against SQLite events; it is simple and works, but it is not a high-throughput design.
-- The frontend assumes the backend is reachable on the local default port unless reconfigured.
+- The cockpit live view still uses polling against SQLite events; it is simple and works, but it is not a high-throughput design.
+- Held-out dataset protection depends on the pointer files plus `leakage_guard.py`; direct path leaks outside that guard can still undermine the intended workflow.
 
 ## What To Read First Before Big Changes
 

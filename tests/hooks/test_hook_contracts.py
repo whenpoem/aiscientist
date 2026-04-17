@@ -96,13 +96,14 @@ def test_leakage_guard_returns_structured_pretooluse_deny(monkeypatch):
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": "Held-out data access is restricted to verify-mcp.",
+            "permissionDecisionReason": "held-out dataset access only via query_heldout",
         }
     }
 
 
-def test_leakage_guard_ignores_unlabeled_markdown_numbers(monkeypatch):
+def test_leakage_guard_ignores_unlabeled_markdown_numbers(tmp_path, monkeypatch):
     module = _load_hook("leakage_guard")
+    module.DB = tmp_path / "state.db"
     payload = _run_hook(
         module,
         {
@@ -117,8 +118,9 @@ def test_leakage_guard_ignores_unlabeled_markdown_numbers(monkeypatch):
     assert payload == {}
 
 
-def test_leakage_guard_blocks_unproven_labeled_markdown_metrics(monkeypatch):
+def test_leakage_guard_blocks_unproven_labeled_markdown_metrics(tmp_path, monkeypatch):
     module = _load_hook("leakage_guard")
+    module.DB = tmp_path / "state.db"
     payload = _run_hook(
         module,
         {

@@ -1,0 +1,3 @@
+epochs=10
+lr-trials: 2
+params=100000

@@ -1,0 +1,172 @@
+"""Tree pane for the cockpit TUI."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+
+from rich.text import Text
+from textual.widgets import Tree
+
+from cockpit.data import GraphNode, GraphSnapshot
+
+
+class HypothesisTreePane(Tree[str]):
+    """Navigation tree for hypotheses, evidence, and related nodes."""
+
+    def __init__(self) -> None:
+        super().__init__("research")
+        self.id = "tree-pane"
+        self.classes = "pane"
+        self.border_title = "1 Hypothesis Tree"
+        self.show_root = False
+        self.auto_expand = False
+        self.node_lookup: dict[str, object] = {}
+        self._visible_ids: list[str] = []
+
+    def current_node_id(self) -> str | None:
+        cursor = self.cursor_node
+        data = getattr(cursor, "data", None)
+        return data if isinstance(data, str) else None
+
+    def visible_node_ids(self) -> list[str]:
+        return list(self._visible_ids)
+
+    def move_cursor_by(self, delta: int) -> None:
+        if delta > 0:
+            for _ in range(delta):
+                self.action_cursor_down()
+        elif delta < 0:
+            for _ in range(abs(delta)):
+                self.action_cursor_up()
+
+    def move_cursor_to_top(self) -> None:
+        if self._visible_ids:
+            self.select_node_id(self._visible_ids[0])
+
+    def move_cursor_to_bottom(self) -> None:
+        if self._visible_ids:
+            self.select_node_id(self._visible_ids[-1])
+
+    def select_node_id(self, node_id: str | None) -> None:
+        if node_id and node_id in self.node_lookup:
+            self.select_node(self.node_lookup[node_id])
+
+    def expand_current(self) -> None:
+        cursor = self.cursor_node
+        if cursor is not None:
+            cursor.expand()
+
+    def collapse_current(self) -> None:
+        cursor = self.cursor_node
+        if cursor is not None:
+            cursor.collapse()
+
+    def set_title(self, filter_text: str = "") -> None:
+        suffix = f" (filter: {filter_text})" if filter_text else ""
+        self.border_title = f"1 Hypothesis Tree{suffix}"
+
+    def load_graph(
+        self,
+        graph: GraphSnapshot,
+        *,
+        show_refuted: bool,
+        filter_text: str = "",
+        selected_node_id: str | None = None,
+    ) -> str | None:
+        expanded_ids = {
+            node_id
+            for node_id, tree_node in self.node_lookup.items()
+            if getattr(tree_node, "is_expanded", False)
+        }
+        self.node_lookup.clear()
+        self._visible_ids.clear()
+        self.root.remove_children()
+        self.root.expand()
+        self.set_title(filter_text)
+
+        needle = filter_text.strip().lower()
+
+        @lru_cache(maxsize=None)
+        def matches(node_id: str) -> bool:
+            node = graph.node(node_id)
+            if node is None:
+                return False
+            if not needle:
+                return True
+            haystack = f"{node.node_id} {node.kind} {node.text}".lower()
+            if needle in haystack:
+                return True
+            return any(matches(child_id) for child_id in graph.children_of(node_id))
+
+        def visible_children(node_id: str) -> list[str]:
+            children: list[str] = []
+            for child_id in graph.children_of(node_id):
+                node = graph.node(child_id)
+                if node is None or not matches(child_id):
+                    continue
+                if node.state == "refuted" and not show_refuted:
+                    children.extend(visible_children(child_id))
+                    continue
+                children.append(child_id)
+            return children
+
+        def add_branch(parent_ui_node, node_id: str) -> None:
+            node = graph.node(node_id)
+            if node is None:
+                return
+            child_ids = visible_children(node_id)
+            ui_node = parent_ui_node.add(
+                self._label_for(node),
+                data=node_id,
+                expand=(node_id in expanded_ids or bool(needle)),
+                allow_expand=bool(child_ids),
+            )
+            self.node_lookup[node_id] = ui_node
+            self._visible_ids.append(node_id)
+            for child_id in child_ids:
+                add_branch(ui_node, child_id)
+
+        root_ids: list[str] = []
+        for root_id in graph.roots:
+            node = graph.node(root_id)
+            if node is None or not matches(root_id):
+                continue
+            if node.state == "refuted" and not show_refuted:
+                root_ids.extend(visible_children(root_id))
+            else:
+                root_ids.append(root_id)
+        for root_id in root_ids:
+            add_branch(self.root, root_id)
+
+        if not self._visible_ids:
+            self.root.add_leaf("No hypotheses yet. Trigger a research session in Claude Code.")
+            return None
+
+        if selected_node_id in self.node_lookup:
+            candidate = selected_node_id
+        else:
+            candidate = self._visible_ids[0]
+        self.select_node_id(candidate)
+        return self.current_node_id()
+
+    def _label_for(self, node: GraphNode) -> Text:
+        title = Text()
+        title.append(node.node_id, style=self._style_for(node))
+        title.append(" ")
+        title.append(node.text)
+        title.append(f"  [{node.elo_score:.0f}]", style="dim")
+        if node.state == "refuted":
+            title.stylize("strike")
+        return title
+
+    @staticmethod
+    def _style_for(node: GraphNode) -> str:
+        if node.state == "refuted":
+            return "#f85149"
+        return {
+            "question": "#79c0ff",
+            "hypothesis": "#58a6ff",
+            "experiment": "#d29922",
+            "evidence": "#3fb950",
+            "conclusion": "#bc8cff",
+        }.get(node.kind, "#c9d1d9")

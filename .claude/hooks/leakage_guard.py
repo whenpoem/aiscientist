@@ -8,15 +8,35 @@ import os
 import re
 import sqlite3
 import sys
+from pathlib import Path
 from typing import Iterator
 
 from claudescientist.runtime import state_db_path
 from verify_mcp.provenance import METRIC_RE
 
 DB = state_db_path()
-HELDOUT_RE = re.compile(
-    r"(?i)(?:\.research-agent[\\/]+held_out|%USERPROFILE%[\\/]+\.research-agent|~[\\/]+\.research-agent[\\/]+held_out)"
+HELDOUT_PATH_RE = re.compile(
+    r"(?i)(?:^|[\\/])\.research-agent[\\/](?:heldout|held_out|held-out)(?:[\\/]|$)"
 )
+HELDOUT_POINTER_RE = re.compile(
+    r"(?i)(?:^|[\\/])[^\\/]*\.(?:heldout|held_out|held-out)-pointer(?:[\\/]|$)"
+)
+PATH_FRAGMENT_RE = re.compile(
+    r"""
+    (?:
+        [A-Za-z]:[\\/][^\s"'`<>|]+
+        |
+        ~[\\/][^\s"'`<>|]+
+        |
+        \.\.?[\\/][^\s"'`<>|]+
+        |
+        [^\s"'`<>|]+[\\/][^\s"'`<>|]+
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+HELDOUT_POINTER_SUFFIXES = (".heldout-pointer", ".held_out-pointer", ".held-out-pointer")
+STRIP_CHARS = "`'\"()[]{}.,;"
 
 
 def _iter_strings(value) -> Iterator[str]:
@@ -28,6 +48,65 @@ def _iter_strings(value) -> Iterator[str]:
     elif isinstance(value, list):
         for item in value:
             yield from _iter_strings(item)
+
+
+def _normalize_text(text: str) -> str:
+    normalized = os.path.expandvars(os.path.expanduser(text)).replace("\\", "/")
+    return re.sub(r"/+", "/", normalized)
+
+
+def _clean_candidate(text: str) -> str:
+    return text.strip().strip(STRIP_CHARS)
+
+
+def _candidate_paths(text: str) -> Iterator[str]:
+    expanded = os.path.expandvars(os.path.expanduser(text))
+    seen: set[str] = set()
+    for match in PATH_FRAGMENT_RE.finditer(expanded):
+        candidate = _clean_candidate(match.group(0))
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            yield candidate
+    for token in expanded.split():
+        candidate = _clean_candidate(token)
+        lowered = candidate.lower()
+        if candidate and any(suffix in lowered for suffix in HELDOUT_POINTER_SUFFIXES):
+            if candidate not in seen:
+                seen.add(candidate)
+                yield candidate
+
+
+def _heldout_root() -> Path:
+    return Path.home() / ".research-agent" / "heldout"
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    candidate = str(path.resolve(strict=False)).replace("\\", "/").lower().rstrip("/")
+    root_text = str(root.resolve(strict=False)).replace("\\", "/").lower().rstrip("/")
+    return candidate == root_text or candidate.startswith(root_text + "/")
+
+
+def _looks_like_heldout_reference(text: str) -> bool:
+    normalized = _normalize_text(text)
+    return bool(HELDOUT_PATH_RE.search(normalized) or HELDOUT_POINTER_RE.search(normalized))
+
+
+def _should_block_heldout(strings: list[str]) -> bool:
+    root = _heldout_root()
+    for text in strings:
+        if _looks_like_heldout_reference(text):
+            return True
+        for candidate in _candidate_paths(text):
+            lowered = candidate.lower()
+            if any(lowered.endswith(suffix) for suffix in HELDOUT_POINTER_SUFFIXES):
+                return True
+            try:
+                resolved = Path(os.path.expandvars(os.path.expanduser(candidate)))
+            except (OSError, ValueError):
+                continue
+            if _is_within(resolved, root):
+                return True
+    return False
 
 
 def _deny(reason: str) -> None:
@@ -91,8 +170,8 @@ def main() -> None:
         return
     tool_input = payload.get("tool_input", {})
     strings = list(_iter_strings(tool_input))
-    if any(HELDOUT_RE.search(text.replace("\\", "/")) for text in strings):
-        _deny("Held-out data access is restricted to verify-mcp.")
+    if _should_block_heldout(strings):
+        _deny("held-out dataset access only via query_heldout")
         return
 
     path_value = ""
