@@ -14,9 +14,6 @@ from textual.containers import Container
 from textual.reactive import reactive
 from textual.widgets import Footer, Input, Static
 
-from memory_mcp import impl as memory_impl
-from verify_mcp import impl as verify_impl
-
 from . import data
 from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
 from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
@@ -148,31 +145,11 @@ class CockpitApp(App[None]):
         return self.query_one("#command-line", Input)
 
     def refresh_state(self, *, include_events: bool) -> None:
-        previous_node_id = self.selected_node_id or self.tree_pane.current_node_id()
-        self.graph = data.fetch_graph()
-        self.selected_node_id = self.tree_pane.load_graph(
-            self.graph,
-            show_refuted=self.show_refuted,
-            filter_text=self._pane_filters["tree"],
-            selected_node_id=previous_node_id,
-        )
-        self.tabs_pane.set_filter_text(self._pane_filters["tabs"])
-        self.tabs_pane.set_rows(
-            failures=data.fetch_failures(),
-            claims=data.fetch_claims(),
-            literature=data.fetch_literature(),
-        )
-        self.status_bar.set_counts(data.fetch_counts())
+        self._refresh_graph()
+        self._refresh_tabs()
+        self._refresh_counts()
         if include_events:
-            rows = data.fetch_new_events(self.last_event_id)
-            if rows:
-                self.events_pane.append_rows(rows)
-                self.last_event_id = int(rows[-1]["id"])
-            else:
-                self.last_event_id = int(data.fetch_latest_event_id())
-                self.events_pane.set_rows(data.fetch_new_events(0))
-        self.events_pane.set_filter_text(self._pane_filters["events"])
-        self.events_pane.set_relative_timestamps(self.relative_timestamps)
+            self._refresh_events()
         self._detail_override = False
         self.detail_pane.clear_override()
         self._refresh_detail()
@@ -214,23 +191,12 @@ class CockpitApp(App[None]):
             self._execute_command(value)
             return
         if mode == "filter":
-            self._pane_filters[target] = value
-            if target == "tree":
-                self.selected_node_id = self.tree_pane.load_graph(
-                    self.graph,
-                    show_refuted=self.show_refuted,
-                    filter_text=value,
-                    selected_node_id=self.selected_node_id,
-                )
-            elif target == "events":
-                self.events_pane.set_filter_text(value)
-            else:
-                self.tabs_pane.set_filter_text(value)
+            self._apply_filter(target, value)
             self._refresh_detail()
 
     def on_key(self, event) -> None:
         if event.key == "escape" and not self.command_line.has_class("hidden"):
-            self._hide_command_line()
+            self._hide_command_line(clear_filter=self._command_mode == "filter")
             event.stop()
 
     def action_focus_tree(self) -> None:
@@ -369,7 +335,7 @@ class CockpitApp(App[None]):
 
     def action_cancel_context(self) -> None:
         if not self.command_line.has_class("hidden"):
-            self._hide_command_line()
+            self._hide_command_line(clear_filter=self._command_mode == "filter")
             return
         if self._detail_override:
             self._detail_override = False
@@ -445,7 +411,7 @@ class CockpitApp(App[None]):
             if new_rows:
                 self.events_pane.append_rows(new_rows)
                 self.last_event_id = int(new_rows[-1]["id"])
-                self.refresh_state(include_events=False)
+                self._dispatch_events(new_rows)
             await asyncio.sleep(1.0)
 
     def _set_focus(self, pane_name: str) -> None:
@@ -467,10 +433,14 @@ class CockpitApp(App[None]):
         self.command_line.focus()
         self.command_line.action_end()
 
-    def _hide_command_line(self) -> None:
+    def _hide_command_line(self, *, clear_filter: bool = False) -> None:
+        mode = self._command_mode
+        target = self._command_target
         self.command_line.value = ""
         self.command_line.add_class("hidden")
         self._command_mode = None
+        if clear_filter and mode == "filter":
+            self._apply_filter(target, "")
         self._set_focus(self.focused_pane)
 
     def _queue_intervention(self, kind: str) -> None:
@@ -561,7 +531,7 @@ class CockpitApp(App[None]):
             else:
                 data.write_intervention(op, self.selected_node_id, " ".join(args))
         elif op == "pin" and len(args) >= 3:
-            verify_impl.pin_metric(
+            data.pin_metric_local(
                 claim=args[1],
                 value=args[2],
                 session_id=args[0],
@@ -577,13 +547,13 @@ class CockpitApp(App[None]):
 
     def _handle_mark_refuted(self, node_id: str, confirmed: bool) -> None:
         if confirmed:
-            memory_impl.mark_refuted(node_id, "cockpit refuted")
+            data.refute_node(node_id, "cockpit refuted")
             self.refresh_state(include_events=True)
 
     def _handle_pin_metric(self, payload: dict[str, str] | None) -> None:
         if not payload:
             return
-        verify_impl.pin_metric(
+        data.pin_metric_local(
             claim=payload["metric"],
             value=payload["value"],
             session_id=payload["dataset"],
@@ -596,6 +566,86 @@ class CockpitApp(App[None]):
         if confirmed:
             data.write_intervention("halt", None, "halt requested from cockpit")
             self.refresh_state(include_events=True)
+
+    def _refresh_graph(self) -> None:
+        previous_node_id = self.selected_node_id or self.tree_pane.current_node_id()
+        self.graph = data.fetch_graph()
+        self.selected_node_id = self.tree_pane.load_graph(
+            self.graph,
+            show_refuted=self.show_refuted,
+            filter_text=self._pane_filters["tree"],
+            selected_node_id=previous_node_id,
+        )
+
+    def _refresh_tabs(self) -> None:
+        self._set_tab_rows(
+            failures=data.fetch_failures(),
+            claims=data.fetch_claims(),
+            literature=data.fetch_literature(),
+        )
+
+    def _refresh_failures(self) -> None:
+        self._set_tab_rows(failures=data.fetch_failures())
+
+    def _refresh_claims(self) -> None:
+        self._set_tab_rows(claims=data.fetch_claims())
+
+    def _refresh_literature(self) -> None:
+        self._set_tab_rows(literature=data.fetch_literature())
+
+    def _set_tab_rows(
+        self,
+        *,
+        failures: list[dict] | None = None,
+        claims: list[dict] | None = None,
+        literature: list[dict] | None = None,
+    ) -> None:
+        self.tabs_pane.set_filter_text(self._pane_filters["tabs"])
+        self.tabs_pane.set_rows(
+            failures=failures if failures is not None else self.tabs_pane.failures_rows,
+            claims=claims if claims is not None else self.tabs_pane.claims_rows,
+            literature=literature if literature is not None else self.tabs_pane.literature_rows,
+        )
+
+    def _refresh_counts(self) -> None:
+        self.status_bar.set_counts(data.fetch_counts())
+
+    def _refresh_events(self) -> None:
+        rows = data.fetch_new_events(self.last_event_id)
+        if self.last_event_id <= 0:
+            self.events_pane.set_rows(rows)
+        elif rows:
+            self.events_pane.append_rows(rows)
+        self.last_event_id = int(rows[-1]["id"]) if rows else int(data.fetch_latest_event_id())
+        self.events_pane.set_filter_text(self._pane_filters["events"])
+        self.events_pane.set_relative_timestamps(self.relative_timestamps)
+
+    def _dispatch_events(self, rows: list[dict]) -> None:
+        kinds = {str(row.get("kind", "")) for row in rows}
+        if {"graph_delta", "judgement_recorded"} & kinds:
+            self._refresh_graph()
+        if "failure_added" in kinds:
+            self._refresh_failures()
+        if "claim_pinned" in kinds:
+            self._refresh_claims()
+        if "literature_ingested" in kinds:
+            self._refresh_literature()
+        self._refresh_counts()
+        self._refresh_detail()
+
+    def _apply_filter(self, target: str, value: str) -> None:
+        self._pane_filters[target] = value
+        if target == "tree":
+            self.selected_node_id = self.tree_pane.load_graph(
+                self.graph,
+                show_refuted=self.show_refuted,
+                filter_text=value,
+                selected_node_id=self.selected_node_id,
+            )
+        elif target == "events":
+            self.events_pane.set_filter_text(value)
+        else:
+            self.tabs_pane.set_filter_text(value)
 
 
 def render_snapshot() -> str:

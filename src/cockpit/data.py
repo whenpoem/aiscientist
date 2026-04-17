@@ -325,16 +325,31 @@ def fetch_literature(limit: int = 100) -> list[dict[str, Any]]:
 def fetch_new_events(last_event_id: int = 0, limit: int = 2000) -> list[dict[str, Any]]:
     con = _connect()
     try:
-        rows = con.execute(
-            """
-            SELECT id, kind, payload, created_at
-            FROM cockpit_events
-            WHERE id > ?
-            ORDER BY id ASC
-            LIMIT ?
-            """,
-            (max(0, last_event_id), max(1, limit)),
-        ).fetchall()
+        if last_event_id <= 0:
+            rows = con.execute(
+                """
+                SELECT id, kind, payload, created_at
+                FROM (
+                    SELECT id, kind, payload, created_at
+                    FROM cockpit_events
+                    ORDER BY id DESC
+                    LIMIT ?
+                ) recent
+                ORDER BY id ASC
+                """,
+                (max(1, limit),),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """
+                SELECT id, kind, payload, created_at
+                FROM cockpit_events
+                WHERE id > ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (last_event_id, max(1, limit)),
+            ).fetchall()
     finally:
         con.close()
 
@@ -387,3 +402,28 @@ def write_intervention(kind: str, target: str | None, payload: str) -> dict[str,
         return {"intervention_id": intervention_id, "event_id": event_id}
     finally:
         con.close()
+
+
+def refute_node(node_id: str, reason: str) -> dict[str, Any]:
+    from memory_mcp import impl as memory_impl
+
+    return memory_impl.mark_refuted(node_id, reason)
+
+
+def pin_metric_local(
+    *,
+    claim: str,
+    value: str,
+    session_id: str,
+    source_command: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    from verify_mcp import impl as verify_impl
+
+    return verify_impl.pin_metric(
+        claim=claim,
+        value=value,
+        session_id=session_id,
+        source_command=source_command,
+        note=note,
+    )

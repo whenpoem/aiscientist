@@ -39,8 +39,9 @@ Screen {
 
 #command-line {
     dock: bottom;
-    height: 3;
+    height: 1;
     margin: 0 1 0 1;
+    border: none;
 }
 
 #command-line.hidden {

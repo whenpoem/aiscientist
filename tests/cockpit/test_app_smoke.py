@@ -52,3 +52,96 @@ async def test_cockpit_app_smoke(workspace):
         event["kind"] == "intervention" and event["payload"].get("kind") == "halt"
         for event in events
     )
+
+
+@pytest.mark.asyncio
+async def test_filter_escape_clears_active_tree_filter(workspace):
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+    memory_impl.propose_hypothesis("Increase batch size")
+
+    app = CockpitApp()
+
+    async with app.run_test() as pilot:
+        tree = app.query_one(HypothesisTreePane)
+
+        await pilot.press("/")
+        await pilot.press(*list("dropout"))
+        await pilot.press("enter")
+
+        assert app._pane_filters["tree"] == "dropout"
+        assert len(tree.visible_node_ids()) == 1
+        assert "filter: dropout" in tree.border_title
+
+        await pilot.press("/")
+        await pilot.press("escape")
+
+        assert app._pane_filters["tree"] == ""
+        assert len(tree.visible_node_ids()) == 2
+        assert "filter:" not in tree.border_title
+
+
+@pytest.mark.asyncio
+async def test_event_dispatch_refreshes_only_affected_panes(workspace, monkeypatch):
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+
+    app = CockpitApp()
+
+    async with app.run_test():
+        counters = {
+            "graph": 0,
+            "failures": 0,
+            "claims": 0,
+            "literature": 0,
+            "counts": 0,
+            "detail": 0,
+        }
+
+        monkeypatch.setattr(
+            app,
+            "_refresh_graph",
+            lambda: counters.__setitem__("graph", counters["graph"] + 1),
+        )
+        monkeypatch.setattr(
+            app,
+            "_refresh_failures",
+            lambda: counters.__setitem__("failures", counters["failures"] + 1),
+        )
+        monkeypatch.setattr(
+            app,
+            "_refresh_claims",
+            lambda: counters.__setitem__("claims", counters["claims"] + 1),
+        )
+        monkeypatch.setattr(
+            app,
+            "_refresh_literature",
+            lambda: counters.__setitem__("literature", counters["literature"] + 1),
+        )
+        monkeypatch.setattr(
+            app,
+            "_refresh_counts",
+            lambda: counters.__setitem__("counts", counters["counts"] + 1),
+        )
+        monkeypatch.setattr(
+            app,
+            "_refresh_detail",
+            lambda: counters.__setitem__("detail", counters["detail"] + 1),
+        )
+
+        app._dispatch_events(
+            [
+                {"kind": "graph_delta"},
+                {"kind": "failure_added"},
+                {"kind": "intervention"},
+            ]
+        )
+
+        assert counters == {
+            "graph": 1,
+            "failures": 1,
+            "claims": 0,
+            "literature": 0,
+            "counts": 1,
+            "detail": 1,
+        }

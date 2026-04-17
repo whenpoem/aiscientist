@@ -47,3 +47,22 @@ def test_claude_settings_register_stdio_cockpit_and_node_openalex():
         for hook in group["hooks"]
     }
     assert expected_hooks <= actual_commands
+
+
+def test_sops_reference_elo_selection_flow():
+    repo_root = Path(__file__).resolve().parents[2]
+    research_sop = (repo_root / ".claude" / "skills" / "research-sop" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    writeup_sop = (repo_root / ".claude" / "skills" / "writeup-sop" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    elo_select = (repo_root / ".claude" / "skills" / "elo-select" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$elo-select" in research_sop
+    assert "mcp__memory__judge_hypotheses" in research_sop
+    assert "mcp__memory__record_judgement" in research_sop
+    assert "$elo-select" in writeup_sop
+    assert "mcp__memory__record_judgement" in elo_select

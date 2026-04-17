@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import statistics
 import subprocess
@@ -35,17 +36,25 @@ def _read_text(value: str) -> str:
 
 
 def _run_script(
-    script_path: str, args: list[str], *, timeout_sec: int
+    script_path: str,
+    args: list[str],
+    *,
+    timeout_sec: int,
+    env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     script = Path(script_path)
     if not script.exists():
         raise FileNotFoundError(script)
+    env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
     return subprocess.run(
         [sys.executable, str(script), *args],
         check=False,
         capture_output=True,
         text=True,
         timeout=timeout_sec,
+        env=env,
     )
 
 
@@ -91,6 +100,42 @@ def _verify_metric_pin(metric_pin_id: int | None) -> dict[str, object] | None:
     return None
 
 
+def _load_heldout_budget(
+    con,
+    dataset: str,
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    row = con.execute(
+        """
+        SELECT dataset, heldout_path, manifest_sha256, budget_total, budget_used
+        FROM ver_heldout_budgets
+        WHERE dataset = ?
+        """,
+        (dataset,),
+    ).fetchone()
+    if row is None:
+        return None, {"ok": False, "error": "unknown_dataset", "dataset": dataset}
+
+    heldout_path = Path(row["heldout_path"])
+    manifest_recorded = str(row["manifest_sha256"])
+    manifest_file = load_manifest(heldout_path)
+    if manifest_file is None or manifest_file.get("manifest_sha256") != manifest_recorded:
+        return None, {"ok": False, "error": "manifest_drift", "dataset": dataset}
+    current_manifest = compute_manifest(heldout_path)
+    if current_manifest["manifest_sha256"] != manifest_recorded:
+        return None, {"ok": False, "error": "manifest_drift", "dataset": dataset}
+
+    return (
+        {
+            "dataset": str(row["dataset"]),
+            "heldout_path": heldout_path,
+            "manifest_sha256": manifest_recorded,
+            "budget_total": int(row["budget_total"]),
+            "budget_used": int(row["budget_used"]),
+        },
+        None,
+    )
+
+
 def _insert_provenance(
     *,
     claim: str,
@@ -123,8 +168,10 @@ def seed_perturb(
     seeds: list[int] | None = None,
     metric_pattern: str = r"test[_ ]acc(?:uracy)?[: =]+([\d.]+)",
     timeout_sec: int = 600,
-    stability_tol: float = 1e-6,
+    stability_tol: float = 0.01,
     metric_pin_id: int | None = None,
+    seed_env: str | None = "PYTHONHASHSEED",
+    extra_env: dict[str, str] | None = None,
 ) -> dict:
     """Run a training script across multiple seeds and summarize the metric."""
 
@@ -140,10 +187,14 @@ def seed_perturb(
     values: list[float] = []
     outputs: list[str] = []
     for seed in seeds:
+        env_overrides = dict(extra_env or {})
+        if seed_env:
+            env_overrides[seed_env] = str(seed)
         completed = _run_script(
             script_path,
             [seed_arg, str(seed)],
             timeout_sec=timeout_sec,
+            env_overrides=env_overrides or None,
         )
         if completed.returncode != 0:
             return {
@@ -166,8 +217,8 @@ def seed_perturb(
         outputs.append(completed.stdout)
 
     mean_value = statistics.fmean(values)
-    std_value = statistics.pstdev(values) if len(values) > 1 else 0.0
-    verdict = "stable" if std_value <= stability_tol else "unstable"
+    std_value = statistics.stdev(values) if len(values) > 1 else 0.0
+    verdict = "stable" if std_value < stability_tol else "unstable"
 
     with tx() as con:
         cur = con.execute(
@@ -197,6 +248,7 @@ def seed_perturb(
         "run_id": run_id,
         "script_path": str(script_path),
         "seed_arg": seed_arg,
+        "seed_env": seed_env,
         "seeds": seeds,
         "values": values,
         "mean_value": mean_value,
@@ -249,29 +301,18 @@ def query_heldout(
     if batch_size <= 0:
         raise ValueError("batch_size must be positive.")
 
-    with tx() as con:
-        row = con.execute(
-            """
-            SELECT dataset, heldout_path, manifest_sha256, budget_total, budget_used
-            FROM ver_heldout_budgets
-            WHERE dataset = ?
-            """,
-            (dataset,),
-        ).fetchone()
-    if row is None:
-        return {"ok": False, "error": "unknown_dataset", "dataset": dataset}
+    con = _connect()
+    try:
+        validated, error = _load_heldout_budget(con, dataset)
+    finally:
+        con.close()
+    if error is not None:
+        return error
 
-    heldout_path = Path(row["heldout_path"])
-    manifest_recorded = row["manifest_sha256"]
-    manifest_file = load_manifest(heldout_path)
-    if manifest_file is None or manifest_file.get("manifest_sha256") != manifest_recorded:
-        return {"ok": False, "error": "manifest_drift", "dataset": dataset}
-    current_manifest = compute_manifest(heldout_path)
-    if current_manifest["manifest_sha256"] != manifest_recorded:
-        return {"ok": False, "error": "manifest_drift", "dataset": dataset}
-
-    budget_total = int(row["budget_total"])
-    budget_used = int(row["budget_used"])
+    assert validated is not None
+    heldout_path = validated["heldout_path"]
+    budget_total = int(validated["budget_total"])
+    budget_used = int(validated["budget_used"])
     if budget_used + batch_size > budget_total:
         return {
             "ok": False,
@@ -306,27 +347,12 @@ def query_heldout(
         }
 
     with tx() as con:
-        row = con.execute(
-            """
-            SELECT dataset, heldout_path, manifest_sha256, budget_total, budget_used
-            FROM ver_heldout_budgets
-            WHERE dataset = ?
-            """,
-            (dataset,),
-        ).fetchone()
-        if row is None:
-            return {"ok": False, "error": "unknown_dataset", "dataset": dataset}
-        heldout_path = Path(row["heldout_path"])
-        manifest_recorded = row["manifest_sha256"]
-        manifest_file = load_manifest(heldout_path)
-        if manifest_file is None or manifest_file.get("manifest_sha256") != manifest_recorded:
-            return {"ok": False, "error": "manifest_drift", "dataset": dataset}
-        current_manifest = compute_manifest(heldout_path)
-        if current_manifest["manifest_sha256"] != manifest_recorded:
-            return {"ok": False, "error": "manifest_drift", "dataset": dataset}
-
-        budget_total = int(row["budget_total"])
-        budget_used = int(row["budget_used"])
+        validated, error = _load_heldout_budget(con, dataset)
+        if error is not None:
+            return error
+        assert validated is not None
+        budget_total = int(validated["budget_total"])
+        budget_used = int(validated["budget_used"])
         if budget_used + batch_size > budget_total:
             return {
                 "ok": False,
