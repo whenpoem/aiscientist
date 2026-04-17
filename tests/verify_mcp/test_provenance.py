@@ -72,3 +72,18 @@ def test_dev_server_wrappers_preserve_impl_signatures(tmp_path, monkeypatch):
         impl.check_provenance
     )
     assert inspect.signature(dev_server.pin_metric) == inspect.signature(impl.pin_metric)
+
+
+def test_memory_dev_server_wrappers_preserve_impl_signatures(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    impl = importlib.reload(importlib.import_module("memory_mcp.impl"))
+    dev_server = importlib.reload(importlib.import_module("memory_mcp.dev_server"))
+
+    assert inspect.signature(dev_server.propose_hypothesis) == inspect.signature(
+        impl.propose_hypothesis
+    )
+    assert inspect.signature(dev_server.record_failure) == inspect.signature(
+        impl.record_failure
+    )
+    assert inspect.signature(dev_server.snapshot) == inspect.signature(impl.snapshot)

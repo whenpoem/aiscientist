@@ -414,21 +414,6 @@ def ingest_paper(paper_id: str, source: str, structured: dict) -> dict:
     with tx() as con:
         con.execute(
             """
-            INSERT OR REPLACE INTO mem_lit(
-              paper_id, source, title, abstract, metadata, trust_level, added_at
-            ) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)
-            """,
-            (
-                paper_id,
-                source,
-                structured.get("title", ""),
-                structured.get("raw_abstract", ""),
-                json.dumps(structured, ensure_ascii=True),
-                structured.get("trust_level", 0.5),
-            ),
-        )
-        con.execute(
-            """
             INSERT OR REPLACE INTO mem_lit_compressed(
               paper_id, source, title, authors, year, venue, problem, method,
               claimed_results, assumptions, limitations, trust_level, relates_to,

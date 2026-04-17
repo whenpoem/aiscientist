@@ -3,6 +3,7 @@ from __future__ import annotations
 
 def test_ingest_and_query_literature(workspace):
   impl = workspace["memory_mcp.impl"]
+  db = workspace["memory_mcp.db"]
 
   impl.ingest_paper(
       "arxiv:1234.5678",
@@ -30,3 +31,18 @@ def test_ingest_and_query_literature(workspace):
 
   assert rows[0]["paper_id"] == "arxiv:1234.5678"
   assert baselines[0]["paper_id"] == "arxiv:1234.5678"
+
+  con = db._connect()
+  try:
+      compressed_count = con.execute(
+          "SELECT COUNT(*) FROM mem_lit_compressed WHERE paper_id = ?",
+          ("arxiv:1234.5678",),
+      ).fetchone()[0]
+      legacy_table = con.execute(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mem_lit'"
+      ).fetchone()
+  finally:
+      con.close()
+
+  assert compressed_count == 1
+  assert legacy_table is None

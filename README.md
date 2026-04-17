@@ -36,9 +36,11 @@ uv run uvicorn cockpit.server:app --port 7777
 Run the frontend from `src/cockpit/frontend`:
 
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
+
+Use the checked-in `package-lock.json` as the source of truth. The frontend stack is on very new 2026-era versions, so prefer `npm ci` over a fresh unlocked install.
 
 Default local endpoints:
 

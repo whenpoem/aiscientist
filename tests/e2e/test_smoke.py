@@ -24,8 +24,11 @@ def test_cockpit_smoke(workspace):
         assert snapshot["meta"]["mcp"]["transport"] == "http"
         assert snapshot["meta"]["mcp"]["url"].endswith("/mcp")
 
-        mcp_probe = client.get("/mcp", follow_redirects=False)
+        mcp_probe = client.get("/mcp/", follow_redirects=False)
         assert mcp_probe.status_code == 406
+
+        mount_paths = {getattr(route, "path", None) for route in server.app.routes}
+        assert "/mcp" in mount_paths
 
         last_event_id = snapshot["meta"]["last_event_id"]
         with client.websocket_connect(f"/ws/state?last_id={last_event_id}") as websocket:
@@ -60,3 +63,18 @@ def test_claude_settings_register_http_cockpit_and_node_openalex():
     openalex = settings["mcpServers"]["openalex"]
     assert openalex["command"] == "npx"
     assert openalex["args"] == ["-y", "openalex-research-mcp"]
+
+    expected_hooks = {
+        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/leakage_guard.py\"",
+        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/destructive_bash_guard.py\"",
+        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/provenance_log.py\"",
+        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/intervention_pump.py\"",
+        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_flush.py\"",
+    }
+    actual_commands = {
+        hook["command"]
+        for groups in settings["hooks"].values()
+        for group in groups
+        for hook in group["hooks"]
+    }
+    assert expected_hooks <= actual_commands

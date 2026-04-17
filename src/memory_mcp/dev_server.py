@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import os
 from functools import wraps
 
@@ -27,11 +28,12 @@ def _wrap(tool_name: str):
     def wrapper(*args, **kwargs):
         return getattr(_impl(), tool_name)(*args, **kwargs)
 
+    wrapper.__signature__ = inspect.signature(tool)
     return wrapper
 
 
 for tool_name in _impl_module.TOOL_NAMES:
-    mcp.tool(_wrap(tool_name))
+    globals()[tool_name] = mcp.tool(_wrap(tool_name))
 
 
 if __name__ == "__main__":

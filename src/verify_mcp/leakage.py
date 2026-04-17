@@ -137,7 +137,12 @@ def scan_python(src: str) -> list[Finding]:
             target_arg = node.args[1]
             feature_base = _base_name(feature_arg)
             target_base = _base_name(target_arg)
-            if isinstance(feature_arg, ast.Name) and feature_base and feature_base == target_base:
+            if (
+                isinstance(feature_arg, ast.Name)
+                and isinstance(target_arg, (ast.Subscript, ast.Attribute))
+                and feature_base
+                and feature_base == target_base
+            ):
                 findings.append(
                     Finding(
                         "target_in_features",

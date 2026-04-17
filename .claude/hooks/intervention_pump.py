@@ -51,12 +51,24 @@ def drain() -> str:
 
 
 def main() -> None:
-    _ = json.loads(sys.stdin.read() or "{}")
+    payload = json.loads(sys.stdin.read() or "{}")
+    if payload.get("hook_event_name") != "UserPromptSubmit":
+        print("{}")
+        return
     text = drain()
     if text:
-        print(json.dumps({"hookSpecificOutput": {"additionalContext": text}}))
-    else:
-        print("{}")
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": text,
+                    }
+                }
+            )
+        )
+        return
+    print("{}")
 
 
 if __name__ == "__main__":

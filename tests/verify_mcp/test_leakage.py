@@ -94,3 +94,22 @@ def test_leakage_detector_accepts_clean_pipeline(workspace):
     result = impl.leakage_check(script_path=str(fixture))
 
     assert result == {"clean": True, "findings": []}
+
+
+def test_leakage_detector_allows_autoencoder_fit_on_same_tensor(workspace):
+    impl = workspace["verify_mcp.impl"]
+
+    result = impl.leakage_check(
+        script_text="""
+class AutoEncoder:
+    def fit(self, X, y):
+        return self
+
+def train(X):
+    model = AutoEncoder()
+    model.fit(X, X)
+    return model
+"""
+    )
+
+    assert result == {"clean": True, "findings": []}

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,19 @@ def connect_sqlite(path: Path | None = None, *, timeout: float = 5.0) -> sqlite3
 
 def apply_schema_migration(con: sqlite3.Connection, component: str, schema_text: str) -> None:
     con.executescript(MIGRATION_SCHEMA)
+    schema_hash = hashlib.sha256(schema_text.encode("utf-8")).hexdigest()
+    row = con.execute(
+        "SELECT schema_sha256 FROM ra_migrations WHERE component = ?",
+        (component,),
+    ).fetchone()
+    if row is not None and row["schema_sha256"] != schema_hash:
+        warnings.warn(
+            (
+                f"Schema hash changed for {component}; applying updated schema and "
+                "refreshing the recorded hash."
+            ),
+            stacklevel=2,
+        )
     con.executescript(schema_text)
     con.execute(
         """
@@ -68,7 +82,7 @@ def apply_schema_migration(con: sqlite3.Connection, component: str, schema_text:
           schema_sha256 = excluded.schema_sha256,
           applied_at = excluded.applied_at
         """,
-        (component, hashlib.sha256(schema_text.encode("utf-8")).hexdigest(), now_utc_iso()),
+        (component, schema_hash, now_utc_iso()),
     )
 
 

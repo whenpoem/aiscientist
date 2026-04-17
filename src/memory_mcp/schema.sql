@@ -70,16 +70,6 @@ CREATE TRIGGER IF NOT EXISTS mem_failures_au AFTER UPDATE ON mem_failures BEGIN
   VALUES (new.failure_id, new.trigger, new.symptom, coalesce(new.root_cause, ''), coalesce(new.resolution, ''));
 END;
 
-CREATE TABLE IF NOT EXISTS mem_lit (
-  paper_id TEXT PRIMARY KEY,
-  source TEXT NOT NULL,
-  title TEXT,
-  abstract TEXT,
-  metadata TEXT DEFAULT '{}',
-  trust_level REAL NOT NULL DEFAULT 0.5,
-  added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS mem_lit_compressed (
   paper_id TEXT PRIMARY KEY,
   source TEXT NOT NULL CHECK(source IN ('arxiv', 'openalex', 'manual')),

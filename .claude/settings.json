@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python .claude/hooks/leakage_guard.py",
+            "command": "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/leakage_guard.py\"",
             "timeout": 5
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python .claude/hooks/destructive_bash_guard.py",
+            "command": "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/destructive_bash_guard.py\"",
             "timeout": 5
           }
         ]
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python .claude/hooks/provenance_log.py",
+            "command": "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/provenance_log.py\"",
             "timeout": 5
           }
         ]
@@ -65,7 +65,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python .claude/hooks/intervention_pump.py",
+            "command": "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/intervention_pump.py\"",
             "timeout": 5
           }
         ]
@@ -76,12 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python .claude/hooks/intervention_pump.py",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "uv run python .claude/hooks/stop_flush.py",
+            "command": "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_flush.py\"",
             "timeout": 5
           }
         ]

@@ -33,15 +33,18 @@ def main() -> None:
         print(
             json.dumps(
                 {
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "Destructive bash command blocked. "
-                        "Append # CONFIRM_DESTRUCTIVE to proceed."
-                    ),
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            "Destructive bash command blocked. "
+                            "Append # CONFIRM_DESTRUCTIVE to proceed."
+                        ),
+                    }
                 }
             )
         )
-        raise SystemExit(2)
+        return
     print("{}")
 
 

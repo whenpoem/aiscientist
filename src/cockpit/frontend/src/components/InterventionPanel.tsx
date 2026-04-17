@@ -99,7 +99,7 @@ export function InterventionPanel({
 
         <div className="shrink-0 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="max-w-[30rem] text-sm text-[#8e9889]">
-            {notice || 'Queued interventions are delivered on the next prompt or turn stop.'}
+            {notice || 'Queued interventions are delivered on the next prompt.'}
           </p>
           <button
             className="mono rounded-full border border-[#d5dfb8]/30 bg-[#d5dfb8]/12 px-4 py-2 text-[11px] uppercase tracking-[0.24em] text-[#eef5db] disabled:opacity-50"

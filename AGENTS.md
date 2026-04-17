@@ -60,6 +60,7 @@ uv run uvicorn cockpit.server:app --port 7777
 Run from `src/cockpit/frontend`:
 
 ```powershell
+npm ci
 npm run dev
 npm run build
 ```
@@ -84,6 +85,7 @@ Important detail:
 
 - `openalex-research-mcp` is configured through `npx -y openalex-research-mcp`, not `uv`, because the real package is a Node CLI in this environment.
 - The cockpit MCP is mounted over HTTP at `http://127.0.0.1:7777/mcp`.
+- The frontend lockfile is the contract. Use `npm ci`, not an unlocked `npm install`, unless you are intentionally updating the pinned stack.
 
 If you change `.claude/settings.json`, assume Claude Code may need a fresh session to reload MCP and hooks.
 

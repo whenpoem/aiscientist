@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from .db import connect, ensure
 
 cockpit_mcp = FastMCP("cockpit")
-mcp_http_app = cockpit_mcp.http_app(path="/mcp", transport="http")
+mcp_http_app = cockpit_mcp.http_app(path="/", transport="http")
 
 
 def _safe_rows(query: str, params: tuple = ()) -> list[dict]:
@@ -233,4 +233,10 @@ async def ws_state(ws: WebSocket) -> None:
         return
 
 
-app.mount("/", mcp_http_app)
+app.mount("/mcp", mcp_http_app)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("cockpit.server:app", host="127.0.0.1", port=7777, reload=False)

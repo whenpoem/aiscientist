@@ -11,12 +11,12 @@ import sys
 from typing import Iterator
 
 from claudescientist.runtime import state_db_path
+from verify_mcp.provenance import METRIC_RE
 
 DB = state_db_path()
 HELDOUT_RE = re.compile(
     r"(?i)(?:\.research-agent[\\/]+held_out|%USERPROFILE%[\\/]+\.research-agent|~[\\/]+\.research-agent[\\/]+held_out)"
 )
-NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?%?")
 
 
 def _iter_strings(value) -> Iterator[str]:
@@ -31,8 +31,17 @@ def _iter_strings(value) -> Iterator[str]:
 
 
 def _deny(reason: str) -> None:
-    print(json.dumps({"permissionDecision": "deny", "permissionDecisionReason": reason}))
-    raise SystemExit(2)
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+    )
 
 
 def _missing_provenance(values: list[str]) -> list[str]:
@@ -55,6 +64,26 @@ def _missing_provenance(values: list[str]) -> list[str]:
         con.close()
 
 
+def _should_verify_markdown(path_value: str) -> bool:
+    normalized = path_value.replace("\\", "/").lower()
+    if not normalized.endswith(".md"):
+        return False
+    parts = [part for part in normalized.split("/") if part]
+    return any(part in {"reports", "writeup"} for part in parts)
+
+
+def _metric_values_from_text(text: str) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for match in METRIC_RE.finditer(text):
+        value = match.group("value")
+        if value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+    return values
+
+
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     if os.environ.get("RESEARCH_AGENT_VERIFY") == "1":
@@ -64,6 +93,7 @@ def main() -> None:
     strings = list(_iter_strings(tool_input))
     if any(HELDOUT_RE.search(text.replace("\\", "/")) for text in strings):
         _deny("Held-out data access is restricted to verify-mcp.")
+        return
 
     path_value = ""
     for key in ("file_path", "path"):
@@ -71,8 +101,8 @@ def main() -> None:
         if isinstance(candidate, str):
             path_value = candidate
             break
-    if path_value.lower().endswith(".md"):
-        numeric_values = NUMBER_RE.findall("\n".join(strings))
+    if _should_verify_markdown(path_value):
+        numeric_values = _metric_values_from_text("\n".join(strings))
         if numeric_values:
             missing = _missing_provenance(numeric_values)
             if missing:
@@ -80,6 +110,7 @@ def main() -> None:
                     "Markdown write blocked. Missing provenance for numeric claims: "
                     + ", ".join(missing[:5])
                 )
+                return
     print("{}")
 
 
