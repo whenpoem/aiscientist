@@ -9,6 +9,7 @@ from claudescientist.runtime import (
     apply_schema_migration,
     cache_key,
     connect_sqlite,
+    ensure_columns,
     state_db_path,
 )
 
@@ -75,6 +76,9 @@ CREATE TABLE IF NOT EXISTS ver_heldout_queries (
   model_path TEXT NOT NULL,
   batch_size INTEGER NOT NULL DEFAULT 1,
   metric_value REAL,
+  status TEXT NOT NULL DEFAULT 'completed',
+  error TEXT NOT NULL DEFAULT '',
+  completed_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(dataset) REFERENCES ver_heldout_budgets(dataset) ON DELETE CASCADE
 );
@@ -85,6 +89,18 @@ CREATE INDEX IF NOT EXISTS idx_ver_heldout_queries_dataset ON ver_heldout_querie
 _BOOTSTRAPPED: set[str] = set()
 
 
+def _ensure_heldout_query_columns(con: sqlite3.Connection) -> None:
+    ensure_columns(
+        con,
+        "ver_heldout_queries",
+        {
+            "status": "TEXT NOT NULL DEFAULT 'completed'",
+            "error": "TEXT NOT NULL DEFAULT ''",
+            "completed_at": "TEXT",
+        },
+    )
+
+
 def bootstrap() -> None:
     path = state_db_path()
     key = cache_key(path)
@@ -92,7 +108,8 @@ def bootstrap() -> None:
         return
     con = connect_sqlite(path)
     try:
-        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA)
+        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA, schema_version=2)
+        _ensure_heldout_query_columns(con)
     finally:
         con.close()
     _BOOTSTRAPPED.add(key)

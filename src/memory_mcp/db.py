@@ -10,6 +10,7 @@ from claudescientist.runtime import (
     apply_schema_migration,
     cache_key,
     connect_sqlite,
+    ensure_columns,
     state_db_path,
 )
 
@@ -18,9 +19,7 @@ _BOOTSTRAPPED: set[str] = set()
 
 
 def _ensure_elo_column(con: sqlite3.Connection) -> None:
-    columns = {row["name"] for row in con.execute("PRAGMA table_info(mem_nodes)").fetchall()}
-    if "elo_score" not in columns:
-        con.execute("ALTER TABLE mem_nodes ADD COLUMN elo_score REAL NOT NULL DEFAULT 1500.0")
+    ensure_columns(con, "mem_nodes", {"elo_score": "REAL NOT NULL DEFAULT 1500.0"})
 
 
 def bootstrap() -> None:
@@ -30,7 +29,12 @@ def bootstrap() -> None:
         return
     con = connect_sqlite(path)
     try:
-        apply_schema_migration(con, "memory_mcp", SCHEMA_PATH.read_text(encoding="utf-8"))
+        apply_schema_migration(
+            con,
+            "memory_mcp",
+            SCHEMA_PATH.read_text(encoding="utf-8"),
+            schema_version=2,
+        )
         _ensure_elo_column(con)
     finally:
         con.close()

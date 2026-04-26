@@ -5,24 +5,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import shutil
 from pathlib import Path
 from typing import Any, Iterable
 
-from claudescientist.runtime import now_utc_iso
+from claudescientist.runtime import heldout_root, now_utc_iso
 from verify_mcp.db import bootstrap as verify_bootstrap
 from verify_mcp.db import tx
 
 DEFAULT_HELDOUT_BUDGET = 5
-HELDOUT_DIR_ENV = "RESEARCH_AGENT_HELDOUT_DIR"
-
-
-def heldout_root() -> Path:
-    override = os.environ.get(HELDOUT_DIR_ENV)
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".research-agent" / "heldout"
 
 
 def dataset_root(dataset: str) -> Path:

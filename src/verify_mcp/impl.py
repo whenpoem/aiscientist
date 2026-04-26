@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from claudescientist.heldout import compute_manifest, load_manifest
+from claudescientist.runtime import emit_cockpit_event
 
 from .budget import budget_ratios, extract_budget
 from .db import _connect, bootstrap, tx
@@ -67,6 +68,10 @@ def _parse_metric_value(stdout: str) -> float | None:
         return float(token.replace(",", ""))
     except ValueError:
         return None
+
+
+def _emit_event(con, kind: str, payload: dict) -> None:
+    emit_cockpit_event(con, kind, payload)
 
 
 def _extract_pattern_value(text: str, pattern: str) -> float | None:
@@ -242,6 +247,18 @@ def seed_perturb(
             ),
         )
         run_id = int(cur.lastrowid)
+        _emit_event(
+            con,
+            "seed_run_recorded",
+            {
+                "run_id": run_id,
+                "script_path": str(script_path),
+                "metric_pin_id": metric_pin_id,
+                "verdict": verdict,
+                "mean_value": mean_value,
+                "std_value": std_value,
+            },
+        )
 
     return {
         "ok": True,
@@ -290,6 +307,95 @@ def baseline_fairness(
     }
 
 
+def _reserve_heldout_budget(
+    *,
+    dataset: str,
+    model_path: str,
+    batch_size: int,
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    with tx() as con:
+        validated, error = _load_heldout_budget(con, dataset)
+        if error is not None:
+            return None, error
+        assert validated is not None
+        budget_total = int(validated["budget_total"])
+        budget_used = int(validated["budget_used"])
+        if budget_used + batch_size > budget_total:
+            return None, {
+                "ok": False,
+                "error": "budget_exceeded",
+                "dataset": dataset,
+                "budget_total": budget_total,
+                "budget_used": budget_used,
+            }
+
+        cur = con.execute(
+            """
+            INSERT INTO ver_heldout_queries(dataset, model_path, batch_size, status)
+            VALUES(?,?,?,?)
+            """,
+            (dataset, str(model_path), batch_size, "running"),
+        )
+        con.execute(
+            """
+            UPDATE ver_heldout_budgets
+            SET budget_used = budget_used + ?
+            WHERE dataset = ?
+            """,
+            (batch_size, dataset),
+        )
+        query_id = int(cur.lastrowid)
+        reserved_used = budget_used + batch_size
+        _emit_event(
+            con,
+            "heldout_query_reserved",
+            {
+                "query_id": query_id,
+                "dataset": dataset,
+                "batch_size": batch_size,
+                "budget_used": reserved_used,
+                "budget_total": budget_total,
+            },
+        )
+        return (
+            {
+                **validated,
+                "query_id": query_id,
+                "budget_used": reserved_used,
+                "remaining_budget": budget_total - reserved_used,
+            },
+            None,
+        )
+
+
+def _finish_heldout_query(
+    *,
+    query_id: int,
+    status: str,
+    metric_value: float | None = None,
+    error: str = "",
+) -> None:
+    with tx() as con:
+        con.execute(
+            """
+            UPDATE ver_heldout_queries
+            SET status = ?, metric_value = ?, error = ?, completed_at = CURRENT_TIMESTAMP
+            WHERE query_id = ?
+            """,
+            (status, metric_value, error[:500], query_id),
+        )
+        _emit_event(
+            con,
+            "heldout_query_finished",
+            {
+                "query_id": query_id,
+                "status": status,
+                "metric_value": metric_value,
+                "error": error[:120],
+            },
+        )
+
+
 def query_heldout(
     dataset: str,
     model_path: str,
@@ -301,26 +407,20 @@ def query_heldout(
     if batch_size <= 0:
         raise ValueError("batch_size must be positive.")
 
-    con = _connect()
-    try:
-        validated, error = _load_heldout_budget(con, dataset)
-    finally:
-        con.close()
+    validated, error = _reserve_heldout_budget(
+        dataset=dataset,
+        model_path=model_path,
+        batch_size=batch_size,
+    )
     if error is not None:
         return error
 
     assert validated is not None
     heldout_path = validated["heldout_path"]
-    budget_total = int(validated["budget_total"])
     budget_used = int(validated["budget_used"])
-    if budget_used + batch_size > budget_total:
-        return {
-            "ok": False,
-            "error": "budget_exceeded",
-            "dataset": dataset,
-            "budget_total": budget_total,
-            "budget_used": budget_used,
-        }
+    budget_total = int(validated["budget_total"])
+    remaining_budget = int(validated["remaining_budget"])
+    query_id = int(validated["query_id"])
 
     completed = _run_script(
         model_path,
@@ -328,56 +428,40 @@ def query_heldout(
         timeout_sec=timeout_sec,
     )
     if completed.returncode != 0:
+        _finish_heldout_query(
+            query_id=query_id,
+            status="failed",
+            error=f"script_failed:{completed.returncode}",
+        )
         return {
             "ok": False,
+            "query_id": query_id,
             "error": "script_failed",
             "dataset": dataset,
             "returncode": completed.returncode,
-            "stdout": completed.stdout,
-            "stderr": completed.stderr,
+            "budget_total": budget_total,
+            "budget_used": budget_used,
+            "remaining_budget": remaining_budget,
         }
 
     metric_value = _parse_metric_value(completed.stdout)
     if metric_value is None:
+        _finish_heldout_query(
+            query_id=query_id,
+            status="failed",
+            error="metric_parse_failed",
+        )
         return {
             "ok": False,
+            "query_id": query_id,
             "error": "metric_parse_failed",
             "dataset": dataset,
-            "stdout": completed.stdout,
+            "budget_total": budget_total,
+            "budget_used": budget_used,
+            "remaining_budget": remaining_budget,
         }
 
-    with tx() as con:
-        validated, error = _load_heldout_budget(con, dataset)
-        if error is not None:
-            return error
-        assert validated is not None
-        budget_total = int(validated["budget_total"])
-        budget_used = int(validated["budget_used"])
-        if budget_used + batch_size > budget_total:
-            return {
-                "ok": False,
-                "error": "budget_exceeded",
-                "dataset": dataset,
-                "budget_total": budget_total,
-                "budget_used": budget_used,
-            }
-
-        cur = con.execute(
-            """
-            INSERT INTO ver_heldout_queries(dataset, model_path, batch_size, metric_value)
-            VALUES(?,?,?,?)
-            """,
-            (dataset, str(model_path), batch_size, metric_value),
-        )
-        con.execute(
-            """
-            UPDATE ver_heldout_budgets
-            SET budget_used = budget_used + ?
-            WHERE dataset = ?
-            """,
-            (batch_size, dataset),
-        )
-        query_id = int(cur.lastrowid)
+    _finish_heldout_query(query_id=query_id, status="completed", metric_value=metric_value)
 
     return {
         "ok": True,
@@ -387,9 +471,8 @@ def query_heldout(
         "batch_size": batch_size,
         "metric_value": metric_value,
         "budget_total": budget_total,
-        "budget_used": budget_used + batch_size,
-        "remaining_budget": budget_total - (budget_used + batch_size),
-        "stdout": completed.stdout,
+        "budget_used": budget_used,
+        "remaining_budget": remaining_budget,
     }
 
 
@@ -439,7 +522,18 @@ def pin_metric(
                 note.strip(),
             ),
         )
-    return {"pinned": True, "pin_id": int(pin.lastrowid), "provenance_id": provenance_id}
+        pin_id = int(pin.lastrowid)
+        _emit_event(
+            con,
+            "claim_pinned",
+            {
+                "pin_id": pin_id,
+                "claim": normalized_claim,
+                "value": normalized_value,
+                "session_id": session_id,
+            },
+        )
+    return {"pinned": True, "pin_id": pin_id, "provenance_id": provenance_id}
 
 
 def check_provenance(claim: str) -> dict:

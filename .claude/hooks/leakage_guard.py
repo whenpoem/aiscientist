@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Iterator
 
-from claudescientist.runtime import state_db_path
+from claudescientist.runtime import heldout_root, state_db_path
 from verify_mcp.provenance import METRIC_RE
 
 DB = state_db_path()
@@ -76,8 +76,34 @@ def _candidate_paths(text: str) -> Iterator[str]:
                 yield candidate
 
 
-def _heldout_root() -> Path:
-    return Path.home() / ".research-agent" / "heldout"
+def _heldout_roots() -> list[Path]:
+    roots = [heldout_root()]
+    if DB.exists():
+        try:
+            con = sqlite3.connect(str(DB), timeout=2.0)
+            rows = con.execute(
+                """
+                SELECT heldout_path
+                FROM ver_heldout_budgets
+                WHERE heldout_path IS NOT NULL
+                """
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+        finally:
+            try:
+                con.close()
+            except UnboundLocalError:
+                pass
+        roots.extend(Path(str(row[0])).expanduser() for row in rows)
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root.resolve(strict=False)).replace("\\", "/").lower().rstrip("/")
+        if key not in seen:
+            seen.add(key)
+            deduped.append(root)
+    return deduped
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -92,7 +118,7 @@ def _looks_like_heldout_reference(text: str) -> bool:
 
 
 def _should_block_heldout(strings: list[str]) -> bool:
-    root = _heldout_root()
+    roots = _heldout_roots()
     for text in strings:
         if _looks_like_heldout_reference(text):
             return True
@@ -104,7 +130,7 @@ def _should_block_heldout(strings: list[str]) -> bool:
                 resolved = Path(os.path.expandvars(os.path.expanduser(candidate)))
             except (OSError, ValueError):
                 continue
-            if _is_within(resolved, root):
+            if any(_is_within(resolved, root) for root in roots):
                 return True
     return False
 

@@ -8,6 +8,7 @@ from rich.text import Text
 from textual.widgets import Tree
 
 from cockpit.data import GraphNode, GraphSnapshot
+from cockpit.i18n import t
 
 
 class HypothesisTreePane(Tree[str]):
@@ -17,11 +18,16 @@ class HypothesisTreePane(Tree[str]):
         super().__init__("research")
         self.id = "tree-pane"
         self.classes = "pane"
-        self.border_title = "1 Hypothesis Tree"
+        self.lang = "en"
+        self.border_title = t(self.lang, "tree_title")
         self.show_root = False
         self.auto_expand = False
         self.node_lookup: dict[str, object] = {}
         self._visible_ids: list[str] = []
+
+    def set_language(self, lang: str) -> None:
+        self.lang = lang
+        self.set_title()
 
     def current_node_id(self) -> str | None:
         cursor = self.cursor_node
@@ -62,8 +68,12 @@ class HypothesisTreePane(Tree[str]):
             cursor.collapse()
 
     def set_title(self, filter_text: str = "") -> None:
-        suffix = f" (filter: {filter_text})" if filter_text else ""
-        self.border_title = f"1 Hypothesis Tree{suffix}"
+        suffix = (
+            f" ({t(self.lang, 'filter_suffix', value=filter_text)})"
+            if filter_text
+            else ""
+        )
+        self.border_title = f"{t(self.lang, 'tree_title')}{suffix}"
 
     def load_graph(
         self,
@@ -139,7 +149,7 @@ class HypothesisTreePane(Tree[str]):
             add_branch(self.root, root_id)
 
         if not self._visible_ids:
-            self.root.add_leaf("No hypotheses yet. Trigger a research session in Claude Code.")
+            self.root.add_leaf(t(self.lang, "no_hypotheses"))
             return None
 
         if selected_node_id in self.node_lookup:
@@ -151,13 +161,35 @@ class HypothesisTreePane(Tree[str]):
 
     def _label_for(self, node: GraphNode) -> Text:
         title = Text()
-        title.append(node.node_id, style=self._style_for(node))
+        title.append(self._prefix_for(node), style=self._style_for(node))
+        title.append(" ")
+        title.append(self._short_id(node.node_id), style=self._style_for(node))
         title.append(" ")
         title.append(node.text)
-        title.append(f"  [{node.elo_score:.0f}]", style="dim")
+        if node.kind == "hypothesis":
+            title.append(f"  elo {node.elo_score:.0f}", style="dim")
         if node.state == "refuted":
             title.stylize("strike")
         return title
+
+    @staticmethod
+    def _short_id(node_id: str) -> str:
+        if "_" not in node_id:
+            return node_id[:10]
+        prefix, suffix = node_id.split("_", 1)
+        return f"{prefix}_{suffix[:4]}"
+
+    @staticmethod
+    def _prefix_for(node: GraphNode) -> str:
+        if node.state == "refuted":
+            return "X"
+        return {
+            "question": "Q",
+            "hypothesis": "H",
+            "experiment": "E",
+            "evidence": "EV",
+            "conclusion": "C",
+        }.get(node.kind, "-")
 
     @staticmethod
     def _style_for(node: GraphNode) -> str:

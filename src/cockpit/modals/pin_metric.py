@@ -7,6 +7,8 @@ from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label
 
+from cockpit.i18n import t
+
 
 class PinMetricModal(ModalScreen[dict[str, str] | None]):
     """Prompt for dataset, metric, and numeric value."""
@@ -27,18 +29,23 @@ class PinMetricModal(ModalScreen[dict[str, str] | None]):
     }
     """
 
-    def __init__(self, dataset: str = "") -> None:
+    def __init__(self, dataset: str = "", *, lang: str = "en") -> None:
         super().__init__()
         self._default_dataset = dataset
+        self._lang = lang
 
     def compose(self) -> ComposeResult:
         with Container(id="pin-dialog"):
             with Vertical():
-                yield Label("Pin metric")
-                yield Input(value=self._default_dataset, placeholder="dataset", id="pin-dataset")
-                yield Input(placeholder="metric", id="pin-metric")
-                yield Input(placeholder="value", id="pin-value")
-                yield Label("Tab moves between fields. Enter on value submits.", id="pin-help")
+                yield Label(t(self._lang, "pin_title"))
+                yield Input(
+                    value=self._default_dataset,
+                    placeholder=t(self._lang, "pin_dataset"),
+                    id="pin-dataset",
+                )
+                yield Input(placeholder=t(self._lang, "pin_metric_field"), id="pin-metric")
+                yield Input(placeholder=t(self._lang, "pin_value"), id="pin-value")
+                yield Label(t(self._lang, "pin_help"), id="pin-help")
 
     def on_mount(self) -> None:
         self.query_one("#pin-dataset", Input).focus()

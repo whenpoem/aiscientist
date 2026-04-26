@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from rich.text import Text
 from textual.widgets import RichLog
 
+from cockpit.i18n import t
+
 
 class EventStreamPane(RichLog):
     """Streaming event log with filter and relative-time toggle support."""
@@ -15,14 +17,24 @@ class EventStreamPane(RichLog):
         super().__init__(max_lines=2000, wrap=False, highlight=False)
         self.id = "events-pane"
         self.classes = "pane"
-        self.border_title = "3 Event Stream"
+        self.lang = "en"
+        self.border_title = t(self.lang, "events_title")
         self._rows: list[dict] = []
         self._filter_text = ""
         self._relative_timestamps = False
 
+    def set_language(self, lang: str) -> None:
+        self.lang = lang
+        self.set_title(self._filter_text)
+        self._rerender()
+
     def set_title(self, filter_text: str = "") -> None:
-        suffix = f" (filter: {filter_text})" if filter_text else ""
-        self.border_title = f"3 Event Stream{suffix}"
+        suffix = (
+            f" ({t(self.lang, 'filter_suffix', value=filter_text)})"
+            if filter_text
+            else ""
+        )
+        self.border_title = f"{t(self.lang, 'events_title')}{suffix}"
 
     def set_filter_text(self, filter_text: str) -> None:
         self._filter_text = filter_text.strip().lower()
@@ -58,7 +70,7 @@ class EventStreamPane(RichLog):
             if not self._filter_text or self._matches_filter(row)
         ]
         if not rendered:
-            self.write("No cockpit events yet.")
+            self.write(t(self.lang, "no_events"))
             return
         for row in rendered:
             self.write(self._render_row(row))
@@ -101,6 +113,25 @@ class EventStreamPane(RichLog):
                 f"{payload.get('winner_node_id', '-')} beat "
                 f"{payload.get('a_node_id', '-')} / {payload.get('b_node_id', '-')}"
             )
+        if kind == "claim_pinned":
+            return f"{payload.get('claim', '-')}={payload.get('value', '-')}"
+        if kind == "seed_run_recorded":
+            return (
+                f"{payload.get('script_path', '-')} "
+                f"{payload.get('verdict', '-')} mean={payload.get('mean_value', '-')}"
+            )
+        if kind == "heldout_query_reserved":
+            return (
+                f"{payload.get('dataset', '-')} "
+                f"{payload.get('budget_used', '-')}/{payload.get('budget_total', '-')}"
+            )
+        if kind == "heldout_query_finished":
+            return (
+                f"{payload.get('query_id', '-')} {payload.get('status', '-')} "
+                f"metric={payload.get('metric_value', '-')}"
+            )
+        if kind == "literature_ingested":
+            return f"{payload.get('paper_id', '-')} {payload.get('title', '')}".strip()
         if kind == "note":
             return str(payload.get("text", ""))
         if kind == "snapshot_created":

@@ -21,6 +21,19 @@ def test_cockpit_tui_once_snapshot(workspace, capsys):
     assert hypothesis["node_id"] in render_snapshot()
 
 
+def test_cockpit_tui_once_snapshot_zh(workspace, capsys):
+    memory_impl = workspace["memory_mcp.impl"]
+    hypothesis = memory_impl.propose_hypothesis("Try dropout scaling for ViT")
+
+    exit_code = tui_main(["--once", "--lang", "zh"])
+    captured = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "研究座舱" in captured
+    assert "假设树" in captured
+    assert hypothesis["node_id"] in captured
+
+
 def test_claude_settings_register_stdio_cockpit_and_node_openalex():
     settings_path = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -60,9 +73,15 @@ def test_sops_reference_elo_selection_flow():
     elo_select = (repo_root / ".claude" / "skills" / "elo-select" / "SKILL.md").read_text(
         encoding="utf-8"
     )
+    verifier = (repo_root / ".claude" / "agents" / "verifier.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "$elo-select" in research_sop
     assert "mcp__memory__judge_hypotheses" in research_sop
     assert "mcp__memory__record_judgement" in research_sop
     assert "$elo-select" in writeup_sop
     assert "mcp__memory__record_judgement" in elo_select
+    assert "mcp__verify__seed_perturb" in verifier
+    assert "mcp__verify__baseline_fairness" in verifier
+    assert "mcp__verify__query_heldout" in verifier

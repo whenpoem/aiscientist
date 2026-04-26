@@ -82,6 +82,25 @@ async def test_filter_escape_clears_active_tree_filter(workspace):
 
 
 @pytest.mark.asyncio
+async def test_language_toggle_localizes_core_tui_labels(workspace):
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+
+    app = CockpitApp()
+
+    async with app.run_test() as pilot:
+        assert "Hypothesis Tree" in app.tree_pane.border_title
+
+        await pilot.press("L")
+
+        assert app.lang == "zh"
+        assert "假设树" in app.tree_pane.border_title
+        assert "节点详情" in app.detail_pane.border_title
+        assert "研究座舱" in app.status_bar.current_text
+        assert "切换语言" in app.context_bar.current_text
+
+
+@pytest.mark.asyncio
 async def test_event_dispatch_refreshes_only_affected_panes(workspace, monkeypatch):
     memory_impl = workspace["memory_mcp.impl"]
     memory_impl.propose_hypothesis("Tune dropout for ViT")
@@ -133,14 +152,14 @@ async def test_event_dispatch_refreshes_only_affected_panes(workspace, monkeypat
             [
                 {"kind": "graph_delta"},
                 {"kind": "failure_added"},
-                {"kind": "intervention"},
+                {"kind": "seed_run_recorded"},
             ]
         )
 
         assert counters == {
             "graph": 1,
             "failures": 1,
-            "claims": 0,
+            "claims": 1,
             "literature": 0,
             "counts": 1,
             "detail": 1,

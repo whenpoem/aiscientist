@@ -42,6 +42,15 @@ def test_seed_perturb_records_stable_runs(workspace):
             """,
             (result["run_id"],),
         ).fetchone()
+        event = con.execute(
+            """
+            SELECT payload
+            FROM cockpit_events
+            WHERE kind = 'seed_run_recorded'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
     finally:
         con.close()
 
@@ -54,6 +63,7 @@ def test_seed_perturb_records_stable_runs(workspace):
     assert row["std_value"] == pytest.approx(0.0)
     assert row["verdict"] == "stable"
     assert row["metric_pin_id"] == pin["pin_id"]
+    assert json.loads(event["payload"])["run_id"] == result["run_id"]
 
 
 def test_seed_perturb_flags_noisy_runs(workspace):

@@ -134,6 +134,65 @@ def fetch_counts() -> dict[str, int]:
         con.close()
 
 
+def fetch_dashboard() -> dict[str, Any]:
+    con = _connect()
+    try:
+        node_counts = con.execute(
+            """
+            SELECT
+              SUM(CASE WHEN kind = 'hypothesis' AND state = 'active' THEN 1 ELSE 0 END)
+                AS active_hypotheses,
+              SUM(CASE WHEN state = 'refuted' THEN 1 ELSE 0 END) AS refuted_nodes,
+              COUNT(*) AS nodes
+            FROM mem_nodes
+            """
+        ).fetchone()
+        failure_count = int(con.execute("SELECT COUNT(*) FROM mem_failures").fetchone()[0])
+        event_row = con.execute(
+            "SELECT COUNT(*) AS n, MAX(created_at) AS latest FROM cockpit_events"
+        ).fetchone()
+        intervention_count = int(
+            con.execute("SELECT COUNT(*) FROM cockpit_interventions").fetchone()[0]
+        )
+        claim_count = int(con.execute("SELECT COUNT(*) FROM ver_metric_pins").fetchone()[0])
+        unstable_seed_runs = 0
+        if _table_exists(con, "ver_seed_runs"):
+            unstable_seed_runs = int(
+                con.execute(
+                    "SELECT COUNT(*) FROM ver_seed_runs WHERE verdict = 'unstable'"
+                ).fetchone()[0]
+            )
+        heldout_rows = con.execute(
+            """
+            SELECT dataset, budget_total, budget_used,
+                   budget_total - budget_used AS remaining
+            FROM ver_heldout_budgets
+            ORDER BY remaining ASC, dataset ASC
+            LIMIT 3
+            """
+        ).fetchall()
+    finally:
+        con.close()
+
+    claims = fetch_claims()
+    risks = fetch_risks(claims=claims)
+    unverified_claims = sum(1 for claim in claims if not claim.get("verified"))
+    return {
+        "nodes": int(node_counts["nodes"] or 0),
+        "active_hypotheses": int(node_counts["active_hypotheses"] or 0),
+        "refuted_nodes": int(node_counts["refuted_nodes"] or 0),
+        "failures": failure_count,
+        "events": int(event_row["n"] or 0),
+        "interventions": intervention_count,
+        "pinned_claims": claim_count,
+        "unverified_claims": unverified_claims,
+        "unstable_seed_runs": unstable_seed_runs,
+        "heldout_budgets": [dict(row) for row in heldout_rows],
+        "latest_event_at": event_row["latest"],
+        "risks": len(risks),
+    }
+
+
 def fetch_latest_event_id() -> int:
     con = _connect()
     try:
@@ -276,6 +335,111 @@ def fetch_claims(limit: int = 100) -> list[dict[str, Any]]:
             }
         )
     return claims
+
+
+def fetch_heldout_budgets() -> list[dict[str, Any]]:
+    con = _connect()
+    try:
+        rows = con.execute(
+            """
+            SELECT dataset, heldout_path, manifest_sha256, budget_total, budget_used,
+                   budget_total - budget_used AS remaining, registered_at
+            FROM ver_heldout_budgets
+            ORDER BY remaining ASC, dataset ASC
+            """
+        ).fetchall()
+        return _rows_to_dicts(rows)
+    finally:
+        con.close()
+
+
+def fetch_risks(
+    *,
+    claims: list[dict[str, Any]] | None = None,
+    failures: list[dict[str, Any]] | None = None,
+    graph: GraphSnapshot | None = None,
+    heldout_budgets: list[dict[str, Any]] | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    claims = fetch_claims() if claims is None else claims
+    failures = fetch_failures() if failures is None else failures
+    graph = fetch_graph() if graph is None else graph
+    heldout_budgets = (
+        fetch_heldout_budgets() if heldout_budgets is None else heldout_budgets
+    )
+
+    risks: list[dict[str, Any]] = []
+    for claim in claims:
+        verdict = str(claim.get("seed_verdict") or "pending")
+        if verdict == "unstable":
+            risks.append(
+                {
+                    "severity": "high",
+                    "category": "seed",
+                    "item": str(claim.get("metric", "-")),
+                    "summary": (
+                        f"{claim.get('metric', '-')}={claim.get('value', '-')} "
+                        "has unstable seed verification"
+                    ),
+                }
+            )
+        elif not claim.get("verified"):
+            risks.append(
+                {
+                    "severity": "medium",
+                    "category": "claim",
+                    "item": str(claim.get("metric", "-")),
+                    "summary": (
+                        f"{claim.get('metric', '-')}={claim.get('value', '-')} "
+                        f"needs verification ({claim.get('seeds', '0/3')})"
+                    ),
+                }
+            )
+
+    for failure in failures:
+        seen_count = int(failure.get("seen_count") or 0)
+        if seen_count >= 3:
+            risks.append(
+                {
+                    "severity": "medium" if seen_count < 8 else "high",
+                    "category": "failure",
+                    "item": f"#{failure.get('failure_id', '-')}",
+                    "summary": (
+                        f"{failure.get('trigger', '-')} repeated {seen_count} times: "
+                        f"{failure.get('symptom', '-')}"
+                    ),
+                }
+            )
+
+    for edge in graph.edges:
+        if edge.get("relation") == "contradicts":
+            risks.append(
+                {
+                    "severity": "high",
+                    "category": "contradiction",
+                    "item": str(edge.get("edge_id", "-")),
+                    "summary": f"{edge.get('src', '-')} contradicts {edge.get('dst', '-')}",
+                }
+            )
+
+    for budget in heldout_budgets:
+        remaining = int(budget.get("remaining") or 0)
+        if remaining <= 1:
+            risks.append(
+                {
+                    "severity": "high" if remaining <= 0 else "medium",
+                    "category": "heldout",
+                    "item": str(budget.get("dataset", "-")),
+                    "summary": (
+                        f"{budget.get('dataset', '-')} held-out budget "
+                        f"{budget.get('budget_used', 0)}/{budget.get('budget_total', 0)}"
+                    ),
+                }
+            )
+
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    risks.sort(key=lambda row: (severity_order.get(str(row["severity"]), 9), row["category"]))
+    return risks[: max(1, limit)]
 
 
 def fetch_literature(limit: int = 100) -> list[dict[str, Any]]:

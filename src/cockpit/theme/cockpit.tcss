@@ -48,6 +48,14 @@ Screen {
     display: none;
 }
 
+#context-bar {
+    dock: bottom;
+    height: 1;
+    padding: 0 1;
+    color: #8b949e;
+    background: #0d1117;
+}
+
 Footer {
     dock: bottom;
 }

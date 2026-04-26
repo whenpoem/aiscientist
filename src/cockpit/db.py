@@ -32,7 +32,7 @@ def ensure() -> None:
     bootstrap_verify()
     con = connect_sqlite(state_db_path())
     try:
-        apply_schema_migration(con, "cockpit", COCKPIT_SCHEMA)
+        apply_schema_migration(con, "cockpit", COCKPIT_SCHEMA, schema_version=1)
     finally:
         con.close()
 

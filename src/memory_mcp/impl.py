@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import datetime, timezone
 from uuid import uuid4
+
+from claudescientist.runtime import emit_cockpit_event
 
 from .db import _connect, bootstrap, tx
 
@@ -55,10 +56,7 @@ def _fts_query(text: str) -> str:
 
 def _emit_event(con, kind: str, payload: dict) -> None:
     try:
-        con.execute(
-            "INSERT INTO cockpit_events(kind, payload, created_at) VALUES(?,?,?)",
-            (kind, json.dumps(payload, ensure_ascii=True), datetime.now(timezone.utc).isoformat()),
-        )
+        emit_cockpit_event(con, kind, payload)
     except sqlite3.Error:
         return
 
@@ -568,6 +566,15 @@ def ingest_paper(paper_id: str, source: str, structured: dict) -> dict:
                 json.dumps(relates_to, ensure_ascii=True),
                 structured.get("raw_abstract", ""),
             ),
+        )
+        _emit_event(
+            con,
+            "literature_ingested",
+            {
+                "paper_id": paper_id,
+                "source": source,
+                "title": structured.get("title", ""),
+            },
         )
     return {"ingested": paper_id}
 

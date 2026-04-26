@@ -56,6 +56,12 @@ def test_cockpit_data_layer_reads_existing_tables(workspace):
     assert claims[0]["dataset"] == "cifar10"
     assert claims[0]["seeds"] == "0/3"
     assert claims[0]["verified"] is False
+    risks = cockpit_data.fetch_risks(claims=claims, failures=failures, graph=graph)
+    assert any(row["category"] == "claim" and row["item"] == "accuracy" for row in risks)
+    dashboard = cockpit_data.fetch_dashboard()
+    assert dashboard["active_hypotheses"] >= 1
+    assert dashboard["pinned_claims"] >= 1
+    assert dashboard["risks"] >= 1
 
     literature = cockpit_data.fetch_literature()
     assert literature[0]["paper_id"] == paper["ingested"]
@@ -65,6 +71,8 @@ def test_cockpit_data_layer_reads_existing_tables(workspace):
     kinds = [event["kind"] for event in events]
     assert "graph_delta" in kinds
     assert "failure_added" in kinds
+    assert "claim_pinned" in kinds
+    assert "literature_ingested" in kinds
     assert "intervention" in kinds
     assert "note" in kinds
     assert intervention["event_id"] in {events[-2]["id"], events[-1]["id"]}

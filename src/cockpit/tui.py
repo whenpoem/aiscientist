@@ -5,20 +5,28 @@ from __future__ import annotations
 import argparse
 
 from .app import CockpitApp, render_snapshot
+from .i18n import SUPPORTED_LANGS, normalize_lang
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m cockpit.tui")
     parser.add_argument("--once", action="store_true", help="render one textual snapshot and exit")
+    parser.add_argument(
+        "--lang",
+        choices=sorted(SUPPORTED_LANGS),
+        default="en",
+        help="UI language",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    lang = normalize_lang(args.lang)
     if args.once:
-        print(render_snapshot())
+        print(render_snapshot(lang=lang))
         return 0
-    CockpitApp().run()
+    CockpitApp(lang=lang).run()
     return 0
 
 

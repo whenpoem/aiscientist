@@ -7,6 +7,8 @@ from textual.containers import Container, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Label
 
+from cockpit.i18n import t
+
 
 class ConfirmModal(ModalScreen[bool]):
     """Simple y/n confirmation screen."""
@@ -27,17 +29,18 @@ class ConfirmModal(ModalScreen[bool]):
     }
     """
 
-    def __init__(self, title: str, prompt: str) -> None:
+    def __init__(self, title: str, prompt: str, *, lang: str = "en") -> None:
         super().__init__()
         self._title = title
         self._prompt = prompt
+        self._lang = lang
 
     def compose(self) -> ComposeResult:
         with Container(id="confirm-dialog"):
             with Vertical():
                 yield Label(self._title, id="confirm-title")
                 yield Label(self._prompt)
-                yield Label("Press y to confirm, n or Esc to cancel.", id="confirm-hint")
+                yield Label(t(self._lang, "confirm_hint"), id="confirm-hint")
 
     def on_key(self, event) -> None:
         if event.key == "y":

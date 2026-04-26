@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import shlex
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from textual import work
@@ -15,6 +15,7 @@ from textual.reactive import reactive
 from textual.widgets import Footer, Input, Static
 
 from . import data
+from .i18n import normalize_lang, t, toggle_lang
 from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
 from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
 
@@ -24,18 +25,32 @@ FOCUS_ORDER = ("tree", "detail", "events", "tabs")
 class StatusBar(Static):
     """Single-line status header."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, lang: str = "en") -> None:
         super().__init__("")
         self.id = "status-bar"
-        self._counts = {"nodes": 0, "failures": 0, "events": 0, "interventions": 0}
+        self.lang = normalize_lang(lang)
+        self.current_text = ""
+        self._summary = {
+            "active_hypotheses": 0,
+            "refuted_nodes": 0,
+            "pinned_claims": 0,
+            "unverified_claims": 0,
+            "heldout_budgets": [],
+            "risks": 0,
+            "latest_event_at": None,
+        }
         self._clock = "--:--"
 
     def on_mount(self) -> None:
         self.set_interval(1.0, self._tick)
         self._refresh_display()
 
-    def set_counts(self, counts: dict[str, int]) -> None:
-        self._counts = dict(counts)
+    def set_language(self, lang: str) -> None:
+        self.lang = normalize_lang(lang)
+        self._refresh_display()
+
+    def set_summary(self, summary: dict) -> None:
+        self._summary = dict(summary)
         self._refresh_display()
 
     def _tick(self) -> None:
@@ -43,11 +58,81 @@ class StatusBar(Static):
         self._refresh_display()
 
     def _refresh_display(self) -> None:
-        self.update(
-            "research-cockpit  "
-            f"state.db: {self._counts['nodes']} nodes / {self._counts['failures']} failures / "
-            f"{self._counts['events']} events  {self._clock}"
+        self.current_text = t(
+            self.lang,
+            "hud",
+            app=t(self.lang, "app_name"),
+            active_hypotheses=self._summary.get("active_hypotheses", 0),
+            refuted_nodes=self._summary.get("refuted_nodes", 0),
+            pinned_claims=self._summary.get("pinned_claims", 0),
+            unverified_claims=self._summary.get("unverified_claims", 0),
+            heldout=self._format_heldout(),
+            risks=self._summary.get("risks", 0),
+            last_event=self._format_last_event(),
+            clock=self._clock,
         )
+        self.update(self.current_text)
+
+    def _format_heldout(self) -> str:
+        budgets = self._summary.get("heldout_budgets") or []
+        if not budgets:
+            return t(self.lang, "heldout_none")
+        parts = [
+            f"{row.get('dataset', '-')}: {row.get('budget_used', 0)}/{row.get('budget_total', 0)}"
+            for row in budgets[:2]
+        ]
+        return ", ".join(parts)
+
+    def _format_last_event(self) -> str:
+        raw = self._summary.get("latest_event_at")
+        if not raw:
+            return t(self.lang, "last_never")
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            return str(raw)[:8]
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)
+        seconds = max(int(delta.total_seconds()), 0)
+        if seconds < 5:
+            return t(self.lang, "just_now")
+        if seconds < 60:
+            return t(self.lang, "seconds_ago", value=seconds)
+        minutes = seconds // 60
+        if minutes < 60:
+            return t(self.lang, "minutes_ago", value=minutes)
+        return t(self.lang, "hours_ago", value=minutes // 60)
+
+
+class ContextBar(Static):
+    """Localized one-line hint for the focused pane."""
+
+    def __init__(self, *, lang: str = "en") -> None:
+        super().__init__("")
+        self.id = "context-bar"
+        self.lang = normalize_lang(lang)
+        self.pane = "tree"
+        self.current_text = ""
+        self.refresh_text()
+
+    def set_language(self, lang: str) -> None:
+        self.lang = normalize_lang(lang)
+        self.refresh_text()
+
+    def set_pane(self, pane: str) -> None:
+        self.pane = pane
+        self.refresh_text()
+
+    def refresh_text(self) -> None:
+        key = {
+            "tree": "context_tree",
+            "tabs": "context_tabs",
+            "events": "context_events",
+            "detail": "context_detail",
+        }.get(self.pane, "context_tree")
+        self.current_text = t(self.lang, key)
+        self.update(self.current_text)
 
 
 class CockpitApp(App[None]):
@@ -81,6 +166,7 @@ class CockpitApp(App[None]):
         Binding("?", "show_help", "Help"),
         Binding("t", "toggle_timestamp_mode", "Time"),
         Binding("s", "toggle_refuted", "Refuted"),
+        Binding("L", "toggle_language", "Language"),
         Binding("R", "force_refresh", "Refresh"),
         Binding("ctrl+l", "clear_event_log", "Clear Events"),
         Binding("escape", "cancel_context", show=False),
@@ -92,8 +178,9 @@ class CockpitApp(App[None]):
     relative_timestamps = reactive(False)
     last_event_id = reactive(0)
 
-    def __init__(self) -> None:
+    def __init__(self, *, lang: str = "en") -> None:
         super().__init__()
+        self.lang = normalize_lang(lang)
         self.graph = data.GraphSnapshot(nodes={})
         self.selected_node_id: str | None = None
         self._command_mode: str | None = None
@@ -103,16 +190,18 @@ class CockpitApp(App[None]):
         self._stop_event_worker = False
 
     def compose(self) -> ComposeResult:
-        yield StatusBar()
+        yield StatusBar(lang=self.lang)
         with Container(id="body-grid"):
             yield HypothesisTreePane()
             yield NodeDetailPane()
             yield EventStreamPane()
             yield RightTabsPane()
         yield Input(placeholder="command", id="command-line", classes="hidden")
+        yield ContextBar(lang=self.lang)
         yield Footer()
 
     def on_mount(self) -> None:
+        self._apply_language()
         self.refresh_state(include_events=True)
         self._set_focus("tree")
         self.events_worker()
@@ -144,6 +233,10 @@ class CockpitApp(App[None]):
     def command_line(self) -> Input:
         return self.query_one("#command-line", Input)
 
+    @property
+    def context_bar(self) -> ContextBar:
+        return self.query_one(ContextBar)
+
     def refresh_state(self, *, include_events: bool) -> None:
         self._refresh_graph()
         self._refresh_tabs()
@@ -166,6 +259,7 @@ class CockpitApp(App[None]):
                 widget.add_class("pane-active")
             else:
                 widget.remove_class("pane-active")
+        self.context_bar.set_pane(new)
 
     def on_tree_node_selected(self, event: HypothesisTreePane.NodeSelected) -> None:
         node_id = event.node.data if isinstance(event.node.data, str) else None
@@ -270,48 +364,55 @@ class CockpitApp(App[None]):
     def action_show_help(self) -> None:
         sections = [
             (
-                "Navigation",
+                t(self.lang, "help_navigation"),
                 [
-                    ("j / k", "move selection"),
-                    ("h / l", "collapse/expand or move focus"),
-                    ("1-4", "jump to pane"),
-                    ("Tab", "cycle panes"),
+                    ("j / k", t(self.lang, "move_selection")),
+                    ("h / l", t(self.lang, "collapse_expand")),
+                    ("1-4", t(self.lang, "jump_pane")),
+                    ("Tab", t(self.lang, "cycle_panes")),
                 ],
             ),
             (
-                "Actions",
+                t(self.lang, "help_actions"),
                 [
-                    ("y / n", "approve or reject"),
-                    ("r / c", "redirect or constrain"),
-                    ("m", "mark refuted"),
-                    ("p", "pin metric"),
-                    ("H", "halt agent"),
+                    ("y / n", t(self.lang, "approve_reject")),
+                    ("r / c", t(self.lang, "redirect_constrain")),
+                    ("m", t(self.lang, "mark_refuted")),
+                    ("p", t(self.lang, "pin_metric")),
+                    ("H", t(self.lang, "halt_agent")),
                 ],
             ),
             (
-                "Meta",
+                t(self.lang, "help_meta"),
                 [
-                    ("/", "filter"),
-                    (":", "command mode"),
-                    ("t", "toggle timestamps"),
-                    ("s", "toggle refuted"),
-                    ("q", "quit"),
+                    ("/", t(self.lang, "filter")),
+                    (":", t(self.lang, "command_mode")),
+                    ("t", t(self.lang, "toggle_time")),
+                    ("s", t(self.lang, "toggle_refuted")),
+                    ("L", t(self.lang, "toggle_language")),
+                    ("q", t(self.lang, "quit")),
                 ],
             ),
         ]
-        self.push_screen(HelpScreen(sections))
+        self.push_screen(HelpScreen(sections, self.lang))
 
     def action_open_command(self) -> None:
-        self._show_command_line("command", "Enter command, e.g. note remember baseline")
+        self._show_command_line("command", t(self.lang, "command_placeholder"))
 
     def action_open_filter(self) -> None:
         target = self.focused_pane if self.focused_pane in {"tree", "events", "tabs"} else "tree"
         placeholder = {
-            "tree": "Filter hypothesis tree",
-            "events": "Filter event stream",
-            "tabs": "Filter active right tab",
+            "tree": t(self.lang, "filter_tree"),
+            "events": t(self.lang, "filter_events"),
+            "tabs": t(self.lang, "filter_tabs"),
         }[target]
         self._show_command_line("filter", placeholder, target=target)
+
+    def action_toggle_language(self) -> None:
+        self.lang = toggle_lang(self.lang)
+        self._apply_language()
+        self.refresh_state(include_events=True)
+        self.notify(t(self.lang, "language_notice"))
 
     def action_toggle_timestamp_mode(self) -> None:
         self.relative_timestamps = not self.relative_timestamps
@@ -356,7 +457,7 @@ class CockpitApp(App[None]):
         if node_id is None:
             return
         self.push_screen(
-            TextInputModal("Redirect hypothesis", "Enter redirect text"),
+            TextInputModal(t(self.lang, "redirect_title"), t(self.lang, "redirect_prompt")),
             callback=lambda payload, node_id=node_id: self._handle_text_action(
                 "redirect", node_id, payload
             ),
@@ -367,7 +468,7 @@ class CockpitApp(App[None]):
         if node_id is None:
             return
         self.push_screen(
-            TextInputModal("Constrain hypothesis", "Enter constraint text"),
+            TextInputModal(t(self.lang, "constrain_title"), t(self.lang, "constrain_prompt")),
             callback=lambda payload, node_id=node_id: self._handle_text_action(
                 "constrain", node_id, payload
             ),
@@ -378,7 +479,11 @@ class CockpitApp(App[None]):
         if node_id is None:
             return
         self.push_screen(
-            ConfirmModal("Mark Refuted", f"Mark {node_id} as refuted?"),
+            ConfirmModal(
+                t(self.lang, "mark_refuted_title"),
+                t(self.lang, "mark_refuted_prompt", node_id=node_id),
+                lang=self.lang,
+            ),
             callback=lambda confirmed, node_id=node_id: self._handle_mark_refuted(
                 node_id, confirmed
             ),
@@ -386,11 +491,14 @@ class CockpitApp(App[None]):
 
     def action_pin_metric(self) -> None:
         dataset = self.selected_node_id or "session"
-        self.push_screen(PinMetricModal(dataset=dataset), callback=self._handle_pin_metric)
+        self.push_screen(
+            PinMetricModal(dataset=dataset, lang=self.lang),
+            callback=self._handle_pin_metric,
+        )
 
     def action_halt_agent(self) -> None:
         self.push_screen(
-            ConfirmModal("Halt Agent", "Queue a halt intervention?"),
+            ConfirmModal(t(self.lang, "halt_title"), t(self.lang, "halt_prompt"), lang=self.lang),
             callback=self._handle_halt,
         )
 
@@ -424,6 +532,15 @@ class CockpitApp(App[None]):
         }[pane_name]
         target.focus()
 
+    def _apply_language(self) -> None:
+        self.status_bar.set_language(self.lang)
+        self.context_bar.set_language(self.lang)
+        self.tree_pane.set_language(self.lang)
+        self.detail_pane.set_language(self.lang)
+        self.events_pane.set_language(self.lang)
+        self.tabs_pane.set_language(self.lang)
+        self.context_bar.set_pane(self.focused_pane)
+
     def _show_command_line(self, mode: str, placeholder: str, *, target: str = "tree") -> None:
         self._command_mode = mode
         self._command_target = target
@@ -453,7 +570,7 @@ class CockpitApp(App[None]):
     def _require_selected_node(self) -> str | None:
         node_id = self.selected_node_id or self.tree_pane.current_node_id()
         if node_id is None:
-            self.notify("No node selected.", severity="warning")
+            self.notify(t(self.lang, "no_node"), severity="warning")
             return None
         return node_id
 
@@ -470,42 +587,54 @@ class CockpitApp(App[None]):
         self.detail_pane.update_for_node(self.graph, self.selected_node_id)
 
     def _row_detail(self, row: dict) -> tuple[str, str]:
-        if "failure_id" in row:
+        if {"severity", "category", "summary"} <= set(row):
             return (
-                f"Failure #{row['failure_id']}",
+                f"{t(self.lang, 'risks')} {row['item']}",
                 "\n".join(
                     [
-                        f"Trigger: {row['trigger']}",
-                        f"Symptom: {row['symptom']}",
+                        f"{t(self.lang, 'severity')}: {row['severity']}",
+                        f"{t(self.lang, 'category')}: {row['category']}",
+                        f"{t(self.lang, 'summary')}: {row['summary']}",
+                    ]
+                ),
+            )
+        if "failure_id" in row:
+            return (
+                f"{t(self.lang, 'failures')} #{row['failure_id']}",
+                "\n".join(
+                    [
+                        f"{t(self.lang, 'trigger')}: {row['trigger']}",
+                        f"{t(self.lang, 'symptom')}: {row['symptom']}",
                         f"Root cause: {row.get('root_cause') or '-'}",
                         f"Resolution: {row.get('resolution') or '-'}",
-                        f"Seen: {row.get('seen_count', 0)}",
+                        f"{t(self.lang, 'seen')}: {row.get('seen_count', 0)}",
                         f"Signature: {row.get('signature') or '-'}",
                     ]
                 ),
             )
         if "pin_id" in row:
             return (
-                f"Claim {row['metric']}",
+                f"{t(self.lang, 'claims')} {row['metric']}",
                 "\n".join(
                     [
-                        f"Value: {row['value']}",
-                        f"Dataset: {row['dataset']}",
-                        f"Verified: {'yes' if row['verified'] else 'no'}",
-                        f"Seeds: {row['seeds']}",
+                        f"{t(self.lang, 'value')}: {row['value']}",
+                        f"{t(self.lang, 'dataset')}: {row['dataset']}",
+                        f"{t(self.lang, 'verified')}: "
+                        f"{t(self.lang, 'yes') if row['verified'] else t(self.lang, 'no')}",
+                        f"{t(self.lang, 'seeds')}: {row['seeds']}",
                         f"Note: {row.get('note') or '-'}",
                         f"Source: {row.get('source_command') or '-'}",
                     ]
                 ),
             )
         return (
-            f"Paper {row['paper_id']}",
+            f"{t(self.lang, 'literature')} {row['paper_id']}",
             "\n".join(
                 [
                     row.get("title", ""),
-                    f"Year: {row.get('year') or '-'}",
-                    f"Task: {row.get('task') or '-'}",
-                    f"Score: {float(row.get('score') or 0.0):.2f}",
+                    f"{t(self.lang, 'year')}: {row.get('year') or '-'}",
+                    f"{t(self.lang, 'task')}: {row.get('task') or '-'}",
+                    f"{t(self.lang, 'score')}: {float(row.get('score') or 0.0):.2f}",
                     f"Venue: {row.get('venue') or '-'}",
                     f"Source: {row.get('source') or '-'}",
                 ]
@@ -578,17 +707,32 @@ class CockpitApp(App[None]):
         )
 
     def _refresh_tabs(self) -> None:
+        failures = data.fetch_failures()
+        claims = data.fetch_claims()
+        graph = data.fetch_graph()
+        heldout_budgets = data.fetch_heldout_budgets()
         self._set_tab_rows(
-            failures=data.fetch_failures(),
-            claims=data.fetch_claims(),
+            risks=data.fetch_risks(
+                claims=claims,
+                failures=failures,
+                graph=graph,
+                heldout_budgets=heldout_budgets,
+            ),
+            failures=failures,
+            claims=claims,
             literature=data.fetch_literature(),
         )
 
+    def _refresh_risks(self) -> None:
+        self._set_tab_rows(risks=data.fetch_risks())
+
     def _refresh_failures(self) -> None:
-        self._set_tab_rows(failures=data.fetch_failures())
+        failures = data.fetch_failures()
+        self._set_tab_rows(failures=failures, risks=data.fetch_risks(failures=failures))
 
     def _refresh_claims(self) -> None:
-        self._set_tab_rows(claims=data.fetch_claims())
+        claims = data.fetch_claims()
+        self._set_tab_rows(claims=claims, risks=data.fetch_risks(claims=claims))
 
     def _refresh_literature(self) -> None:
         self._set_tab_rows(literature=data.fetch_literature())
@@ -596,19 +740,21 @@ class CockpitApp(App[None]):
     def _set_tab_rows(
         self,
         *,
+        risks: list[dict] | None = None,
         failures: list[dict] | None = None,
         claims: list[dict] | None = None,
         literature: list[dict] | None = None,
     ) -> None:
         self.tabs_pane.set_filter_text(self._pane_filters["tabs"])
         self.tabs_pane.set_rows(
+            risks=risks if risks is not None else self.tabs_pane.risks_rows,
             failures=failures if failures is not None else self.tabs_pane.failures_rows,
             claims=claims if claims is not None else self.tabs_pane.claims_rows,
             literature=literature if literature is not None else self.tabs_pane.literature_rows,
         )
 
     def _refresh_counts(self) -> None:
-        self.status_bar.set_counts(data.fetch_counts())
+        self.status_bar.set_summary(data.fetch_dashboard())
 
     def _refresh_events(self) -> None:
         rows = data.fetch_new_events(self.last_event_id)
@@ -626,10 +772,12 @@ class CockpitApp(App[None]):
             self._refresh_graph()
         if "failure_added" in kinds:
             self._refresh_failures()
-        if "claim_pinned" in kinds:
+        if {"claim_pinned", "seed_run_recorded"} & kinds:
             self._refresh_claims()
         if "literature_ingested" in kinds:
             self._refresh_literature()
+        if {"heldout_query_reserved", "heldout_query_finished"} & kinds:
+            self._refresh_risks()
         self._refresh_counts()
         self._refresh_detail()
 
@@ -648,23 +796,21 @@ class CockpitApp(App[None]):
             self.tabs_pane.set_filter_text(value)
 
 
-def render_snapshot() -> str:
+def render_snapshot(*, lang: str = "en") -> str:
     """Render a lightweight text snapshot without launching Textual."""
 
-    counts = data.fetch_counts()
+    lang = normalize_lang(lang)
+    summary = data.fetch_dashboard()
     graph = data.fetch_graph()
     lines = [
-        "research-cockpit",
-        (
-            f"state.db: {counts['nodes']} nodes / {counts['failures']} failures / "
-            f"{counts['events']} events"
-        ),
+        t(lang, "app_name"),
+        _snapshot_summary(lang, summary),
         "",
-        "Hypothesis Tree",
+        t(lang, "tree_title"),
     ]
     visible = graph.visible_ids()
     if not visible:
-        lines.append("  No hypotheses yet.")
+        lines.append(f"  {t(lang, 'no_hypotheses')}")
     else:
         for node_id in visible[:10]:
             node = graph.node(node_id)
@@ -672,6 +818,20 @@ def render_snapshot() -> str:
                 continue
             lines.append(f"  {node.node_id} [{node.kind}] {node.text}")
     return "\n".join(lines)
+
+
+def _snapshot_summary(lang: str, summary: dict) -> str:
+    if lang == "zh":
+        return (
+            f"活跃假设 {summary['active_hypotheses']} / "
+            f"已反驳 {summary['refuted_nodes']} / "
+            f"指标 {summary['pinned_claims']} / 风险 {summary['risks']}"
+        )
+    return (
+        f"active H {summary['active_hypotheses']} / "
+        f"refuted {summary['refuted_nodes']} / "
+        f"claims {summary['pinned_claims']} / risks {summary['risks']}"
+    )
 
 
 def main() -> None:

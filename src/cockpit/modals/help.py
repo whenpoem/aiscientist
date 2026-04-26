@@ -7,6 +7,8 @@ from textual.containers import Container
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
+from cockpit.i18n import t
+
 
 class HelpScreen(ModalScreen[None]):
     """Read-only overlay showing the important keybindings."""
@@ -25,18 +27,19 @@ class HelpScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, sections: list[tuple[str, list[tuple[str, str]]]]) -> None:
+    def __init__(self, sections: list[tuple[str, list[tuple[str, str]]]], lang: str) -> None:
         super().__init__()
         self._sections = sections
+        self._lang = lang
 
     def compose(self) -> ComposeResult:
-        lines = ["Help", ""]
+        lines = [t(self._lang, "help_title"), ""]
         for title, bindings in self._sections:
             lines.append(title)
             for key, description in bindings:
                 lines.append(f"  {key:<12} {description}")
             lines.append("")
-        lines.append("Press any key to close.")
+        lines.append(t(self._lang, "help_close"))
         with Container(id="help-dialog"):
             yield Static("\n".join(lines))
 
