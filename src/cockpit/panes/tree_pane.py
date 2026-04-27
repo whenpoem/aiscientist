@@ -167,10 +167,25 @@ class HypothesisTreePane(Tree[str]):
         title.append(" ")
         title.append(node.text)
         if node.kind == "hypothesis":
+            title.append(self._bt_suffix(node), style="dim")
             title.append(f"  elo {node.elo_score:.0f}", style="dim")
+        if node.bt_status == "paused":
+            title.append("  [paused]", style="#d29922")
         if node.state == "refuted":
             title.stylize("strike")
         return title
+
+    @staticmethod
+    def _bt_suffix(node: GraphNode) -> str:
+        if node.bt_strength is None or node.bt_n_comparisons <= 0:
+            return "  bt n/a"
+        import math
+
+        sd = math.sqrt(max(1e-6, float(node.bt_strength_var or 1.0)))
+        return (
+            f"  bt {node.bt_strength:+.2f}±{1.96*sd:.2f}"
+            f" n={node.bt_n_comparisons}"
+        )
 
     @staticmethod
     def _short_id(node_id: str) -> str:

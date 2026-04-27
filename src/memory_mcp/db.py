@@ -22,6 +22,18 @@ def _ensure_elo_column(con: sqlite3.Connection) -> None:
     ensure_columns(con, "mem_nodes", {"elo_score": "REAL NOT NULL DEFAULT 1500.0"})
 
 
+def _ensure_bt_seeded(con: sqlite3.Connection) -> None:
+    """Backfill mem_bt_ratings rows for any existing hypothesis nodes."""
+    con.execute(
+        """
+        INSERT INTO mem_bt_ratings (node_id)
+        SELECT node_id FROM mem_nodes
+        WHERE kind = 'hypothesis'
+          AND node_id NOT IN (SELECT node_id FROM mem_bt_ratings)
+        """
+    )
+
+
 def bootstrap() -> None:
     path = state_db_path()
     key = cache_key(path)
@@ -33,9 +45,10 @@ def bootstrap() -> None:
             con,
             "memory_mcp",
             SCHEMA_PATH.read_text(encoding="utf-8"),
-            schema_version=2,
+            schema_version=4,
         )
         _ensure_elo_column(con)
+        _ensure_bt_seeded(con)
     finally:
         con.close()
     _BOOTSTRAPPED.add(key)

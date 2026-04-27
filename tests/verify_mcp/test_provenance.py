@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from pathlib import Path
 
 
 def test_pin_metric_creates_pin_and_linked_provenance(workspace):
@@ -54,6 +55,31 @@ def test_record_provenance_normalizes_claims(workspace):
     assert evidence["status"] == "found"
     assert evidence["evidence"][0]["claim"] == "test loss"
     assert evidence["evidence"][0]["value"] == "0.123"
+
+
+def test_check_provenance_includes_seed_verdict_for_pins(workspace):
+    impl = workspace["verify_mcp.impl"]
+    fixture = Path(__file__).with_name("fixtures") / "seed_stable.py"
+
+    pin = impl.pin_metric(
+        claim="test accuracy",
+        value="0.875",
+        session_id="sess-seed",
+        source_command=f"python {fixture}",
+    )
+    seed_run = impl.seed_perturb(
+        script_path=str(fixture),
+        metric_pin_id=pin["pin_id"],
+    )
+    assert seed_run["ok"] is True
+
+    evidence = impl.check_provenance("test accuracy")
+    assert evidence["status"] == "found"
+    assert evidence["pins"][0]["id"] == pin["pin_id"]
+    assert evidence["pins"][0]["pin_id"] == pin["pin_id"]
+    assert evidence["pins"][0]["seed_verdict"] == "stable"
+    assert evidence["pins"][0]["seed_run_count"] == 1
+    assert evidence["pins"][0]["latest_seed_run_id"] == seed_run["run_id"]
 
 
 def test_dev_server_wrappers_preserve_impl_signatures(tmp_path, monkeypatch):

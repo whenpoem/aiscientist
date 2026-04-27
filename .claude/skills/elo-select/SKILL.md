@@ -3,7 +3,15 @@ name: elo-select
 description: Rank competing hypotheses with pairwise Elo updates before choosing what to implement.
 ---
 
-# Elo Select
+# Elo Select (deprecated in V3.0)
+
+> **Deprecation note (V3.0)**: this skill is kept for backwards compatibility.
+> New work should use `bt-tournament`, which runs an online Bradley-Terry
+> update with 95% LUCB intervals instead of one-shot Elo. `record_judgement`
+> dual-writes to both ledgers, so following the elo-select workflow still
+> updates the BT leaderboard correctly — but you will lose access to
+> confidence intervals and the realtime pruning hooks. Treat this skill as a
+> shim and migrate when convenient.
 
 Use this when multiple candidate hypotheses compete for the next experiment and you need a stable top-2 instead of picking the first option.
 

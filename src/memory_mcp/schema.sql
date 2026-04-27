@@ -128,3 +128,51 @@ CREATE TRIGGER IF NOT EXISTS mem_lit_compressed_au AFTER UPDATE ON mem_lit_compr
   INSERT INTO mem_lit_fts(rowid, title, problem, method, claimed_results)
   VALUES (new.rowid, coalesce(new.title, ''), coalesce(new.problem, ''), coalesce(new.method, ''), coalesce(new.claimed_results, ''));
 END;
+
+CREATE TABLE IF NOT EXISTS mem_bt_ratings (
+  node_id TEXT PRIMARY KEY REFERENCES mem_nodes(node_id),
+  strength REAL NOT NULL DEFAULT 0.0,
+  strength_var REAL NOT NULL DEFAULT 1.0,
+  n_comparisons INTEGER NOT NULL DEFAULT 0,
+  last_updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK(status IN ('active', 'paused', 'pruned', 'promoted'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_mem_bt_ratings_status_strength
+  ON mem_bt_ratings(status, strength DESC);
+
+CREATE TABLE IF NOT EXISTS mem_bt_comparisons (
+  comparison_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  winner_id TEXT NOT NULL REFERENCES mem_nodes(node_id),
+  loser_id TEXT NOT NULL REFERENCES mem_nodes(node_id),
+  weight REAL NOT NULL DEFAULT 1.0,
+  source TEXT NOT NULL CHECK(source IN
+    ('llm_judge', 'metric_diff', 'user_intervention', 'reviewer_critic')),
+  provenance_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mem_bt_comparisons_winner
+  ON mem_bt_comparisons(winner_id);
+CREATE INDEX IF NOT EXISTS idx_mem_bt_comparisons_loser
+  ON mem_bt_comparisons(loser_id);
+
+CREATE TABLE IF NOT EXISTS meta_calibration (
+  agent_name TEXT NOT NULL,
+  predicted_p REAL NOT NULL,
+  realized_outcome INTEGER NOT NULL CHECK(realized_outcome IN (0, 1)),
+  n INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (agent_name, predicted_p, realized_outcome)
+);
+
+CREATE TABLE IF NOT EXISTS mem_replay_branches (
+  branch_id TEXT PRIMARY KEY,
+  parent_snapshot_id TEXT NOT NULL REFERENCES mem_snapshots(snapshot_id),
+  counterfactual TEXT NOT NULL,
+  divergence_payload TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mem_replay_branches_snapshot
+  ON mem_replay_branches(parent_snapshot_id);

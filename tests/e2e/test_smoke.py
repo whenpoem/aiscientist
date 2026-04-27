@@ -62,7 +62,8 @@ def test_claude_settings_register_stdio_cockpit_and_node_openalex():
     assert expected_hooks <= actual_commands
 
 
-def test_sops_reference_elo_selection_flow():
+def test_sops_reference_selection_flow():
+    """V3.0: research-sop must reference bt-tournament (with elo-select kept as a shim)."""
     repo_root = Path(__file__).resolve().parents[2]
     research_sop = (repo_root / ".claude" / "skills" / "research-sop" / "SKILL.md").read_text(
         encoding="utf-8"
@@ -70,6 +71,9 @@ def test_sops_reference_elo_selection_flow():
     writeup_sop = (repo_root / ".claude" / "skills" / "writeup-sop" / "SKILL.md").read_text(
         encoding="utf-8"
     )
+    bt_tournament = (
+        repo_root / ".claude" / "skills" / "bt-tournament" / "SKILL.md"
+    ).read_text(encoding="utf-8")
     elo_select = (repo_root / ".claude" / "skills" / "elo-select" / "SKILL.md").read_text(
         encoding="utf-8"
     )
@@ -77,11 +81,18 @@ def test_sops_reference_elo_selection_flow():
         encoding="utf-8"
     )
 
-    assert "$elo-select" in research_sop
+    # V3.0 primary path
+    assert "$bt-tournament" in research_sop
+    assert "$preregister" in research_sop
     assert "mcp__memory__judge_hypotheses" in research_sop
     assert "mcp__memory__record_judgement" in research_sop
-    assert "$elo-select" in writeup_sop
+    assert "mcp__memory__get_bt_leaderboard" in bt_tournament
+    # Backwards-compat shim still recognised
+    assert "deprecated" in elo_select.lower()
     assert "mcp__memory__record_judgement" in elo_select
+    # Writeup SOP still references the legacy shim until P5 polish updates it
+    assert "elo-select" in writeup_sop or "bt-tournament" in writeup_sop
+    # Verifier tool whitelist unchanged in P4
     assert "mcp__verify__seed_perturb" in verifier
     assert "mcp__verify__baseline_fairness" in verifier
     assert "mcp__verify__query_heldout" in verifier

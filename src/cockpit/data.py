@@ -24,6 +24,10 @@ class GraphNode:
     created_at: str
     created_by: str
     parent_id: str | None
+    bt_strength: float | None = None
+    bt_strength_var: float | None = None
+    bt_n_comparisons: int = 0
+    bt_status: str = "active"
 
 
 @dataclass(slots=True)
@@ -219,6 +223,14 @@ def fetch_graph() -> GraphSnapshot:
             ORDER BY created_at ASC, edge_id ASC
             """
         ).fetchall()
+        bt_rows: list[sqlite3.Row] = []
+        if _table_exists(con, "mem_bt_ratings"):
+            bt_rows = con.execute(
+                """
+                SELECT node_id, strength, strength_var, n_comparisons, status
+                FROM mem_bt_ratings
+                """
+            ).fetchall()
     finally:
         con.close()
 
@@ -227,6 +239,7 @@ def fetch_graph() -> GraphSnapshot:
         for row in edge_rows
         if row["relation"] == "parent_of"
     }
+    bt_by_node = {row["node_id"]: row for row in bt_rows}
     nodes = {
         row["node_id"]: GraphNode(
             node_id=row["node_id"],
@@ -237,6 +250,26 @@ def fetch_graph() -> GraphSnapshot:
             created_at=row["created_at"],
             created_by=row["created_by"],
             parent_id=parent_by_child.get(row["node_id"]) or row["parent_id"],
+            bt_strength=(
+                float(bt_by_node[row["node_id"]]["strength"])
+                if row["node_id"] in bt_by_node
+                else None
+            ),
+            bt_strength_var=(
+                float(bt_by_node[row["node_id"]]["strength_var"])
+                if row["node_id"] in bt_by_node
+                else None
+            ),
+            bt_n_comparisons=(
+                int(bt_by_node[row["node_id"]]["n_comparisons"])
+                if row["node_id"] in bt_by_node
+                else 0
+            ),
+            bt_status=(
+                str(bt_by_node[row["node_id"]]["status"])
+                if row["node_id"] in bt_by_node
+                else "active"
+            ),
         )
         for row in node_rows
     }

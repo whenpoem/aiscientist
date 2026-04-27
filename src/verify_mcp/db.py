@@ -84,6 +84,61 @@ CREATE TABLE IF NOT EXISTS ver_heldout_queries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ver_heldout_queries_dataset ON ver_heldout_queries(dataset);
+
+CREATE TABLE IF NOT EXISTS ver_provenance_dag (
+  prov_id INTEGER PRIMARY KEY REFERENCES ver_provenance(id) ON DELETE CASCADE,
+  input_hashes TEXT NOT NULL DEFAULT '[]',
+  output_hash TEXT NOT NULL DEFAULT '',
+  parent_prov_ids TEXT NOT NULL DEFAULT '[]',
+  stale INTEGER NOT NULL DEFAULT 0,
+  refreshed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ver_provenance_dag_stale
+  ON ver_provenance_dag(stale);
+
+CREATE TABLE IF NOT EXISTS ver_preregistrations (
+  prereg_id TEXT PRIMARY KEY,
+  hypothesis_id TEXT,
+  metric_name TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK(direction IN ('higher_better', 'lower_better')),
+  threshold REAL,
+  heldout_dataset TEXT,
+  seed_count INTEGER NOT NULL DEFAULT 5,
+  alpha REAL NOT NULL DEFAULT 0.05,
+  mc_correction TEXT NOT NULL DEFAULT 'bh'
+    CHECK(mc_correction IN ('bh', 'bonferroni', 'none')),
+  observed_value REAL,
+  observed_p_value REAL,
+  adjusted_p_value REAL,
+  resolution_note TEXT NOT NULL DEFAULT '',
+  locked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TEXT,
+  status TEXT NOT NULL DEFAULT 'open'
+    CHECK(status IN ('open', 'met', 'missed', 'withdrawn'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ver_preregistrations_hypothesis
+  ON ver_preregistrations(hypothesis_id);
+CREATE INDEX IF NOT EXISTS idx_ver_preregistrations_status
+  ON ver_preregistrations(status);
+
+CREATE TABLE IF NOT EXISTS res_budget_ledger (
+  budget_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope TEXT NOT NULL,
+  resource TEXT NOT NULL CHECK(resource IN
+    ('wallclock_sec', 'llm_tokens', 'heldout_queries', 'disk_mb')),
+  limit_value REAL NOT NULL,
+  used_value REAL NOT NULL DEFAULT 0,
+  window TEXT NOT NULL DEFAULT 'session',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(scope, resource, window)
+);
+
+CREATE INDEX IF NOT EXISTS idx_res_budget_scope_resource
+  ON res_budget_ledger(scope, resource);
 """
 
 _BOOTSTRAPPED: set[str] = set()
@@ -108,7 +163,7 @@ def bootstrap() -> None:
         return
     con = connect_sqlite(path)
     try:
-        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA, schema_version=2)
+        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA, schema_version=4)
         _ensure_heldout_query_columns(con)
     finally:
         con.close()

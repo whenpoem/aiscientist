@@ -19,13 +19,16 @@ Do **not** describe it as "production-ready" without doing a fresh end-to-end ch
 
 ## Scope Reality
 
-The implementation in this repo is moving through the `v0.2` plan.
-Do not casually rename that to "V1.0 complete" unless you have verified the remaining product and operations expectations yourself.
+The implementation in this repo has shipped the `v3.0` plan ([docs/plan-v3.0.md](docs/plan-v3.0.md)).
+Do not casually rename that to "V1.0 complete" or "production-ready" unless you have verified the remaining product and operations expectations yourself.
 
 Known scope limits to remember:
 
-- The exposed verify tools now include `leakage_check`, `record_provenance`, `check_provenance`, `pin_metric`, `seed_perturb`, `baseline_fairness`, and `query_heldout`.
+- v3.0 verify tools: `leakage_check`, `record_provenance`, `check_provenance`, `pin_metric`, `seed_perturb`, `baseline_fairness`, `query_heldout`, `refresh_claim`, `preregister`, `resolve_preregistration`, `list_preregistrations`, `budget_check`, `budget_consume`.
+- v3.0 memory tools add: `update_bt_rating`, `get_bt_leaderboard`, `suggest_pause_low_strength`, `resume_branch`, `expected_information_gain`, `record_calibration`, `calibration_report`, `replay_counterfactual`, `list_replay_branches`.
+- Auto-prune is opt-in via `RESEARCH_AGENT_AUTO_PRUNE=1`. Default is dry-run (only emits `branch_pause_suggested`).
 - The prover agent is still a stub. Lean MCP tools are not wired in this repo yet.
+- `mem_nodes.elo_score` is preserved as a backwards-compatibility column; new code should read `mem_bt_ratings.strength` and friends.
 - `snapshot` persists memory state, but cockpit still focuses on live state rather than first-class historical snapshot browsing.
 - The cockpit has English and Chinese labels (`--lang en|zh`, or press `L` inside the TUI), but it is still terminal-first; there is no supported browser frontend.
 
