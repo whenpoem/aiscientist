@@ -154,3 +154,13 @@ Hook 必须是幂等的，并且在数据库缺失或损坏时优雅降级（典
 4. 添加或更新对应的测试，把新契约钉住。
 
 悄无声息地修改契约，是这个项目里严重程度最高的 bug 类型。
+
+## 12. 再深一层：各模块地图
+
+这份文档讨论的是**跨模块**契约。每个模块的 `__init__.py`（hooks 目录则是 `README.md`）里写有一份结构化地图，列出该模块的公开接口、自有表、关键不变量和"绝对不要"清单。在模块内部做非平凡修改之前，请先阅读：
+
+- [`src/claudescientist/__init__.py`](../src/claudescientist/__init__.py)
+- [`src/memory_mcp/__init__.py`](../src/memory_mcp/__init__.py)
+- [`src/verify_mcp/__init__.py`](../src/verify_mcp/__init__.py)
+- [`src/cockpit/__init__.py`](../src/cockpit/__init__.py)
+- [`.claude/hooks/README.md`](../.claude/hooks/README.md)

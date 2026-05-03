@@ -154,3 +154,16 @@ If a future change requires breaking one of the contracts above, the right proce
 4. Add or update the test that pins the new contract.
 
 Silent contract changes are the highest-severity bug class in this project.
+
+## 12. Going deeper: per-module maps
+
+This document covers cross-module contracts. Each module's `__init__.py` (or
+`README.md`, for the hooks directory) carries a structured map of its public
+surface, owned tables, invariants, and "do not" rules. Read those before
+making non-trivial changes inside a module:
+
+- [`src/claudescientist/__init__.py`](../src/claudescientist/__init__.py)
+- [`src/memory_mcp/__init__.py`](../src/memory_mcp/__init__.py)
+- [`src/verify_mcp/__init__.py`](../src/verify_mcp/__init__.py)
+- [`src/cockpit/__init__.py`](../src/cockpit/__init__.py)
+- [`.claude/hooks/README.md`](../.claude/hooks/README.md)

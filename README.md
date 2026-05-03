@@ -15,6 +15,8 @@ If you are new to the project, read in this order:
 3. **[`docs/architecture.md`](docs/architecture.md)** — the cross-module contracts
 4. **[`docs/tool-reference.md`](docs/tool-reference.md)** — the full MCP tool catalog
 
+For the distilled rationale of each major decision: **[`docs/adr/`](docs/adr/)**.
+
 Looking ahead: **[`docs/roadmap.md`](docs/roadmap.md)** lays out the post-v3.0 directions.
 
 Historical design decisions live in **[`docs/archive/`](docs/archive/)**.

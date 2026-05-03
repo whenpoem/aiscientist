@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 
-from claudescientist.runtime import apply_schema_migration, connect_sqlite, state_db_path
-from memory_mcp.db import bootstrap as bootstrap_memory
-from verify_mcp.db import bootstrap as bootstrap_verify
+from claudescientist.runtime import (
+    apply_schema_migration,
+    bootstrap_all,
+    connect_sqlite,
+    state_db_path,
+)
 
 COCKPIT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS cockpit_interventions (
@@ -28,8 +31,7 @@ CREATE TABLE IF NOT EXISTS cockpit_events (
 
 
 def ensure() -> None:
-    bootstrap_memory()
-    bootstrap_verify()
+    bootstrap_all()
     con = connect_sqlite(state_db_path())
     try:
         apply_schema_migration(con, "cockpit", COCKPIT_SCHEMA, schema_version=1)

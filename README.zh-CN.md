@@ -15,6 +15,8 @@ ClaudeScientist 是给 Claude Code 加装的一层科研增强层。它不替换
 3. **[`docs/architecture.zh-CN.md`](docs/architecture.zh-CN.md)** —— 跨模块契约
 4. **[`docs/tool-reference.zh-CN.md`](docs/tool-reference.zh-CN.md)** —— 完整的 MCP 工具目录
 
+每个核心决策的精炼理由：**[`docs/adr/`](docs/adr/)**。
+
 展望未来：**[`docs/roadmap.zh-CN.md`](docs/roadmap.zh-CN.md)** 列出了 v3.0 之后的发展方向。
 
 历史设计决策保存在 **[`docs/archive/`](docs/archive/)**。

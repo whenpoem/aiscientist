@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import warnings
 from datetime import datetime, timezone
@@ -188,3 +189,61 @@ def read_json_file(path: Path, *, default: Any) -> Any:
 def write_json_file(path: Path, payload: Any) -> None:
     ensure_parent(path)
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Numeric-claim recognition (project-wide).
+#
+# These constants describe how the project recognises a numeric claim in any
+# textual stream (script stdout, commit message, manuscript paragraph). They
+# live in runtime because both verify_mcp.provenance and the leakage /
+# provenance hooks need them; keeping them in any single business module would
+# force the others to reach across layers.
+# ---------------------------------------------------------------------------
+
+METRIC_RE = re.compile(
+    r"(?P<label>(?:acc(?:uracy)?|f1|auc|loss|precision|recall|mse|rmse|mae|bleu|rouge|score|metric)[^:=\n]{0,24})"
+    r"[:= ]+"
+    r"(?P<value>[-+]?\d+(?:\.\d+)?%?)",
+    re.IGNORECASE,
+)
+
+NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?%?")
+
+
+def extract_metric_tokens(text: str) -> list[str]:
+    """Return labelled numeric values found in ``text``; fall back to bare numbers."""
+    values = [match.group("value") for match in METRIC_RE.finditer(text)]
+    if values:
+        return values
+    return NUMBER_RE.findall(text)
+
+
+# ---------------------------------------------------------------------------
+# Component bootstrap registry.
+#
+# Modules that own SQLite schemas register themselves implicitly through the
+# ``KNOWN_BOOTSTRAP_COMPONENTS`` tuple. Cockpit and other entry points call
+# ``bootstrap_all()`` to ensure every known schema is ready before reading.
+# Adding a new MCP server in the future means appending its bootstrap module
+# here — and only here.
+# ---------------------------------------------------------------------------
+
+KNOWN_BOOTSTRAP_COMPONENTS: tuple[str, ...] = (
+    "memory_mcp.db",
+    "verify_mcp.db",
+)
+
+
+def bootstrap_all() -> None:
+    """Trigger bootstrap on every component registered in ``KNOWN_BOOTSTRAP_COMPONENTS``.
+
+    Each named module must expose a module-level ``bootstrap()`` function that
+    is idempotent. Called by the cockpit before it reads cross-component
+    tables; safe to invoke multiple times per process.
+    """
+    from importlib import import_module
+
+    for module_name in KNOWN_BOOTSTRAP_COMPONENTS:
+        module = import_module(module_name)
+        module.bootstrap()

@@ -49,3 +49,6 @@ it stands today:
 If you find a contradiction between an archived plan and a current document,
 the current document wins. Please open an issue so the archive can be
 annotated, but do not "fix" the archive — these files are immutable history.
+
+For the distilled rationale of each major decision (one page each, easier
+to scan than the long plans), see [`../adr/`](../adr/).

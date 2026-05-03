@@ -11,8 +11,7 @@ import sys
 from pathlib import Path
 from typing import Iterator
 
-from claudescientist.runtime import heldout_root, state_db_path
-from verify_mcp.provenance import METRIC_RE
+from claudescientist.runtime import METRIC_RE, heldout_root, state_db_path
 
 DB = state_db_path()
 HELDOUT_PATH_RE = re.compile(

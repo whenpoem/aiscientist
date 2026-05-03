@@ -13,7 +13,13 @@ def workspace(tmp_path, monkeypatch):
         "memory_mcp.db",
         "memory_mcp.impl",
         "verify_mcp.db",
+        # heldout reload order (v3.1): db -> heldout -> heldout_cli -> impl,
+        # then claudescientist.heldout last so its lazy wrapper sees fresh
+        # verify_mcp.heldout_cli on its next call.
+        "verify_mcp.heldout",
+        "verify_mcp.heldout_cli",
         "verify_mcp.impl",
+        "claudescientist.heldout",
         "cockpit.db",
     ]
     optional_modules = [

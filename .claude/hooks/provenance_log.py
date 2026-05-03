@@ -10,8 +10,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-from claudescientist.runtime import state_db_path
-from verify_mcp.provenance import extract_metric_tokens
+from claudescientist.runtime import extract_metric_tokens, state_db_path
 
 DB = state_db_path()
 METRIC_WORDS = (
