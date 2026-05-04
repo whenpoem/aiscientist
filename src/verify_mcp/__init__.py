@@ -2,7 +2,7 @@
 
 Owns the verification stack: leakage detection, provenance with refreshable
 DAG, multi-seed reproducibility, baseline fairness, sequestered-dataset
-budgeted querying, preregistration with BH/Bonferroni multiple-comparison
+budgeted querying, preregistration with multiple-comparison
 correction, and the resource ledger. Exposes 13 MCP tools through ``impl.py``;
 implementations live under ``tools/`` and are domain-grouped.
 
@@ -24,7 +24,7 @@ ver_provenance_dag     Per-claim input-file hashes; refresh_claim re-checks.
 ver_seed_runs          One row per seed_perturb invocation (mean / std / verdict).
 ver_heldout_budgets    Sequestered-dataset registration + remaining budget.
 ver_heldout_queries    One row per query_heldout invocation; FK to budgets.
-ver_preregistrations   Locked falsification targets + BH/Bonferroni state.
+ver_preregistrations   Locked falsification targets + correction state.
 res_budget_ledger      Wallclock / tokens / heldout / disk budgets per scope.
 
 Critical invariants
@@ -32,14 +32,15 @@ Critical invariants
 - ``query_heldout`` is the only intended access path to sequestered data.
   Direct file reads are blocked by ``leakage_guard.py``. Failed model runs
   still consume reserved budget because the script was already authorised.
-- ``record_provenance`` plus a stable ``ver_seed_runs.verdict`` plus a
-  ``status='met'`` ``ver_preregistrations`` row are the four anchors a
-  numeric claim must trace to before the reviewer accepts it.
+- The four anchors for an accepted numeric claim are: ``record_provenance``,
+  a stable ``ver_seed_runs.verdict``, a ``status='met'``
+  ``ver_preregistrations`` row, and a fresh ``ver_provenance_dag``.
 - ``refresh_claim`` re-hashes input files and emits ``prov_dag_stale``
   events; stale provenance is a hard blocker for writeup.
-- BH / Bonferroni correction in ``resolve_preregistration`` runs against
-  the count of *currently open* prereg rows; the more open at once, the
-  stricter the alpha each one must clear.
+- ``bh`` and ``bonferroni`` currently share the same Bonferroni-style
+  correction in ``resolve_preregistration``; it runs against the count of
+  *currently open* prereg rows, so the more open at once, the stricter the
+  alpha each one must clear.
 - ``budget_consume`` is the only writer of ``res_budget_ledger``;
   ``budget_check`` is read-only and must address the same
   ``(scope, resource, window)`` triple that consume writes.
@@ -51,7 +52,7 @@ Leakage detector wrapper: tools/leakage.py (delegates to verify_mcp.leakage)
 Provenance + pin + DAG:   tools/provenance.py
 Verification subprocesses: tools/verification.py (seed_perturb, fairness)
 Sequestered query:        tools/heldout.py (FK to ver_heldout_budgets)
-Preregistration + BH math: tools/prereg.py
+Preregistration correction: tools/prereg.py
 Budget ledger:            tools/budget.py
 Shared helpers:           tools/_common.py (_emit_event, _run_script)
 Sequestered data CLI:     heldout.py + heldout_cli.py (owns ver_heldout_*)

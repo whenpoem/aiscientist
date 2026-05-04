@@ -1,4 +1,4 @@
-# ADR 0006: Preregistration with BH/Bonferroni as the writeup gate
+# ADR 0006: Preregistration correction aliases as the writeup gate
 
 - **Status**: Accepted (v3.0)
 - **Date**: 2026-04
@@ -32,10 +32,16 @@ Introduce a preregistration mechanism with the following rules:
 - `resolve_preregistration(prereg_id, observed_value, observed_p_value)`
   freezes the verdict (`met` or `missed`). Multiple-comparison correction
   applies based on the count of *currently open* prereg rows:
-  - `bh`: Benjamini-Hochberg adjusted alpha = `alpha / open_count`.
+  - `bh`: accepted for v3.0 compatibility, but currently an alias for the
+    Bonferroni-style calculation below. It is **not** rank-based
+    Benjamini-Hochberg.
   - `bonferroni`: alpha / max(1, open_count); raw p multiplied by
     open_count.
   - `none`: no adjustment (must be explicitly chosen).
+- True Benjamini-Hochberg would require rank-based thresholds over the
+  correction family (`alpha * k / m`) and monotonic adjusted p-values. That
+  would change verdict behavior, so it is deferred to a separate behavioral
+  fix rather than folded into a maintainability refactor.
 - The reviewer agent refuses to draft any markdown that mentions a
   numeric claim unless that claim has all four of: a `ver_metric_pins`
   row, a `ver_seed_runs.verdict='stable'` row, a
@@ -53,7 +59,8 @@ emits `prov_dag_stale` events; stale provenance is a hard blocker.
   experiments. Changing a locked prereg requires opening a new one,
   which the audit trail makes visible.
 - Multiple-comparison correction tightens automatically as more preregs
-  open simultaneously - exactly the behavior FDR / FWER control prescribes.
+  open simultaneously. The current calculation is conservative and
+  Bonferroni-style; it does not yet provide rank-based FDR control.
 - The reviewer's verdict ("accept" / "refuse with blockers") is
   programmatically derived; the user cannot accidentally ship a number
   that does not trace back.
@@ -78,8 +85,12 @@ emits `prov_dag_stale` events; stale provenance is a hard blocker.
 
 - **Preregistration without correction** - lost because the
   multiple-comparison failure mode is the more pernicious one.
-- **Bonferroni only** - lost because BH is less conservative for the
-  typical case (mostly true alternatives), and we expose both.
+- **Implement true Benjamini-Hochberg immediately** - deferred because it
+  would change statistical verdicts and needs dedicated tests plus a clear
+  definition of the correction family.
+- **Expose Bonferroni only** - lost because existing v3.0 callers may already
+  pass `mc_correction='bh'`; keeping it as a compatibility alias avoids a
+  tool-contract break.
 - **Trust-the-user, no enforcement** - lost; this is exactly what every
   other AI scientist system does and exactly the bar we are trying to
   raise.

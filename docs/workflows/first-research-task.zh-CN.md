@@ -126,7 +126,7 @@ mcp__verify__pin_metric claim="vit_dropout_test_accuracy" value=0.873 session_id
 mcp__verify__resolve_preregistration prereg_id=preg_... observed_value=0.873
 ```
 
-如果观测值在锁定方向上达到了阈值，状态翻为 `met`。如果你还传了 `observed_p_value`，BH 校正会自动应用到所有当前打开的预注册上。
+如果观测值在锁定方向上达到了阈值，状态翻为 `met`。如果你还传了 `observed_p_value`，系统会把配置的多重比较校正应用到所有当前打开的预注册上。当前 v3.0 兼容实现中，`bh` 和 `bonferroni` 共用同一套 Bonferroni-style 计算。
 
 ## 7. 抽查 provenance DAG
 

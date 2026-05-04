@@ -111,7 +111,7 @@ var_j := 1 / (1/var_j + fisher)
 
 - **任何最终写入手稿的数值声明都必须可追溯**到一个 `ver_preregistrations.prereg_id`（其 `status='met'`）以及一个 `ver_seed_runs.verdict='stable'`。`reviewer` 子智能体在写作阶段会强制执行这条规则。
 - **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希**。`refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。**provenance 过期是写作的硬阻断项**。
-- **`resolve_preregistration` 中的 BH / Bonferroni 校正基于"当前打开的预注册行数"计算**。一次性锁定多个预注册会有意收紧 alpha——这是正确的多重比较行为：你并行测试的假说越多，每个假说要跨过的门槛就越高。
+- **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正**。一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。当前 v3.0 兼容实现中，`bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的别名。
 
 ## 8. 资源账本契约（v3.0）
 

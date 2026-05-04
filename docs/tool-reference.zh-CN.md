@@ -268,7 +268,7 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 ### 预注册
 
 #### `preregister(hypothesis_id, metric, direction, threshold, mc_correction="bh", alpha=0.05, seeds=None, note="")`
-**在任何实验开始之前**就锁定该假说的证伪目标。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bh`、`bonferroni`、`none`。发出 `prereg_locked`。
+**在任何实验开始之前**就锁定该假说的证伪目标。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bh`、`bonferroni`、`none`；当前 `bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的 v3.0 兼容别名。发出 `prereg_locked`。
 
 **返回**：`{"prereg_id": "preg_...", "alpha_adjusted": <float>}`
 

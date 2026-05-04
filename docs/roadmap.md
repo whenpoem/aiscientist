@@ -105,9 +105,9 @@ Different levels emit different severity events: Level 2 → "suggest re-run", L
 
 **Value**: High. In deep learning experiments where a single training run takes hours or days, early termination saves significant compute budget.
 
-**Complexity**: Medium-high. Implementing the spending function math correctly is not hard but error-prone, and orthogonal composition with existing BH/Bonferroni correction needs design.
+**Complexity**: Medium-high. Implementing the spending function math correctly is not hard but error-prone, and orthogonal composition with the existing preregistration correction needs design. True rank-based BH remains a separate behavior change.
 
-**Reference**: BH controls FDR across hypotheses; Alpha-Spending controls FWER across multiple checks within one hypothesis. The two are mathematically independent and stack cleanly.
+**Reference**: True rank-based BH controls FDR across hypotheses; Alpha-Spending controls FWER across multiple checks within one hypothesis. The two are mathematically independent and stack cleanly.
 
 ---
 
@@ -153,7 +153,7 @@ Together they form an "EKG" of the research: at a glance you can tell whether yo
 
 ### Direction 8: Optimistic concurrency control for multi-session use
 
-**Today**: Design assumes single-user single-session. Two Claude Code sessions writing the same `state.db` simultaneously can under-correct BH because both see the same `open_count`.
+**Today**: Design assumes single-user single-session. Two Claude Code sessions writing the same `state.db` simultaneously can under-correct preregistration thresholds because both see the same `open_count`.
 
 **Proposal**: Add a `version INTEGER DEFAULT 0` column to critical tables (`ver_preregistrations`, `mem_bt_ratings`, `res_budget_ledger`). Convert all writes to compare-and-swap:
 

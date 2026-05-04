@@ -11,15 +11,28 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setenv("RESEARCH_AGENT_STATE_DIR", str(tmp_path / ".research-agent"))
     module_names = [
         "memory_mcp.db",
+        "memory_mcp.tools._common",
+        "memory_mcp.tools.bt",
+        "memory_mcp.tools.calibration",
+        "memory_mcp.tools.failures",
+        "memory_mcp.tools.graph",
+        "memory_mcp.tools.literature",
+        "memory_mcp.tools.replay",
         "memory_mcp.impl",
         "verify_mcp.db",
-        # heldout reload order (v3.1): db -> heldout -> heldout_cli -> impl,
-        # then claudescientist.heldout last so its lazy wrapper sees fresh
-        # verify_mcp.heldout_cli on its next call.
+        # Reload pure claudescientist helpers before verify-side modules
+        # that bind their functions at import time.
+        "claudescientist.heldout",
         "verify_mcp.heldout",
         "verify_mcp.heldout_cli",
+        "verify_mcp.tools._common",
+        "verify_mcp.tools.budget",
+        "verify_mcp.tools.heldout",
+        "verify_mcp.tools.leakage",
+        "verify_mcp.tools.prereg",
+        "verify_mcp.tools.provenance",
+        "verify_mcp.tools.verification",
         "verify_mcp.impl",
-        "claudescientist.heldout",
         "cockpit.db",
     ]
     optional_modules = [

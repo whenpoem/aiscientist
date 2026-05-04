@@ -97,7 +97,7 @@ sequenceDiagram
   C->>V: pin_metric + record_provenance(input_files)
 
   Note over C,V: 第六阶段：解锁与审稿
-  C->>V: resolve_preregistration（应用 BH 校正）
+  C->>V: resolve_preregistration（应用配置的校正）
   C->>V: refresh_claim（检查文件是否漂移）
   C->>M: get_bt_leaderboard
   C->>U: 输出结论 / 拒绝发布并说明 blocker

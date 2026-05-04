@@ -268,7 +268,7 @@ The only legitimate access path to held-out data. Reserves budget *before* execu
 ### Preregistration
 
 #### `preregister(hypothesis_id, metric, direction, threshold, mc_correction="bh", alpha=0.05, seeds=None, note="")`
-Lock the falsification target for a hypothesis **before any experiment runs**. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bh`, `bonferroni`, `none`. Emits `prereg_locked`.
+Lock the falsification target for a hypothesis **before any experiment runs**. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bh`, `bonferroni`, `none`; current `bh` and `bonferroni` modes are v3.0-compatible aliases for the same Bonferroni-style calculation. Emits `prereg_locked`.
 
 **Returns**: `{"prereg_id": "preg_...", "alpha_adjusted": <float>}`
 

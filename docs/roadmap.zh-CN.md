@@ -105,9 +105,9 @@ for child in descendants(H_parent):
 
 **价值**：高。在深度学习实验中，单次训练动辄几小时甚至几天；能提前停止意味着省下可观的计算预算。
 
-**复杂度**：中高。需要正确实现 spending function 数学（不复杂，但容易出错），并设计与现有 BH/Bonferroni 校正的正交组合方式。
+**复杂度**：中高。需要正确实现 spending function 数学（不复杂，但容易出错），并设计与现有预注册校正的正交组合方式。真正 rank-based BH 仍然是单独的行为变更。
 
-**参考**：BH 控制跨假说的 FDR，Alpha-Spending 控制单假说内跨多次检查的 FWER。两者在数学上独立，可以叠加。
+**参考**：真正 rank-based BH 控制跨假说的 FDR，Alpha-Spending 控制单假说内跨多次检查的 FWER。两者在数学上独立，可以叠加。
 
 ---
 
@@ -153,7 +153,7 @@ for child in descendants(H_parent):
 
 ### 方向 8：多会话/多用户的乐观并发控制
 
-**当前**：设计假定单用户单会话。两个 Claude Code 会话同时写同一个 `state.db` 时，`ver_preregistrations` 的 BH 校正可能因为读到相同的 open_count 而被低估。
+**当前**：设计假定单用户单会话。两个 Claude Code 会话同时写同一个 `state.db` 时，`ver_preregistrations` 的预注册阈值校正可能因为读到相同的 open_count 而被低估。
 
 **建议**：在关键表（`ver_preregistrations`、`mem_bt_ratings`、`res_budget_ledger`）加一列 `version INTEGER DEFAULT 0`。所有写操作改用 CAS（Compare-And-Swap）：
 

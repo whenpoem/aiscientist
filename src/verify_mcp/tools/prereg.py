@@ -1,4 +1,4 @@
-"""Preregistration tools and the BH/Bonferroni multiple-comparison logic."""
+"""Preregistration tools and multiple-comparison correction logic."""
 
 from __future__ import annotations
 
@@ -17,10 +17,9 @@ def _new_prereg_id() -> str:
     return f"prereg_{uuid4().hex[:12]}"
 
 
-def _bh_threshold(open_count: int, alpha: float) -> float:
-    """Benjamini-Hochberg adjusted alpha for the most significant rank."""
-    rank = max(1, int(open_count))
-    return float(alpha) / rank
+def _bonferroni_style_threshold(open_count: int, alpha: float) -> float:
+    """Return the v3.0-compatible per-open-prereg alpha threshold."""
+    return float(alpha) / max(1, int(open_count))
 
 
 def _adjust_p_value(
@@ -117,10 +116,11 @@ def resolve_preregistration(
 ) -> dict:
     """Compare a locked prereg against observed evidence and freeze its verdict.
 
-    The Benjamini-Hochberg / Bonferroni correction operates on the count of
-    *currently open* prereg rows so each new resolve sees a stricter alpha
-    until the open queue drains. ``observed_p_value`` is optional; when it is
-    not supplied the verdict only uses the threshold.
+    The current ``bh`` and ``bonferroni`` modes are v3.0-compatible aliases:
+    both operate on the count of *currently open* prereg rows so each new
+    resolve sees a stricter alpha until the open queue drains.
+    ``observed_p_value`` is optional; when it is not supplied the verdict only
+    uses the threshold.
     """
     with tx() as con:
         row = con.execute(
@@ -152,9 +152,9 @@ def resolve_preregistration(
         mc_correction = row["mc_correction"]
 
         if mc_correction == "bonferroni":
-            adjusted_alpha = alpha / max(1, open_count)
+            adjusted_alpha = _bonferroni_style_threshold(open_count, alpha)
         elif mc_correction == "bh":
-            adjusted_alpha = _bh_threshold(open_count, alpha)
+            adjusted_alpha = _bonferroni_style_threshold(open_count, alpha)
         else:
             adjusted_alpha = alpha
 

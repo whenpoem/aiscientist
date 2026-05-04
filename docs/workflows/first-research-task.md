@@ -126,7 +126,7 @@ This creates a `ver_metric_pins` row linked to the seed run. Now resolve the pre
 mcp__verify__resolve_preregistration prereg_id=preg_... observed_value=0.873
 ```
 
-If the observed value beats the threshold in the locked direction, status flips to `met`. If you also passed an `observed_p_value`, the BH correction is automatically applied across all currently-open preregistrations.
+If the observed value beats the threshold in the locked direction, status flips to `met`. If you also passed an `observed_p_value`, the configured multiple-comparison correction is applied across all currently-open preregistrations. In the current v3.0-compatible implementation, `bh` and `bonferroni` share the same Bonferroni-style calculation.
 
 ## 7. Spot-check the provenance DAG
 

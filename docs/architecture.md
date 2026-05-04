@@ -111,7 +111,7 @@ These two mechanisms together enforce trustworthy numeric claims.
 
 - **Every numeric claim that ends up in a manuscript should trace** to a `ver_preregistrations.prereg_id` whose `status='met'` and to a `ver_seed_runs.verdict='stable'`. The `reviewer` agent enforces this on writeup.
 - **`ver_provenance_dag.input_hashes` records the sha256 of every cited input file at record time.** `refresh_claim` re-hashes and emits `prov_dag_stale` events on drift. **Stale provenance is a hard blocker for writeup.**
-- **BH / Bonferroni correction in `resolve_preregistration` is computed against the count of currently-open prereg rows.** Locking many preregs at once intentionally tightens alpha, which is the correct multiple-comparison behavior — the more hypotheses you test in parallel, the higher the bar each one must clear.
+- **`resolve_preregistration` computes correction against the count of currently-open prereg rows.** Locking many preregs at once intentionally tightens alpha, which is conservative multiple-comparison behavior. In the current v3.0-compatible implementation, `bh` and `bonferroni` are aliases for the same Bonferroni-style calculation.
 
 ## 8. Resource ledger contract (v3.0)
 

@@ -97,7 +97,7 @@ sequenceDiagram
   C->>V: pin_metric + record_provenance(input_files)
 
   Note over C,V: Phase 6: resolve and review
-  C->>V: resolve_preregistration (apply BH correction)
+  C->>V: resolve_preregistration (apply configured correction)
   C->>V: refresh_claim (detect upstream drift)
   C->>M: get_bt_leaderboard
   C->>U: emit conclusion / refuse with blockers listed

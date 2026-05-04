@@ -18,7 +18,7 @@ it from both sides.
 | [0003](0003-textual-tui-not-browser.md) | Drop the browser frontend; adopt a Textual TUI | Accepted | v0.2 |
 | [0004](0004-elo-to-bradley-terry.md) | Replace Elo with Bradley-Terry ranking | Accepted | v3.0 |
 | [0005](0005-auto-prune-opt-in.md) | Auto-prune is dry-run by default; opt-in via env var | Accepted | v3.0 |
-| [0006](0006-preregistration-as-writeup-gate.md) | Preregistration with BH/Bonferroni as the writeup gate | Accepted | v3.0 |
+| [0006](0006-preregistration-as-writeup-gate.md) | Preregistration correction aliases as the writeup gate | Accepted | v3.0 |
 
 ## Writing a new ADR
 

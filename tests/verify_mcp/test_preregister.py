@@ -105,7 +105,7 @@ def test_resolve_marks_missed_when_below_threshold(workspace):
     assert resolved["status"] == "missed"
 
 
-def test_bh_correction_tightens_alpha_with_more_open_rows(workspace):
+def test_bh_alias_tightens_alpha_with_more_open_rows(workspace):
     impl = workspace["verify_mcp.impl"]
 
     locked = []
@@ -126,7 +126,7 @@ def test_bh_correction_tightens_alpha_with_more_open_rows(workspace):
         observed_value=0.6,
         observed_p_value=0.04,
     )
-    # With 4 open rows, BH alpha should be 0.05/4 = 0.0125. p=0.04 misses.
+    # The v3.0-compatible "bh" alias uses 0.05/4 = 0.0125 here.
     assert first["status"] == "missed"
     assert first["adjusted_p_value"] == 0.16
     assert first["adjusted_alpha"] <= 0.05 / 4 + 1e-9
@@ -136,7 +136,7 @@ def test_bh_correction_tightens_alpha_with_more_open_rows(workspace):
         observed_value=0.6,
         observed_p_value=0.001,
     )
-    # 3 open rows now (we just resolved one), BH alpha = 0.05/3.
+    # 3 open rows now (we just resolved one), so alpha is 0.05/3.
     assert last["status"] == "met"
 
 
