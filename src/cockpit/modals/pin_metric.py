@@ -20,11 +20,17 @@ class PinMetricModal(ModalScreen[dict[str, str] | None]):
     PinMetricModal #pin-dialog {
         width: 72;
         height: auto;
-        border: round #58a6ff;
-        background: #0d1117;
+        border: round $primary;
+        background: $surface;
         padding: 1 2;
     }
     PinMetricModal Input {
+        margin-top: 1;
+        background: $panel;
+        color: $foreground;
+    }
+    PinMetricModal #pin-help {
+        color: $foreground-muted;
         margin-top: 1;
     }
     """

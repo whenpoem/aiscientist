@@ -9,6 +9,7 @@ from textual.widgets import Tree
 
 from cockpit.data import GraphNode, GraphSnapshot
 from cockpit.i18n import t
+from cockpit.theme import color, kind_color
 
 
 class HypothesisTreePane(Tree[str]):
@@ -172,7 +173,7 @@ class HypothesisTreePane(Tree[str]):
         elif node.kind == "proof_skeleton":
             title.append(self._bt_suffix(node), style="dim")
         if node.bt_status == "paused":
-            title.append("  [paused]", style="#d29922")
+            title.append("  [paused]", style=color("warning"))
         if node.state == "refuted":
             title.stylize("strike")
         return title
@@ -214,17 +215,9 @@ class HypothesisTreePane(Tree[str]):
 
     @staticmethod
     def _style_for(node: GraphNode) -> str:
+        # Theme-aware coloring. The token names match the kind keys 1:1
+        # (with underscore→hyphen) so adding a new node kind just requires a
+        # matching `kind-<new-kind>` entry in src/cockpit/theme/themes.py.
         if node.state == "refuted":
-            return "#f85149"
-        return {
-            "question": "#79c0ff",
-            "hypothesis": "#58a6ff",
-            "experiment": "#d29922",
-            "evidence": "#3fb950",
-            "conclusion": "#bc8cff",
-            # Proof trunk: amber-ish so it visually pairs with experiment
-            # without colliding with hypothesis blue.
-            "proposition": "#e3b341",
-            "proof_skeleton": "#d29922",
-            "proof_snippet": "#a98012",
-        }.get(node.kind, "#c9d1d9")
+            return color("kind-refuted")
+        return kind_color(node.kind)

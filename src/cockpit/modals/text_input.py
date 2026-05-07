@@ -18,9 +18,13 @@ class TextInputModal(ModalScreen[str | None]):
     TextInputModal #text-input-dialog {
         width: 72;
         height: auto;
-        border: round #58a6ff;
-        background: #0d1117;
+        border: round $primary;
+        background: $surface;
         padding: 1 2;
+    }
+    TextInputModal Input {
+        background: $panel;
+        color: $foreground;
     }
     """
 

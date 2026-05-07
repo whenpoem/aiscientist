@@ -519,6 +519,170 @@ def fetch_literature(limit: int = 100) -> list[dict[str, Any]]:
     return literature
 
 
+# ---------------------------------------------------------------------------
+# Proof-trunk readers (G3 / v4.1.0a0). All three are tolerant of databases
+# that pre-date v4.0 (where the prv_* tables don't exist) — they return an
+# empty list instead of raising. The TUI renders an "empty" placeholder row
+# in that case rather than a panic message.
+# ---------------------------------------------------------------------------
+
+
+def fetch_corpus_problems(limit: int = 200) -> list[dict[str, Any]]:
+    """Read recent proof-corpus problems for the Corpus tab.
+
+    Joins keyword counts in a single query so each row carries lex / sem
+    counts the table can render directly. Statement is left full-length
+    here; the pane truncates for display.
+    """
+    con = _connect()
+    try:
+        if not _table_exists(con, "prv_corpus_problems"):
+            return []
+        rows = con.execute(
+            """
+            SELECT
+              p.problem_id,
+              p.source,
+              p.statement,
+              p.reference_proof,
+              p.domain_tags,
+              p.ingested_at,
+              SUM(CASE WHEN k.kind = 'lexical' THEN 1 ELSE 0 END) AS n_lexical,
+              SUM(CASE WHEN k.kind = 'semantic' THEN 1 ELSE 0 END) AS n_semantic
+            FROM prv_corpus_problems p
+            LEFT JOIN prv_corpus_keywords k ON k.problem_id = p.problem_id
+            GROUP BY p.problem_id
+            ORDER BY p.ingested_at DESC, p.problem_id ASC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    finally:
+        con.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        domain_tags = _parse_payload(row["domain_tags"])
+        # domain_tags JSON is a list, but _parse_payload returns dicts. Re-parse
+        # explicitly so we get the list shape stored on disk.
+        try:
+            tags = json.loads(row["domain_tags"]) if row["domain_tags"] else []
+        except (json.JSONDecodeError, TypeError):
+            tags = domain_tags if isinstance(domain_tags, list) else []
+        if not isinstance(tags, list):
+            tags = []
+        out.append(
+            {
+                "problem_id": row["problem_id"],
+                "source": row["source"],
+                "statement": row["statement"] or "",
+                "reference_proof": row["reference_proof"] or "",
+                "domain_tags": [str(tag) for tag in tags],
+                "primary_domain": str(tags[0]) if tags else "",
+                "ingested_at": row["ingested_at"],
+                "n_lexical": int(row["n_lexical"] or 0),
+                "n_semantic": int(row["n_semantic"] or 0),
+            }
+        )
+    return out
+
+
+def fetch_diagnostic_manifests(limit: int = 100) -> list[dict[str, Any]]:
+    """Read recent diagnostic manifests for the Diagnostics tab.
+
+    Parses ``items_json`` once here so the renderer can show snippet count
+    + flawed count without re-parsing per render. Older 'closed' status
+    values are normalized to 'applied' / 'empty' depending on flaw count
+    (defensive — current schema only emits the three known states).
+    """
+    con = _connect()
+    try:
+        if not _table_exists(con, "prv_diagnostic_manifests"):
+            return []
+        rows = con.execute(
+            """
+            SELECT manifest_id, draft_id, status, items_json,
+                   created_at, finalized_at
+            FROM prv_diagnostic_manifests
+            ORDER BY manifest_id DESC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    finally:
+        con.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        items = _parse_payload(row["items_json"])
+        entries = items.get("entries") if isinstance(items, dict) else None
+        if not isinstance(entries, list):
+            entries = []
+        flawed = sum(1 for e in entries if isinstance(e, dict) and e.get("is_flawed"))
+        out.append(
+            {
+                "manifest_id": int(row["manifest_id"]),
+                "draft_id": row["draft_id"],
+                "status": row["status"],
+                "snippet_count": len(entries),
+                "flawed_count": flawed,
+                "entries": entries,
+                "created_at": row["created_at"],
+                "finalized_at": row["finalized_at"],
+            }
+        )
+    return out
+
+
+def fetch_lean_attempts(limit: int = 200) -> list[dict[str, Any]]:
+    """Read recent Lean attempts for the Lean tab.
+
+    Returns rows in newest-first order. The Lean source body and full
+    stderr are included so the detail-pane drill-in renders without a
+    second DB hit.
+    """
+    con = _connect()
+    try:
+        if not _table_exists(con, "prv_lean_attempts"):
+            return []
+        rows = con.execute(
+            """
+            SELECT attempt_id, proposition_id, status, lean_source, stderr,
+                   duration_sec, triage_eligible, triage_difficulty,
+                   triage_reasons, created_at
+            FROM prv_lean_attempts
+            ORDER BY attempt_id DESC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    finally:
+        con.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            reasons = json.loads(row["triage_reasons"]) if row["triage_reasons"] else []
+        except (json.JSONDecodeError, TypeError):
+            reasons = []
+        if not isinstance(reasons, list):
+            reasons = []
+        out.append(
+            {
+                "attempt_id": int(row["attempt_id"]),
+                "proposition_id": row["proposition_id"],
+                "status": row["status"],
+                "lean_source": row["lean_source"] or "",
+                "stderr": row["stderr"] or "",
+                "duration_sec": (
+                    float(row["duration_sec"]) if row["duration_sec"] is not None else None
+                ),
+                "triage_eligible": bool(row["triage_eligible"]),
+                "triage_difficulty": row["triage_difficulty"],
+                "triage_reasons": [str(r) for r in reasons],
+                "created_at": row["created_at"],
+            }
+        )
+    return out
+
+
 def fetch_new_events(last_event_id: int = 0, limit: int = 2000) -> list[dict[str, Any]]:
     con = _connect()
     try:

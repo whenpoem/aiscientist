@@ -6,6 +6,7 @@ import argparse
 
 from .app import CockpitApp, render_snapshot
 from .i18n import SUPPORTED_LANGS, normalize_lang
+from .theme import theme_names
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -14,19 +15,28 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lang",
         choices=sorted(SUPPORTED_LANGS),
-        default="en",
-        help="UI language",
+        default=None,
+        help="UI language (overrides saved settings)",
+    )
+    parser.add_argument(
+        "--theme",
+        choices=theme_names(),
+        default=None,
+        help="visual theme (overrides saved settings)",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    lang = normalize_lang(args.lang)
+    # When --lang is omitted, fall back to "en" only for the headless --once
+    # snapshot (which doesn't have access to settings persistence). For the
+    # interactive path we pass None so saved settings win.
     if args.once:
-        print(render_snapshot(lang=lang))
+        snapshot_lang = normalize_lang(args.lang or "en")
+        print(render_snapshot(lang=snapshot_lang))
         return 0
-    CockpitApp(lang=lang).run()
+    CockpitApp(lang=args.lang, theme=args.theme).run()
     return 0
 
 

@@ -20,12 +20,19 @@ class ConfirmModal(ModalScreen[bool]):
     ConfirmModal #confirm-dialog {
         width: 60;
         height: auto;
-        border: round #58a6ff;
-        background: #0d1117;
+        border: round $primary;
+        background: $surface;
         padding: 1 2;
     }
     ConfirmModal Label {
         width: 1fr;
+    }
+    ConfirmModal #confirm-title {
+        color: $primary;
+        text-style: bold;
+    }
+    ConfirmModal #confirm-hint {
+        color: $foreground-muted;
     }
     """
 

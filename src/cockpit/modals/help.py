@@ -21,8 +21,8 @@ class HelpScreen(ModalScreen[None]):
         width: 90;
         height: auto;
         max-height: 85%;
-        border: round #58a6ff;
-        background: #0d1117;
+        border: round $primary;
+        background: $surface;
         padding: 1 2;
     }
     """

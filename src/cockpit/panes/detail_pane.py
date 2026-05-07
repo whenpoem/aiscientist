@@ -7,6 +7,7 @@ from textual.widgets import Static
 
 from cockpit.data import GraphSnapshot
 from cockpit.i18n import kind_label, state_label, t
+from cockpit.theme import style as theme_style
 
 
 class NodeDetailPane(Static):
@@ -31,7 +32,7 @@ class NodeDetailPane(Static):
 
     def show_override(self, title: str, body: str) -> None:
         self._override = body
-        text = Text(title, style="bold #58a6ff")
+        text = Text(title, style=theme_style("primary", bold=True))
         text.append("\n\n")
         text.append(body)
         self.update(text)
@@ -88,7 +89,7 @@ class NodeDetailPane(Static):
                 f"{t(self.lang, 'created_by')}: {node.created_by}",
             ]
         )
-        text = Text(lines[0], style="bold #58a6ff")
+        text = Text(lines[0], style=theme_style("primary", bold=True))
         for line in lines[1:]:
             text.append("\n")
             text.append(line)

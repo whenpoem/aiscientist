@@ -15,9 +15,25 @@ from textual.reactive import reactive
 from textual.widgets import Footer, Input, Static
 
 from . import data
+from .commands import CockpitCommands, ThemeSwitcherCommands
 from .i18n import normalize_lang, t, toggle_lang
+from .layout import (
+    LAYOUT_FOCUS,
+    LAYOUT_WIDE,
+    all_layout_classes,
+    css_class_for,
+    resolve_for_width,
+)
 from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
 from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
+from .settings import CockpitSettings, load_settings, save_settings
+from .theme import (
+    ALL_THEMES,
+    default_theme_name,
+    get_theme,
+    next_theme,
+    update_theme_vars,
+)
 
 FOCUS_ORDER = ("tree", "detail", "events", "tabs")
 
@@ -139,6 +155,11 @@ class CockpitApp(App[None]):
     """Textual-based cockpit for live research state."""
 
     CSS_PATH = str(Path(__file__).with_name("theme").joinpath("cockpit.tcss"))
+
+    # The system command palette (Ctrl+P) merges these providers with
+    # Textual's built-ins. Custom providers are listed first so cockpit
+    # actions outrank the default app-quit / theme-cycle entries.
+    COMMANDS = App.COMMANDS | {CockpitCommands, ThemeSwitcherCommands}
     BINDINGS = [
         Binding("1", "focus_tree", "Tree"),
         Binding("2", "focus_detail", "Detail"),
@@ -167,6 +188,8 @@ class CockpitApp(App[None]):
         Binding("t", "toggle_timestamp_mode", "Time"),
         Binding("s", "toggle_refuted", "Refuted"),
         Binding("L", "toggle_language", "Language"),
+        Binding("T", "cycle_theme", "Theme"),
+        Binding("F", "toggle_focus", "Focus"),
         Binding("R", "force_refresh", "Refresh"),
         Binding("ctrl+l", "clear_event_log", "Clear Events"),
         Binding("escape", "cancel_context", show=False),
@@ -178,9 +201,25 @@ class CockpitApp(App[None]):
     relative_timestamps = reactive(False)
     last_event_id = reactive(0)
 
-    def __init__(self, *, lang: str = "en") -> None:
+    def __init__(
+        self,
+        *,
+        lang: str | None = None,
+        theme: str | None = None,
+        settings: CockpitSettings | None = None,
+    ) -> None:
         super().__init__()
-        self.lang = normalize_lang(lang)
+        # Settings precedence: explicit kwargs > saved file > built-in defaults.
+        # The CLI passes lang/theme as None when the user didn't specify them,
+        # so a saved choice from a prior session survives across launches.
+        self._settings: CockpitSettings = settings or load_settings()
+        if lang is not None:
+            self._settings.lang = normalize_lang(lang)
+        if theme is not None:
+            self._settings.theme = theme
+        self.lang = normalize_lang(self._settings.lang)
+        self.show_refuted = self._settings.show_refuted
+        self.relative_timestamps = self._settings.relative_timestamps
         self.graph = data.GraphSnapshot(nodes={})
         self.selected_node_id: str | None = None
         self._command_mode: str | None = None
@@ -191,23 +230,150 @@ class CockpitApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield StatusBar(lang=self.lang)
-        with Container(id="body-grid"):
+        # Compose order matters for the grid auto-flow used by layout v3:
+        # Tree (row-span 2 in wide / 3 in narrow) consumes column 1 entirely,
+        # Detail then flows into row 1 of the middle column, Tabs into row 2,
+        # and Events claims the right column (wide) or row 3 (narrow).
+        with Container(id="body-grid", classes="layout-wide"):
             yield HypothesisTreePane()
             yield NodeDetailPane()
-            yield EventStreamPane()
             yield RightTabsPane()
+            yield EventStreamPane()
         yield Input(placeholder="command", id="command-line", classes="hidden")
         yield ContextBar(lang=self.lang)
         yield Footer()
 
     def on_mount(self) -> None:
+        self._register_themes()
+        self._apply_theme(self._settings.theme, persist=False, notify=False)
         self._apply_language()
         self.refresh_state(include_events=True)
         self._set_focus("tree")
+        self._apply_layout(persist=False)
         self.events_worker()
+
+    def on_resize(self, event=None) -> None:  # noqa: ARG002
+        # Re-evaluate the active layout whenever the terminal resizes. The
+        # saved preset is preserved; only the *resolved* class on body-grid
+        # changes (e.g. wide → narrow when the user shrinks the window).
+        if self.is_mounted:
+            self._apply_layout(persist=False)
 
     def on_unmount(self) -> None:
         self._stop_event_worker = True
+        self._persist_settings()
+
+    # -- theme machinery ---------------------------------------------------
+
+    def _register_themes(self) -> None:
+        """Register all bundled themes with Textual's theme system.
+
+        Idempotent: re-registering the same name is a no-op in modern Textual.
+        Catches errors silently so an old Textual without the theme API still
+        boots (the fallback color table in tokens.py keeps things readable).
+        """
+        for theme in ALL_THEMES:
+            try:
+                self.register_theme(theme)
+            except Exception:  # pragma: no cover - depends on Textual version
+                pass
+
+    def _apply_theme(self, name: str, *, persist: bool, notify: bool) -> None:
+        """Switch the active theme and refresh widgets that compose Rich
+        Text styles dynamically (event stream, tree prefixes, detail header).
+        """
+        theme = get_theme(name) or get_theme(default_theme_name())
+        if theme is None:
+            return
+        # Update the in-process token cache so render code in panes resolves
+        # to the new colors on the very next paint.
+        update_theme_vars(theme)
+        try:
+            self.theme = theme.name
+        except Exception:  # pragma: no cover - older Textual
+            pass
+        self._settings.theme = theme.name
+        if persist:
+            self._persist_settings()
+        if notify:
+            label = t(self.lang, f"theme_{theme.name}")
+            self.notify(t(self.lang, "theme_changed", name=label))
+        # Re-render any pane that builds Rich Text styles outside TCSS.
+        if self.is_mounted:
+            self._refresh_detail()
+            # Tree label styles are baked at load time; reload to pick up the
+            # new kind colors.
+            self.selected_node_id = self.tree_pane.load_graph(
+                self.graph,
+                show_refuted=self.show_refuted,
+                filter_text=self._pane_filters["tree"],
+                selected_node_id=self.selected_node_id,
+            )
+
+    def action_cycle_theme(self) -> None:
+        self._apply_theme(next_theme(self._settings.theme), persist=True, notify=True)
+
+    # -- layout machinery --------------------------------------------------
+
+    def _body_grid(self) -> Container:
+        return self.query_one("#body-grid", Container)
+
+    def _apply_layout(self, *, persist: bool) -> None:
+        """Resolve the saved preset against the current terminal width and
+        update the ``#body-grid`` class so the TCSS rules take effect.
+
+        In single (focus) mode, also tag the active pane with
+        ``layout-active`` so it is the lone visible pane.
+        """
+        if not self.is_mounted:
+            return
+        try:
+            width = self.size.width
+        except Exception:  # pragma: no cover - pre-mount path
+            width = 120
+        active = resolve_for_width(self._settings.layout_preset, width)
+        target_class = css_class_for(active)
+        grid = self._body_grid()
+        for cls in all_layout_classes():
+            grid.remove_class(cls)
+        grid.add_class(target_class)
+        # Manage layout-active class on panes for single-pane focus mode.
+        panes = {
+            "tree": self.tree_pane,
+            "detail": self.detail_pane,
+            "events": self.events_pane,
+            "tabs": self.tabs_pane,
+        }
+        for name, widget in panes.items():
+            if active == "single" and name == self.focused_pane:
+                widget.add_class("layout-active")
+            else:
+                widget.remove_class("layout-active")
+        if persist:
+            self._persist_settings()
+
+    def action_toggle_focus(self) -> None:
+        """Toggle single-pane focus mode. Saves the choice so the next
+        launch starts in the same mode."""
+        if self._settings.layout_preset == LAYOUT_FOCUS:
+            self._settings.layout_preset = LAYOUT_WIDE
+        else:
+            self._settings.layout_preset = LAYOUT_FOCUS
+        self._apply_layout(persist=True)
+
+    # -- settings persistence ---------------------------------------------
+
+    def _persist_settings(self) -> None:
+        """Write the current settings snapshot to disk. Swallows OSError so
+        a hostile filesystem (read-only, missing parent, etc.) cannot crash
+        the cockpit at quit time."""
+        self._settings.lang = self.lang
+        self._settings.show_refuted = bool(self.show_refuted)
+        self._settings.relative_timestamps = bool(self.relative_timestamps)
+        try:
+            save_settings(self._settings)
+        except OSError:
+            pass
 
     @property
     def status_bar(self) -> StatusBar:
@@ -260,6 +426,11 @@ class CockpitApp(App[None]):
             else:
                 widget.remove_class("pane-active")
         self.context_bar.set_pane(new)
+        # Persist the new focus + refresh layout-active class so single-pane
+        # focus mode swaps to the newly focused pane immediately.
+        self._settings.focused_pane = new
+        if self.is_mounted:
+            self._apply_layout(persist=False)
 
     def on_tree_node_selected(self, event: HypothesisTreePane.NodeSelected) -> None:
         node_id = event.node.data if isinstance(event.node.data, str) else None
@@ -390,6 +561,7 @@ class CockpitApp(App[None]):
                     ("t", t(self.lang, "toggle_time")),
                     ("s", t(self.lang, "toggle_refuted")),
                     ("L", t(self.lang, "toggle_language")),
+                    ("T", t(self.lang, "cycle_theme")),
                     ("q", t(self.lang, "quit")),
                 ],
             ),
@@ -605,10 +777,95 @@ class CockpitApp(App[None]):
                     [
                         f"{t(self.lang, 'trigger')}: {row['trigger']}",
                         f"{t(self.lang, 'symptom')}: {row['symptom']}",
-                        f"Root cause: {row.get('root_cause') or '-'}",
-                        f"Resolution: {row.get('resolution') or '-'}",
+                        f"{t(self.lang, 'failure_root_cause')}: {row.get('root_cause') or '-'}",
+                        f"{t(self.lang, 'failure_resolution')}: {row.get('resolution') or '-'}",
                         f"{t(self.lang, 'seen')}: {row.get('seen_count', 0)}",
-                        f"Signature: {row.get('signature') or '-'}",
+                        f"{t(self.lang, 'failure_signature')}: {row.get('signature') or '-'}",
+                    ]
+                ),
+            )
+        if "problem_id" in row and "statement" in row:
+            keywords = (
+                f"L{row.get('n_lexical', 0)} / S{row.get('n_semantic', 0)}"
+            )
+            domain = ", ".join(row.get("domain_tags") or []) or "-"
+            return (
+                f"{t(self.lang, 'corpus_title')} {row['problem_id']}",
+                "\n".join(
+                    [
+                        f"{t(self.lang, 'corpus_col_domain')}: {domain}",
+                        f"{t(self.lang, 'corpus_col_keywords')}: {keywords}",
+                        f"{t(self.lang, 'created')}: {row.get('ingested_at', '-')}",
+                        "",
+                        f"{t(self.lang, 'corpus_col_statement')}:",
+                        str(row.get("statement", "")),
+                        "",
+                        "reference proof:",
+                        str(row.get("reference_proof", "")) or "-",
+                    ]
+                ),
+            )
+        if "manifest_id" in row and "snippet_count" in row:
+            status = str(row.get("status", "open"))
+            status_label = t(self.lang, f"diagnostics_status_{status}")
+            if status_label == f"diagnostics_status_{status}":
+                status_label = status
+            entries = row.get("entries") or []
+            lines = [
+                f"draft: {row.get('draft_id', '-')}",
+                f"{t(self.lang, 'status')}: {status_label}",
+                (
+                    f"{t(self.lang, 'diagnostics_col_snippets')}: "
+                    f"{row.get('snippet_count', 0)}  "
+                    f"{t(self.lang, 'diagnostics_col_flawed')}: "
+                    f"{row.get('flawed_count', 0)}"
+                ),
+                "",
+            ]
+            for entry in entries[:20]:
+                if not isinstance(entry, dict):
+                    continue
+                marker = "✗" if entry.get("is_flawed") else "✓"
+                snippet_id = entry.get("snippet_id", "-")
+                note = entry.get("note") or entry.get("rationale") or ""
+                lines.append(f"  {marker} {snippet_id}  {note}".rstrip())
+            return (
+                f"{t(self.lang, 'diagnostics_title')} #{row['manifest_id']}",
+                "\n".join(lines),
+            )
+        if "attempt_id" in row and "proposition_id" in row:
+            status = str(row.get("status", "queued"))
+            status_label = t(self.lang, f"lean_status_{status}")
+            if status_label == f"lean_status_{status}":
+                status_label = status
+            duration = row.get("duration_sec")
+            duration_text = (
+                f"{float(duration):.2f}s"
+                if isinstance(duration, (int, float))
+                else "-"
+            )
+            reasons = ", ".join(row.get("triage_reasons") or []) or "-"
+            lean_source = row.get("lean_source") or ""
+            stderr = row.get("stderr") or ""
+            return (
+                f"{t(self.lang, 'lean_title')} #{row['attempt_id']}",
+                "\n".join(
+                    [
+                        f"proposition: {row.get('proposition_id', '-')}",
+                        f"{t(self.lang, 'status')}: {status_label}",
+                        f"{t(self.lang, 'lean_col_duration')}: {duration_text}",
+                        (
+                            f"{t(self.lang, 'lean_col_triage')}: "
+                            f"{row.get('triage_difficulty', '-')} "
+                            f"({reasons})"
+                        ),
+                        f"{t(self.lang, 'created')}: {row.get('created_at', '-')}",
+                        "",
+                        "lean source:",
+                        lean_source or "-",
+                        "",
+                        "stderr:",
+                        stderr or "-",
                     ]
                 ),
             )
@@ -622,8 +879,8 @@ class CockpitApp(App[None]):
                         f"{t(self.lang, 'verified')}: "
                         f"{t(self.lang, 'yes') if row['verified'] else t(self.lang, 'no')}",
                         f"{t(self.lang, 'seeds')}: {row['seeds']}",
-                        f"Note: {row.get('note') or '-'}",
-                        f"Source: {row.get('source_command') or '-'}",
+                        f"{t(self.lang, 'claim_note')}: {row.get('note') or '-'}",
+                        f"{t(self.lang, 'claim_source')}: {row.get('source_command') or '-'}",
                     ]
                 ),
             )
@@ -635,8 +892,8 @@ class CockpitApp(App[None]):
                     f"{t(self.lang, 'year')}: {row.get('year') or '-'}",
                     f"{t(self.lang, 'task')}: {row.get('task') or '-'}",
                     f"{t(self.lang, 'score')}: {float(row.get('score') or 0.0):.2f}",
-                    f"Venue: {row.get('venue') or '-'}",
-                    f"Source: {row.get('source') or '-'}",
+                    f"{t(self.lang, 'lit_venue')}: {row.get('venue') or '-'}",
+                    f"{t(self.lang, 'lit_source')}: {row.get('source') or '-'}",
                 ]
             ),
         )
@@ -721,6 +978,9 @@ class CockpitApp(App[None]):
             failures=failures,
             claims=claims,
             literature=data.fetch_literature(),
+            corpus=data.fetch_corpus_problems(),
+            diagnostics=data.fetch_diagnostic_manifests(),
+            lean=data.fetch_lean_attempts(),
         )
 
     def _refresh_risks(self) -> None:
@@ -737,6 +997,15 @@ class CockpitApp(App[None]):
     def _refresh_literature(self) -> None:
         self._set_tab_rows(literature=data.fetch_literature())
 
+    def _refresh_corpus(self) -> None:
+        self._set_tab_rows(corpus=data.fetch_corpus_problems())
+
+    def _refresh_diagnostics(self) -> None:
+        self._set_tab_rows(diagnostics=data.fetch_diagnostic_manifests())
+
+    def _refresh_lean(self) -> None:
+        self._set_tab_rows(lean=data.fetch_lean_attempts())
+
     def _set_tab_rows(
         self,
         *,
@@ -744,6 +1013,9 @@ class CockpitApp(App[None]):
         failures: list[dict] | None = None,
         claims: list[dict] | None = None,
         literature: list[dict] | None = None,
+        corpus: list[dict] | None = None,
+        diagnostics: list[dict] | None = None,
+        lean: list[dict] | None = None,
     ) -> None:
         self.tabs_pane.set_filter_text(self._pane_filters["tabs"])
         self.tabs_pane.set_rows(
@@ -751,6 +1023,11 @@ class CockpitApp(App[None]):
             failures=failures if failures is not None else self.tabs_pane.failures_rows,
             claims=claims if claims is not None else self.tabs_pane.claims_rows,
             literature=literature if literature is not None else self.tabs_pane.literature_rows,
+            corpus=corpus if corpus is not None else self.tabs_pane.corpus_rows,
+            diagnostics=(
+                diagnostics if diagnostics is not None else self.tabs_pane.diagnostics_rows
+            ),
+            lean=lean if lean is not None else self.tabs_pane.lean_rows,
         )
 
     def _refresh_counts(self) -> None:
@@ -778,6 +1055,23 @@ class CockpitApp(App[None]):
             self._refresh_literature()
         if {"heldout_query_reserved", "heldout_query_finished"} & kinds:
             self._refresh_risks()
+        # Proof-trunk per-pane refreshes (v4.1.0a0). Each event class maps
+        # to exactly one tab so we don't over-refresh on busy proof loops.
+        if "proof_corpus_ingested" in kinds:
+            self._refresh_corpus()
+        if {
+            "proof_segmented",
+            "proof_diagnosis_recorded",
+            "proof_diagnosis_complete",
+            "proof_correction_applied",
+        } & kinds:
+            self._refresh_diagnostics()
+        if {
+            "lean_proof_succeeded",
+            "lean_proof_failed",
+            "lean_proof_recorded",
+        } & kinds:
+            self._refresh_lean()
         self._refresh_counts()
         self._refresh_detail()
 

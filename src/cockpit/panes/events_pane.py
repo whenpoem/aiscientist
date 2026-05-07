@@ -8,6 +8,8 @@ from rich.text import Text
 from textual.widgets import RichLog
 
 from cockpit.i18n import t
+from cockpit.theme import color
+from cockpit.theme import style as theme_style
 
 
 class EventStreamPane(RichLog):
@@ -84,8 +86,14 @@ class EventStreamPane(RichLog):
         kind = str(row.get("kind", "event"))
         summary = self._summarize(row)
         line = Text()
-        line.append(f"{timestamp}  ", style="#6e7681")
-        line.append(kind, style="bold #58a6ff")
+        line.append(f"{timestamp}  ", style=color("foreground-subtle"))
+        # Proof-trunk events get the proof token color; everything else uses
+        # the primary accent. This keeps the two trunks visually separable
+        # at a glance.
+        if kind.startswith("proof_") or kind.startswith("lean_"):
+            line.append(kind, style=theme_style("kind-proposition", bold=True))
+        else:
+            line.append(kind, style=theme_style("primary", bold=True))
         line.append("  ")
         line.append(summary)
         return line

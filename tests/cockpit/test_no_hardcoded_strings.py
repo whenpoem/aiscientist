@@ -1,0 +1,129 @@
+"""Regression test: no hardcoded English UI strings in cockpit source.
+
+``AGENTS.md:78`` requires that every cockpit UI label go through
+``cockpit.i18n.t``. The Plan v2 retrospective flagged three regressions
+where the rule was violated (``"Root cause:"`` / ``"Resolution:"`` /
+``"Venue:"`` / ``"Source:"`` / ``"Signature:"`` / ``"Note:"``). G4 fixed
+all six, and this test guards them so the next contributor doesn't
+silently re-introduce them.
+
+Strategy: parse each tracked source file and assert that the known-bad
+literal strings (the ones the audit found) are absent. We use literal
+substring scanning rather than a generic "any English string" heuristic
+because the latter has too many false positives (log keys, JSON keys,
+docstrings, exception messages).
+
+Adding a new known-bad pattern is one entry in ``BANNED_PATTERNS``.
+Removing one (because the wording legitimately changed) is also one edit
+— the test stays in lockstep with the cockpit's user-visible vocabulary.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+# Files that must route every UI label through ``t(lang, ...)``. The
+# regression budget is intentionally narrow (panes + the app's _row_detail
+# helpers); broader source files (data layer, db setup) freely use English
+# in error messages and log keys.
+SCANNED_FILES = (
+    "src/cockpit/app.py",
+    "src/cockpit/panes/tree_pane.py",
+    "src/cockpit/panes/detail_pane.py",
+    "src/cockpit/panes/events_pane.py",
+    "src/cockpit/panes/tabs_pane.py",
+)
+
+# Strings that must NEVER appear as quoted Python literals in the scanned
+# files. Each entry includes the trailing colon to avoid matching
+# substrings inside i18n template values like ``failure_root_cause``.
+BANNED_PATTERNS = (
+    '"Root cause:',
+    '"Resolution:',
+    '"Venue:',
+    "'Venue:",
+    '"Source:',
+    "'Source:",
+    '"Note:',
+    "'Note:",
+    '"Signature:',
+)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("relative", SCANNED_FILES)
+def test_scanned_file_has_no_banned_literal(relative: str):
+    target = _repo_root() / relative
+    text = target.read_text(encoding="utf-8")
+    for needle in BANNED_PATTERNS:
+        assert needle not in text, (
+            f"{relative} contains the hardcoded UI literal {needle!r}; "
+            f"route it through cockpit.i18n.t instead. See "
+            f"AGENTS.md:78 for the i18n rule."
+        )
+
+
+def test_app_uses_failure_root_cause_via_i18n():
+    """Positive form: the detail-pane drill that previously said "Root
+    cause:" should now resolve via the new i18n key."""
+    target = _repo_root() / "src/cockpit/app.py"
+    text = target.read_text(encoding="utf-8")
+    assert "failure_root_cause" in text
+    assert "failure_resolution" in text
+    assert "failure_signature" in text
+    assert "lit_venue" in text
+    assert "lit_source" in text
+
+
+def test_i18n_defines_both_languages_for_new_keys():
+    """The 7 fix keys + the 32-ish new proof tab keys must each have an EN
+    *and* a ZH translation. The ``t()`` function falls back to EN if a key
+    is missing in ZH, but missing keys silently regress the bilingual UX —
+    so we assert presence rather than rely on the runtime fallback."""
+    from cockpit.i18n import TEXT
+
+    must_have_keys = (
+        # Detail-pane fixes
+        "failure_root_cause",
+        "failure_resolution",
+        "failure_signature",
+        "lit_venue",
+        "lit_source",
+        "claim_note",
+        "claim_source",
+        # Theme labels
+        "theme_claude-warm-dark",
+        "theme_claude-warm-light",
+        "theme_claude-cool-dark",
+        "theme_claude-high-contrast",
+        "cycle_theme",
+        "theme_changed",
+        # Proof-trunk tabs
+        "corpus_title",
+        "corpus_col_id",
+        "corpus_col_domain",
+        "corpus_col_statement",
+        "corpus_col_keywords",
+        "corpus_empty",
+        "diagnostics_title",
+        "diagnostics_col_manifest",
+        "diagnostics_col_status",
+        "diagnostics_status_open",
+        "diagnostics_status_applied",
+        "diagnostics_empty",
+        "lean_title",
+        "lean_col_attempt",
+        "lean_col_proposition",
+        "lean_col_status",
+        "lean_status_verified",
+        "lean_status_failed",
+        "lean_empty",
+    )
+    for key in must_have_keys:
+        assert key in TEXT["en"], f"missing EN translation for key {key!r}"
+        assert key in TEXT["zh"], f"missing ZH translation for key {key!r}"

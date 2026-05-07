@@ -1,33 +1,102 @@
+/* Cockpit TUI stylesheet — token-driven, layout-adaptive.
+ *
+ * Variables consumed here are Textual's standard set ($primary,
+ * $background, $surface, $panel, $boost, $foreground, $accent, $warning,
+ * $error, $success). Custom semantic tokens (kind-*, foreground-muted,
+ * border-active) live in src/cockpit/theme/tokens.py and are consumed at
+ * Rich Text render time, not from this file. Rationale: Textual parses
+ * this file before App.__init__ has registered our custom themes; only
+ * built-ins are guaranteed to resolve here.
+ *
+ * The ``#body-grid`` container carries one of three layout classes:
+ *   ``layout-wide``    3-column grid (terminal ≥ 120 cols)
+ *   ``layout-narrow``  2-column grid (80–119 cols)
+ *   ``layout-single``  single-pane focus mode (any width; user-toggleable)
+ *
+ * The default class is ``layout-wide``; the App swaps classes on resize
+ * and on F-key focus toggle. See src/cockpit/layout.py for the breakpoint
+ * math and src/cockpit/app.py for the watcher wiring.
+ */
+
 Screen {
-    background: #0d1117;
-    color: #c9d1d9;
+    background: $background;
+    color: $foreground;
 }
 
 #status-bar {
     dock: top;
     height: 1;
     padding: 0 1;
-    color: #c9d1d9;
-    background: #161b22;
+    color: $foreground;
+    background: $surface;
 }
 
 #body-grid {
     layout: grid;
-    grid-size: 2 2;
-    grid-columns: 1fr 1fr;
-    grid-rows: 1fr 1fr;
     height: 1fr;
     padding: 0 1;
 }
 
+/* ===== layout-wide: 3 columns ============================================
+ * Tree | Detail / Tabs (stacked) | Events
+ * Compose order is Tree → Detail → Tabs → Events; row-span on Tree and
+ * Events makes them fill the side columns vertically. */
+
+#body-grid.layout-wide {
+    grid-size: 3 2;
+    grid-columns: 1fr 2fr 2fr;
+    grid-rows: 1fr 1fr;
+}
+
+#body-grid.layout-wide #tree-pane {
+    row-span: 2;
+}
+
+#body-grid.layout-wide #events-pane {
+    row-span: 2;
+}
+
+/* ===== layout-narrow: 2 columns =========================================
+ * Tree | Detail / Tabs / Events (stacked) */
+
+#body-grid.layout-narrow {
+    grid-size: 2 3;
+    grid-columns: 1fr 2fr;
+    grid-rows: 2fr 2fr 1fr;
+}
+
+#body-grid.layout-narrow #tree-pane {
+    row-span: 3;
+}
+
+/* ===== layout-single: focus mode =========================================
+ * One pane fills the body area; the others are display:none. The App
+ * tags the active pane with the .layout-active class. */
+
+#body-grid.layout-single {
+    grid-size: 1 1;
+    grid-columns: 1fr;
+    grid-rows: 1fr;
+}
+
+#body-grid.layout-single .pane {
+    display: none;
+}
+
+#body-grid.layout-single .pane.layout-active {
+    display: block;
+}
+
+/* ===== shared pane chrome =============================================== */
+
 .pane {
-    border: round #21262d;
+    border: round $panel;
     padding: 0 1;
     margin: 0 1 1 0;
 }
 
 .pane-active {
-    border: round #58a6ff;
+    border: round $primary;
 }
 
 #tree-pane,
@@ -37,11 +106,15 @@ Screen {
     height: 1fr;
 }
 
+/* ===== command line + chrome bars ======================================= */
+
 #command-line {
     dock: bottom;
     height: 1;
     margin: 0 1 0 1;
     border: none;
+    background: $surface;
+    color: $foreground;
 }
 
 #command-line.hidden {
@@ -52,12 +125,14 @@ Screen {
     dock: bottom;
     height: 1;
     padding: 0 1;
-    color: #8b949e;
-    background: #0d1117;
+    color: $foreground 70%;
+    background: $background;
 }
 
 Footer {
     dock: bottom;
+    background: $surface;
+    color: $foreground 70%;
 }
 
 RightTabsPane DataTable {
@@ -66,4 +141,8 @@ RightTabsPane DataTable {
 
 TabPane {
     padding: 0;
+}
+
+Tabs {
+    background: $surface;
 }
