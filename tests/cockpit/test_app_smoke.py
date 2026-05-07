@@ -168,6 +168,40 @@ async def test_focused_pane_restored_on_relaunch(workspace):
 
 
 @pytest.mark.asyncio
+async def test_relaunch_with_tabs_focused_does_not_crash(workspace):
+    """Regression: when the saved focused_pane is 'tabs', on_mount used to
+    focus the inner DataTable, which bubbled Focused into TabbedContent's
+    not-yet-fully-composed _watch_active and crashed with NoMatches.
+
+    Subclassing TabbedContent with a custom compose() prevents Textual
+    from injecting ContentTabs / ContentSwitcher in time, so the deferral
+    via call_after_refresh isn't enough. The pragmatic fix downgrades a
+    saved 'tabs' focus to 'tree' on boot — the user can press '4' to
+    re-focus tabs once the cockpit is running."""
+    from cockpit.app import CockpitApp
+    from cockpit.settings import (
+        CockpitSettings,
+        default_config_path,
+        save_settings,
+    )
+
+    config_path = default_config_path()
+    save_settings(CockpitSettings(focused_pane="tabs"), config_path)
+
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+
+    # The whole point of the test is that this doesn't raise during mount.
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        # Downgraded to tree (documented behaviour). User can press '4'
+        # later to re-focus tabs once they're ready, but the boot itself
+        # must not crash.
+        assert app.focused_pane == "tree"
+
+
+@pytest.mark.asyncio
 async def test_focus_toggle_restores_prior_layout_preset(workspace):
     """F-then-F should return to the user's prior preset, not always wide.
     Regression for the v4.1.0a0 toggle that hardcoded LAYOUT_WIDE on exit."""

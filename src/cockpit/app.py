@@ -11,6 +11,7 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Footer, Input, Static
 
@@ -200,9 +201,14 @@ class CockpitApp(App[None]):
         Binding("?", "show_help", "Help"),
         Binding("t", "toggle_timestamp_mode", "Time"),
         Binding("s", "toggle_refuted", "Refuted"),
-        Binding("L", "toggle_language", "Language"),
-        Binding("T", "cycle_theme", "Theme"),
-        Binding("F", "toggle_focus", "Focus"),
+        # Priority bindings: these meta-actions must fire regardless of
+        # which widget has focus. Without priority=True a focused
+        # DataTable / Input swallows the keystroke and the user thinks
+        # the binding is broken (e.g. settings.focused_pane="tabs"
+        # restores DataTable focus on launch and L/T/F seem dead).
+        Binding("L", "toggle_language", "Language", priority=True),
+        Binding("T", "cycle_theme", "Theme", priority=True),
+        Binding("F", "toggle_focus", "Focus", priority=True),
         Binding("R", "force_refresh", "Refresh"),
         Binding("ctrl+l", "clear_event_log", "Clear Events"),
         Binding("escape", "cancel_context", show=False),
@@ -282,9 +288,24 @@ class CockpitApp(App[None]):
         self._apply_theme(self._settings.theme, persist=False, notify=False)
         self._apply_language()
         self.refresh_state(include_events=True)
-        # Use the snapshot taken in __init__ — by now the reactive init-fire
-        # has overwritten self._settings.focused_pane with the default.
-        self._set_focus(self._initial_focus)
+        # Restore focus to the previously active pane. tree / detail /
+        # events are plain widgets; calling .focus() synchronously is
+        # safe and keeps key bindings working from the first keystroke
+        # (matching the v4.1.0a0 behaviour).
+        #
+        # 'tabs' is intentionally NOT restored automatically. The inner
+        # DataTable inside RightTabsPane (a TabbedContent subclass) can't
+        # be focused programmatically during on_mount: Textual's
+        # ContentTabs / ContentSwitcher wrappers are auto-injected lazily
+        # and not on the DOM yet, so the bubbled Focused event crashes
+        # _watch_active with NoMatches. We could defer to call_after_refresh
+        # but the wrappers still aren't ready by the next tick, so the
+        # safest path is to downgrade the saved 'tabs' focus to 'tree'
+        # at boot and let the user press '4' to re-focus tabs.
+        focus_pane = self._initial_focus
+        if focus_pane == "tabs":
+            focus_pane = "tree"
+        self._set_focus(focus_pane)
         self._apply_layout(persist=False)
         self.events_worker()
 
@@ -768,13 +789,25 @@ class CockpitApp(App[None]):
 
     def _set_focus(self, pane_name: str) -> None:
         self.focused_pane = pane_name
-        target = {
-            "tree": self.tree_pane,
-            "detail": self.detail_pane,
-            "events": self.events_pane,
-            "tabs": self.tabs_pane.current_table(),
-        }[pane_name]
-        target.focus()
+        target_map = {
+            "tree": lambda: self.tree_pane,
+            "detail": lambda: self.detail_pane,
+            "events": lambda: self.events_pane,
+            "tabs": lambda: self.tabs_pane.current_table(),
+        }
+        target_factory = target_map.get(pane_name)
+        if target_factory is None:
+            return
+        try:
+            target_factory().focus()
+        except (NoMatches, AttributeError):
+            # The 'tabs' case can hit NoMatches if the user presses '4'
+            # before TabbedContent has finished injecting its ContentTabs
+            # / ContentSwitcher children (which it does lazily). Reactive
+            # state is already updated, so the cockpit stays consistent;
+            # the user can press '4' again after a moment and it will
+            # work. Better than crashing the whole app.
+            pass
 
     def _apply_language(self) -> None:
         self.status_bar.set_language(self.lang)
