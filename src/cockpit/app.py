@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import shlex
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,13 +14,14 @@ from textual.binding import Binding
 from textual.containers import Container
 from textual.css.query import NoMatches
 from textual.reactive import reactive
-from textual.widgets import Footer, Input, Static
+from textual.widgets import Input, Static
 
 from . import data
 from .commands import CockpitCommands, ThemeSwitcherCommands
 from .i18n import normalize_lang, t, toggle_lang
 from .layout import (
     LAYOUT_FOCUS,
+    LAYOUT_SINGLE,
     LAYOUT_WIDE,
     all_layout_classes,
     css_class_for,
@@ -86,9 +88,13 @@ class StatusBar(Static):
         # Compact theme tag (drops the "claude-" prefix) so the HUD doesn't
         # bloat. e.g. "claude-warm-dark" -> "warm-dark".
         compact_theme = self.theme_name.removeprefix("claude-") or self.theme_name
+        try:
+            hud_key = "hud_compact" if self.size.width < 100 else "hud"
+        except Exception:  # pragma: no cover - pre-mount path
+            hud_key = "hud"
         self.current_text = t(
             self.lang,
-            "hud",
+            hud_key,
             app=t(self.lang, "app_name"),
             active_hypotheses=self._summary.get("active_hypotheses", 0),
             refuted_nodes=self._summary.get("refuted_nodes", 0),
@@ -212,7 +218,7 @@ class CockpitApp(App[None]):
         Binding("R", "force_refresh", "Refresh"),
         Binding("ctrl+l", "clear_event_log", "Clear Events"),
         Binding("escape", "cancel_context", show=False),
-        Binding("q", "quit_requested", "Quit"),
+        Binding("q", "quit_requested", "Quit", priority=True),
     ]
 
     focused_pane = reactive("tree")
@@ -236,6 +242,11 @@ class CockpitApp(App[None]):
             self._settings.lang = normalize_lang(lang)
         if theme is not None:
             self._settings.theme = theme
+        # Focus/single-pane layout is useful during a session but hostile as a
+        # startup default: a prior F-key press can make the next launch look
+        # like most panes disappeared. Heal older saved configs immediately.
+        if self._settings.layout_preset in (LAYOUT_FOCUS, LAYOUT_SINGLE):
+            self._settings.layout_preset = LAYOUT_WIDE
         self.lang = normalize_lang(self._settings.lang)
         self.show_refuted = self._settings.show_refuted
         self.relative_timestamps = self._settings.relative_timestamps
@@ -245,6 +256,7 @@ class CockpitApp(App[None]):
         # consumes this snapshot to restore the user's last focus.
         saved_focus = self._settings.focused_pane
         self._initial_focus = saved_focus if saved_focus in FOCUS_ORDER else "tree"
+        self._pre_focus_preset = self._settings.layout_preset or LAYOUT_WIDE
         self.graph = data.GraphSnapshot(nodes={})
         self.selected_node_id: str | None = None
         self._command_mode: str | None = None
@@ -281,7 +293,6 @@ class CockpitApp(App[None]):
             yield RightTabsPane()
         yield Input(placeholder="command", id="command-line", classes="hidden")
         yield ContextBar(lang=self.lang)
-        yield Footer()
 
     def on_mount(self) -> None:
         self._register_themes()
@@ -431,7 +442,8 @@ class CockpitApp(App[None]):
         preset so exiting focus mode returns to wide / narrow / whatever
         they had instead of always snapping to wide.
 
-        Persists the choice so the next launch starts in the same mode.
+        The focus state itself is intentionally session-only; persisting it
+        made the next real launch look like Detail / Events / Tabs vanished.
         """
         if self._settings.layout_preset == LAYOUT_FOCUS:
             # Exit focus → restore the preset that was active before we
@@ -453,8 +465,15 @@ class CockpitApp(App[None]):
         self._settings.lang = self.lang
         self._settings.show_refuted = bool(self.show_refuted)
         self._settings.relative_timestamps = bool(self.relative_timestamps)
+        settings_to_save = self._settings
+        if self._settings.layout_preset in (LAYOUT_FOCUS, LAYOUT_SINGLE):
+            settings_to_save = replace(
+                self._settings,
+                layout_preset=getattr(self, "_pre_focus_preset", LAYOUT_WIDE)
+                or LAYOUT_WIDE,
+            )
         try:
-            save_settings(self._settings)
+            save_settings(settings_to_save)
         except OSError:
             pass
 

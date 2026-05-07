@@ -202,6 +202,33 @@ async def test_relaunch_with_tabs_focused_does_not_crash(workspace):
 
 
 @pytest.mark.asyncio
+async def test_relaunch_with_stale_focus_layout_starts_full_layout(workspace):
+    """A saved focus layout from older builds should not make startup look
+    like Detail / Events / Tabs disappeared."""
+    from textual.containers import Container
+
+    from cockpit.app import CockpitApp
+    from cockpit.settings import (
+        CockpitSettings,
+        default_config_path,
+        load_settings,
+        save_settings,
+    )
+
+    config_path = default_config_path()
+    save_settings(CockpitSettings(layout_preset="focus"), config_path)
+
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)):
+        body = app.query_one("#body-grid", Container)
+        assert "layout-wide" in body.classes
+        assert "layout-single" not in body.classes
+
+    saved = load_settings(config_path)
+    assert saved.layout_preset == "wide"
+
+
+@pytest.mark.asyncio
 async def test_focus_toggle_restores_prior_layout_preset(workspace):
     """F-then-F should return to the user's prior preset, not always wide.
     Regression for the v4.1.0a0 toggle that hardcoded LAYOUT_WIDE on exit."""
@@ -220,6 +247,112 @@ async def test_focus_toggle_restores_prior_layout_preset(workspace):
         assert app._settings.layout_preset == "narrow", (
             f"focus exit clobbered prior preset (got {app._settings.layout_preset!r})"
         )
+
+
+@pytest.mark.asyncio
+async def test_focus_layout_is_not_persisted_as_startup_default(workspace):
+    """F can enter focus mode for the current session, but a hard restart
+    should still open the full dashboard."""
+    from cockpit.app import CockpitApp
+    from cockpit.settings import default_config_path, load_settings
+
+    config_path = default_config_path()
+    if config_path.exists():
+        config_path.unlink()
+
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.press("F")
+        assert app._settings.layout_preset == "focus"
+        assert load_settings(config_path).layout_preset == "wide"
+
+
+@pytest.mark.asyncio
+async def test_tui_uses_context_bar_instead_of_default_footer(workspace):
+    """The Textual Footer renders static English binding labels. The cockpit
+    has its own localized ContextBar, so the default Footer should not be in
+    the DOM."""
+    from textual.widgets import Footer
+
+    from cockpit.app import CockpitApp
+
+    app = CockpitApp(lang="zh")
+    async with app.run_test(size=(80, 24)):
+        assert list(app.query(Footer)) == []
+        assert "语言" in app.context_bar.current_text
+
+
+@pytest.mark.asyncio
+async def test_compact_hud_for_80_col_terminal(workspace):
+    from cockpit.app import CockpitApp
+
+    app = CockpitApp(lang="zh")
+    async with app.run_test(size=(80, 24)):
+        assert "研究座舱" in app.status_bar.current_text
+        assert "未验证" not in app.status_bar.current_text
+        assert "留出" not in app.status_bar.current_text
+
+
+@pytest.mark.asyncio
+async def test_real_startup_common_click_and_key_paths_do_not_crash(workspace):
+    """Exercise the paths that are painful in a real TUI session: clicking
+    panes, cycling tabs, opening/canceling modals, toggling theme/language,
+    and switching focus inside an 80-column terminal."""
+    from cockpit.app import CockpitApp
+
+    memory_impl = workspace["memory_mcp.impl"]
+    root = memory_impl.propose_hypothesis("Tune dropout for ViT")
+    memory_impl.attach_evidence(root["node_id"], "Held-out accuracy moved up", "supports")
+
+    app = CockpitApp(lang="zh")
+    async with app.run_test(size=(80, 24)) as pilot:
+        for target in ("#tree-pane", "#detail-pane", "#events-pane", "#tabs-pane"):
+            await pilot.click(target, offset=(2, 1))
+            await pilot.pause()
+
+        for key in (
+            "1",
+            "j",
+            "k",
+            "h",
+            "l",
+            "g",
+            "G",
+            "2",
+            "3",
+            "4",
+            "f",
+            "f",
+            "enter",
+            "escape",
+            "/",
+            "escape",
+            ":",
+            "escape",
+            "?",
+            "escape",
+            "T",
+            "L",
+            "t",
+            "s",
+            "R",
+            "ctrl+l",
+            "p",
+            "escape",
+            "H",
+            "n",
+            "r",
+            "escape",
+            "c",
+            "escape",
+            "m",
+            "n",
+            "F",
+            "3",
+            "F",
+        ):
+            await pilot.press(key)
+            await pilot.pause()
 
 
 @pytest.mark.asyncio

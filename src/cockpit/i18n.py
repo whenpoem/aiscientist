@@ -68,6 +68,11 @@ TEXT: dict[str, dict[str, str]] = {
             "heldout {heldout} / risks {risks} / last {last_event}  "
             "{theme}·{lang_code}  {clock}"
         ),
+        "hud_compact": (
+            "{app}  H {active_hypotheses}/{refuted_nodes}  "
+            "claims {pinned_claims}  risks {risks}  "
+            "{theme}·{lang_code} {clock}"
+        ),
         "heldout_none": "none",
         "last_never": "never",
         "just_now": "now",
@@ -269,6 +274,11 @@ TEXT: dict[str, dict[str, str]] = {
             "指标 {pinned_claims}（未验证 {unverified_claims}）/ "
             "留出 {heldout} / 风险 {risks} / 最近 {last_event}  "
             "{theme}·{lang_code}  {clock}"
+        ),
+        "hud_compact": (
+            "{app}  假设 {active_hypotheses}/{refuted_nodes}  "
+            "指标 {pinned_claims}  风险 {risks}  "
+            "{theme}·{lang_code} {clock}"
         ),
         "heldout_none": "无",
         "last_never": "无",

@@ -17,7 +17,8 @@ through ``cockpit.i18n.t`` so the bilingual contract holds.
 
 from __future__ import annotations
 
-from textual.widgets import DataTable, TabbedContent, TabPane
+from textual.containers import Container
+from textual.widgets import DataTable
 
 from cockpit.i18n import t
 
@@ -58,14 +59,15 @@ LEAN_STATUS_ICON = {
 }
 
 
-class RightTabsPane(TabbedContent):
+class RightTabsPane(Container):
     """Risks, failures, claims, literature, and proof-trunk tables."""
 
     def __init__(self) -> None:
-        super().__init__(initial="risks")
+        super().__init__()
         self.id = "tabs-pane"
         self.classes = "pane"
         self.lang = "en"
+        self.active = "risks"
         self.border_title = t(self.lang, "tabs_title_all")
         self.risks_rows: list[dict] = []
         self.failures_rows: list[dict] = []
@@ -78,23 +80,12 @@ class RightTabsPane(TabbedContent):
         self._filter_text = ""
 
     def compose(self):
-        with TabPane(t(self.lang, "risks"), id="risks"):
-            yield DataTable(id=TABLE_IDS["risks"], cursor_type="row")
-        with TabPane(t(self.lang, "failures"), id="failures"):
-            yield DataTable(id=TABLE_IDS["failures"], cursor_type="row")
-        with TabPane(t(self.lang, "claims"), id="claims"):
-            yield DataTable(id=TABLE_IDS["claims"], cursor_type="row")
-        with TabPane(t(self.lang, "literature"), id="literature"):
-            yield DataTable(id=TABLE_IDS["literature"], cursor_type="row")
-        with TabPane(t(self.lang, "corpus_title"), id="corpus"):
-            yield DataTable(id=TABLE_IDS["corpus"], cursor_type="row")
-        with TabPane(t(self.lang, "diagnostics_title"), id="diagnostics"):
-            yield DataTable(id=TABLE_IDS["diagnostics"], cursor_type="row")
-        with TabPane(t(self.lang, "lean_title"), id="lean"):
-            yield DataTable(id=TABLE_IDS["lean"], cursor_type="row")
+        for name in TAB_ORDER:
+            yield DataTable(id=TABLE_IDS[name], cursor_type="row", classes="tab-table")
 
     def on_mount(self) -> None:
         self._configure_tables()
+        self._sync_active_table()
         self._refresh_title()
 
     def set_language(self, lang: str) -> None:
@@ -197,6 +188,7 @@ class RightTabsPane(TabbedContent):
         current = self.active or TAB_ORDER[0]
         index = TAB_ORDER.index(current) if current in TAB_ORDER else 0
         self.active = TAB_ORDER[(index + 1) % len(TAB_ORDER)]
+        self._sync_active_table()
         self._refresh_title()
         self.current_table().focus()
 
@@ -232,9 +224,6 @@ class RightTabsPane(TabbedContent):
         active = self.active or "risks"
         return self.query_one(f"#{TABLE_IDS[active]}", DataTable)
 
-    def watch_active(self, _old: str | None, _new: str | None) -> None:
-        self._refresh_title()
-
     def _reload_tables(self) -> None:
         payloads = {
             "risks": self.risks_rows,
@@ -255,7 +244,22 @@ class RightTabsPane(TabbedContent):
         self._reload_corpus_table()
         self._reload_diagnostics_table()
         self._reload_lean_table()
+        self._sync_active_table()
         self._refresh_title()
+
+    def _sync_active_table(self) -> None:
+        active = self.active if self.active in TAB_ORDER else TAB_ORDER[0]
+        self.active = active
+        if not self.is_mounted:
+            return
+        for name in TAB_ORDER:
+            table = self.query_one(f"#{TABLE_IDS[name]}", DataTable)
+            if name == active:
+                table.remove_class("hidden")
+                table.add_class("tab-active")
+            else:
+                table.remove_class("tab-active")
+                table.add_class("hidden")
 
     def _reload_risks_table(self) -> None:
         table = self.query_one(f"#{TABLE_IDS['risks']}", DataTable)

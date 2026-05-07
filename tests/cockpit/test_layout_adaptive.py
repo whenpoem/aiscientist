@@ -93,10 +93,12 @@ def test_all_layout_classes_lists_the_three_css_classes():
 @pytest.mark.asyncio
 async def test_focus_key_toggles_single_pane_layout(workspace):
     """Pressing F enters focus mode (only the active pane visible). Pressing
-    F again exits to wide. Settings track the choice."""
+    F again exits to wide. The runtime setting tracks focus mode, but the
+    persisted startup layout remains the prior full-dashboard preset."""
     from textual.containers import Container
 
     from cockpit.app import CockpitApp
+    from cockpit.settings import default_config_path, load_settings
 
     memory_impl = workspace["memory_mcp.impl"]
     memory_impl.propose_hypothesis("Tune dropout for ViT")
@@ -114,6 +116,7 @@ async def test_focus_key_toggles_single_pane_layout(workspace):
         assert "layout-single" in body.classes
         assert "layout-wide" not in body.classes
         assert app._settings.layout_preset == "focus"
+        assert load_settings(default_config_path()).layout_preset == "wide"
         # The currently-focused pane gets the layout-active class so it's
         # the one visible pane in single mode.
         assert "layout-active" in app.tree_pane.classes

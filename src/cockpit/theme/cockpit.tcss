@@ -139,7 +139,13 @@ Footer {
     color: $foreground 70%;
 }
 
-RightTabsPane DataTable {
+#tabs-pane DataTable {
+    display: none;
+    height: 1fr;
+}
+
+#tabs-pane DataTable.tab-active {
+    display: block;
     height: 1fr;
 }
 
