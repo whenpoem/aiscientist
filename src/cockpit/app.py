@@ -230,15 +230,30 @@ class CockpitApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield StatusBar(lang=self.lang)
-        # Compose order matters for the grid auto-flow used by layout v3:
-        # Tree (row-span 2 in wide / 3 in narrow) consumes column 1 entirely,
-        # Detail then flows into row 1 of the middle column, Tabs into row 2,
-        # and Events claims the right column (wide) or row 3 (narrow).
+        # Compose order is load-bearing for the grid auto-flow.
+        #
+        # Textual's grid placement is row-major (left-to-right, then next row),
+        # filling the next free cell in compose order. With Tree row-span=2
+        # (wide) / =3 (narrow), Tree consumes column 1 entirely; subsequent
+        # widgets flow row-by-row across the remaining columns.
+        #
+        # In the wide preset (3 cols × 2 rows) we want
+        #     Tree | Detail / Tabs stacked | Events spanning full height.
+        # That requires Events placed BEFORE Tabs in compose order so it
+        # lands at (col=3,row=1) and its row-span=2 reaches (col=3,row=2).
+        # If Tabs went first, it would steal (col=3,row=1) and Events would
+        # fall to (col=2,row=2) leaving (col=3,row=2) blank.
+        #
+        # In the narrow preset (2 cols × 3 rows) the same order yields
+        #     Tree | Detail / Events / Tabs stacked
+        # which keeps the most-frequently-changing pane (Events) right next
+        # to Detail and pushes the read-mostly Tabs to the bottom of the
+        # right column — also fine.
         with Container(id="body-grid", classes="layout-wide"):
             yield HypothesisTreePane()
             yield NodeDetailPane()
-            yield RightTabsPane()
             yield EventStreamPane()
+            yield RightTabsPane()
         yield Input(placeholder="command", id="command-line", classes="hidden")
         yield ContextBar(lang=self.lang)
         yield Footer()

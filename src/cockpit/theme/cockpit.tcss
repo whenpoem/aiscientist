@@ -39,8 +39,11 @@ Screen {
 
 /* ===== layout-wide: 3 columns ============================================
  * Tree | Detail / Tabs (stacked) | Events
- * Compose order is Tree → Detail → Tabs → Events; row-span on Tree and
- * Events makes them fill the side columns vertically. */
+ *
+ * Compose order is Tree → Detail → Events → Tabs (see CockpitApp.compose
+ * for the rationale). row-span on Tree and Events makes them fill the
+ * side columns vertically. The auto-flow lands Tabs at (col=2, row=2)
+ * underneath Detail. */
 
 #body-grid.layout-wide {
     grid-size: 3 2;
@@ -57,12 +60,13 @@ Screen {
 }
 
 /* ===== layout-narrow: 2 columns =========================================
- * Tree | Detail / Tabs / Events (stacked) */
+ * Tree | Detail / Events / Tabs (stacked, top-to-bottom).
+ * Equal-height rows so the seven Tabs sub-tabs aren't cramped. */
 
 #body-grid.layout-narrow {
     grid-size: 2 3;
     grid-columns: 1fr 2fr;
-    grid-rows: 2fr 2fr 1fr;
+    grid-rows: 1fr 1fr 1fr;
 }
 
 #body-grid.layout-narrow #tree-pane {
