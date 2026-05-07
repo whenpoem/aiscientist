@@ -356,6 +356,27 @@ async def test_real_startup_common_click_and_key_paths_do_not_crash(workspace):
 
 
 @pytest.mark.asyncio
+async def test_running_tui_pulls_backend_cockpit_events(workspace):
+    """The live TUI should see events written after startup through the
+    cockpit backend/MCP surface, not only rows present during initial paint."""
+    from cockpit.app import CockpitApp
+    from cockpit.mcp_server import record_note
+
+    app = CockpitApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        start_id = app.last_event_id
+        record_note("live backend link check")
+        await pilot.pause(1.2)
+
+        assert app.last_event_id > start_id
+        assert any(
+            row["kind"] == "note"
+            and row.get("payload", {}).get("text") == "live backend link check"
+            for row in app.events_pane._rows
+        )
+
+
+@pytest.mark.asyncio
 async def test_event_dispatch_refreshes_only_affected_panes(workspace, monkeypatch):
     memory_impl = workspace["memory_mcp.impl"]
     memory_impl.propose_hypothesis("Tune dropout for ViT")
