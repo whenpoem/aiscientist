@@ -76,19 +76,19 @@ TEXT: dict[str, dict[str, str]] = {
         "hours_ago": "{value}h ago",
         "context_tree": (
             "Tree: j/k move · y/n approve/reject · p pin · "
-            "L lang · T theme · F focus · ^P palette"
+            "⇧L lang · ⇧T theme · ⇧F focus · ^P palette"
         ),
         "context_tabs": (
             "Tabs: f cycle · Enter detail · / filter · "
-            "L lang · T theme · F focus · ^P palette"
+            "⇧L lang · ⇧T theme · ⇧F focus · ^P palette"
         ),
         "context_events": (
-            "Events: t time · Ctrl-L clear · / filter · "
-            "L lang · T theme · F focus · ^P palette"
+            "Events: t time · ^L clear · / filter · "
+            "⇧L lang · ⇧T theme · ⇧F focus · ^P palette"
         ),
         "context_detail": (
             "Detail: Tab change pane · Esc close detail · "
-            "L lang · T theme · F focus · ^P palette"
+            "⇧L lang · ⇧T theme · ⇧F focus · ^P palette"
         ),
         "help_navigation": "Navigation",
         "help_title": "Help",
@@ -278,19 +278,19 @@ TEXT: dict[str, dict[str, str]] = {
         "hours_ago": "{value} 小时前",
         "context_tree": (
             "假设树: j/k 移动 · y/n 批准/拒绝 · p 固定指标 · "
-            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+            "⇧L 语言 · ⇧T 主题 · ⇧F 焦点 · ^P 命令面板"
         ),
         "context_tabs": (
             "表格: f 切换 · Enter 详情 · / 过滤 · "
-            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+            "⇧L 语言 · ⇧T 主题 · ⇧F 焦点 · ^P 命令面板"
         ),
         "context_events": (
-            "事件: t 时间格式 · Ctrl-L 清空 · / 过滤 · "
-            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+            "事件: t 时间格式 · ^L 清空 · / 过滤 · "
+            "⇧L 语言 · ⇧T 主题 · ⇧F 焦点 · ^P 命令面板"
         ),
         "context_detail": (
             "详情: Tab 切换面板 · Esc 关闭详情 · "
-            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+            "⇧L 语言 · ⇧T 主题 · ⇧F 焦点 · ^P 命令面板"
         ),
         "help_navigation": "导航",
         "help_title": "帮助",
