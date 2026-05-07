@@ -16,6 +16,55 @@
 
 ---
 
+## 常见用法
+
+大部分任务会按固定顺序用到几个常用工具。下面是你最常碰到的五种模式，每种都链到后面的详细条目。
+
+### 启动一个研究任务
+
+1. `match_signatures` — 先查一下有没有踩过类似的坑
+2. `query_literature` — 看看已有文献怎么说
+3. `propose_hypothesis`（调多次）— 生成候选假说
+4. `judge_hypotheses` + `record_judgement`（成对调用）— 跑一轮锦标赛
+5. `get_bt_leaderboard` — 看哪个假说领先
+
+### 跑实验
+
+1. `preregister` — 看到结果之前，先锁定指标、方向和阈值
+2. `leakage_check` — 扫描训练脚本有没有数据泄漏
+3. `budget_check` — 确认预算够用
+4. 跑实验（hook 自动记录溯源）
+5. `seed_perturb` — 换种子检查可复现性
+6. `pin_metric` — 钉住核心数字
+7. `resolve_preregistration` — 结果达标了吗？
+
+### 写研究报告
+
+1. `check_provenance` — 逐条检查每个声明有没有依据
+2. `refresh_claim` — 确认输入文件没有改动
+3. `find_contradictions` — 查图里有没有互相矛盾的结论
+4. `baseline_fairness` — 确认 baseline 比较是公平的
+
+`reviewer` agent 会自动调用这些工具，任何缺少 pin、稳定 seed、met 预注册或新鲜 provenance 的声明都会被拦下。
+
+### 出了问题怎么办
+
+1. `match_signatures` — 先搜一下有没有以前修过的类似故障
+2. 修好问题
+3. `record_failure` — 把诊断记录下来，以后不再踩同一个坑
+4. `replay_counterfactual` — 如果在犹豫之前砍掉的分支是否砍对了，跑一次反事实回放，不动实际数据
+
+### 证明工作流（v4.0）
+
+1. `retrieve_skeletons` — 在语料库里找结构相似的证明
+2. `propose_proposition` + `propose_proof_skeleton` — 建证明目标和候选骨架
+3. `segment_proof` — 把草稿切成片段
+4. `diagnose_snippet` — 拿每个片段去错题本里比对
+5. `apply_correction` — 修复诊断出的问题
+6. `triage_for_formalization` — 如果符合条件，交给 prover agent 做 Lean 验证
+
+---
+
 ## memory MCP
 
 由前缀为 `mem_*` 和 `meta_*` 的 SQLite 表支撑。在 Claude Code 中通过 `mcp__memory__<name>` 命名空间暴露。
@@ -314,7 +363,7 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ## prove MCP *(v4.0)*
 
-由 `prv_*` 表 + 跨域的 `mem_failures.domain` 列支撑。通过 `mcp__prove__<name>` 暴露。证明主干的主路是 StatProver 风格的（语料检索 → 起草 → 切片 → 诊断 → 修正）；Lean 是顶在上面的形式化保险层。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](architecture.zh-CN.md#13-核心与领域主干v40)。
+由 `prv_*` 表 + 跨域的 `mem_failures.domain` 列支撑。通过 `mcp__prove__<name>` 暴露。证明主干的主路是 StatProver 风格的（语料检索 → 起草 → 切片 → 诊断 → 修正）；Lean 是顶在上面的形式化保险层。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ### 语料与检索
 

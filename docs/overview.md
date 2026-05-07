@@ -5,9 +5,9 @@
 
 ## 1. One-line positioning
 
-ClaudeScientist is not a standalone research agent. It is **an augmentation layer that bolts onto Claude Code**, giving it persistent memory, verifiable experiment results, an interruptible research loop, and a real-time human-in-the-loop dashboard.
+ClaudeScientist plugs into Claude Code as **a research augmentation layer** — it adds persistent memory, verifiable experiment results, an interruptible research loop, and a real-time cockpit.
 
-The design assumes Claude Code already does scheduling, dialogue, sub-agents, and tool invocation well enough on its own, so this project only fills in four things: **memory, verification, statistical proof generation (v4.0), and a cockpit**.
+Claude Code already handles scheduling, dialogue, sub-agents, and tool invocation. This project fills in four things on top: **memory, verification, statistical proof generation (v4.0), and a cockpit**.
 
 ## 2. What you actually see
 
@@ -103,17 +103,17 @@ sequenceDiagram
   C->>U: emit conclusion / refuse with blockers listed
 ```
 
-## 5. Three principles that thread the entire design
+## 5. Three principles behind the design
 
 ### 5.1 Single state boundary
 
 All local runtime state lives in one file: `.research-agent/state.db`. Memory, verify, cockpit, and hooks each own their own tables (prefixed `mem_*`, `ver_*`, `cockpit_*`, `res_*`), but cross-module signaling goes through the `cockpit_events` table to avoid modules reaching directly into each other's internals.
 
-The payoff:
+What this buys you:
 
-- The full system state can be backed up by copying a single file
-- Cross-module atomic operations are naturally one SQL transaction
-- WAL mode lets multiple processes read and write the same file without blocking each other
+- Back up the entire system by copying one file
+- Multi-module operations land in one SQL transaction — all or nothing
+- WAL mode lets multiple processes read and write without blocking each other
 
 ### 5.2 Decide first, experiment second, write third
 
@@ -156,10 +156,10 @@ Any attempt to read held-out files directly is blocked by the PreToolUse hook. T
 
 To avoid misinterpretation, here are a few common misreads:
 
-- **Not a complete AI Scientist replacement.** It augments Claude Code; it does not replace your research judgement.
-- **Not a browser app.** The cockpit is a terminal TUI. No Vite, no uvicorn, no port to open. This is a deliberate simplification made in v0.2.
-- **Not a multi-user system.** The current design assumes a single user with a single session. Optimistic concurrency for multi-session use is on the roadmap.
-- **Not yet "production-ready."** All 108 tests pass and ruff is clean, but production readiness needs a fresh end-to-end validation pass.
+- **Not a complete AI Scientist replacement.** It augments Claude Code — your research judgement is still yours.
+- **Not a browser app.** The cockpit is a terminal TUI. No Vite, no uvicorn, no port to open. This was a deliberate simplification in v0.2.
+- **Not a multi-user system.** The current design assumes one user, one session. Multi-session concurrency is on the roadmap.
+- **Not yet "production-ready."** Tests pass and ruff is clean, but production readiness needs a fresh end-to-end validation pass.
 
 ## 8. One-sentence mental model
 

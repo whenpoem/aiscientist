@@ -2,68 +2,78 @@
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
-ClaudeScientist is a research-agent augmentation layer for Claude Code. It does not replace Claude Code's runtime — it adds the layer that AI scientist systems consistently leave out: persistent memory, verifiable experiment results, an interruptible research loop, and a real-time human-in-the-loop dashboard.
+ClaudeScientist plugs into Claude Code and adds what most AI scientist systems leave out: it remembers what you've tried, verifies your numbers before you publish them, and gives you a live terminal dashboard where you can watch the research unfold and step in at any time.
 
-The repository currently ships the **v3.0** plan: a continuously-running, budgeted Bradley-Terry tournament with honest 95% confidence intervals, refreshable provenance DAGs, and preregistration with multiple-comparison correction.
+You give Claude a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
-**v4.0.0a0 (alpha) is shipped**: ClaudeScientist is now a **two-trunk architecture** — the existing ML reproducibility surface is the *empirical trunk*, and a new *proof trunk* (`prove_mcp`) handles statistical proof generation with optional Lean reinsurance. Both trunks share one core: hypothesis graph, failure ledger, BT tournament, calibration, replay, cockpit. Cold-start data ships in `data/`; Lean is opt-in (see [`docs/setup-lean.md`](docs/setup-lean.md)). See [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) and [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
+**Current version**: v4.0.0a0 (alpha) — a [proof trunk](docs/adr/0008-two-trunk-domain-architecture.md) for statistical proof generation now runs alongside the existing ML experiment workflow. Both share one core: hypothesis graph, failure ledger, ranking tournament, and cockpit. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
 
-## Five-minute orientation
+## What it looks like
 
-If you are new to the project, read in this order:
+Open two terminals side by side. That's the whole UI.
 
-1. **[`docs/overview.md`](docs/overview.md)** — the complete mental model
-2. **[`docs/workflows/first-research-task.md`](docs/workflows/first-research-task.md)** — a concrete walkthrough of one task
-3. **[`docs/architecture.md`](docs/architecture.md)** — the cross-module contracts
-4. **[`docs/tool-reference.md`](docs/tool-reference.md)** — the full MCP tool catalog
+```
+┌─────────────────────────┐  ┌─────────────────────────┐
+│  Terminal A: Claude     │  │  Terminal B: Cockpit    │
+│  Code (chat with AI)    │  │  TUI (monitor/intervene)│
+│                         │  │                         │
+│  > /research-sop ...    │  │  ┌─ Hypothesis tree ┐   │
+│  AI thinks, calls tools │  │  │ ▾ Q ViT scale    │   │
+│  AI writes/runs code    │  │  │   ▸ H_07 ...     │   │
+│                         │  │  │   ▸ H_08 ...     │   │
+│                         │  │  └──────────────────┘   │
+│                         │  │  press n=reject y=ok    │
+└─────────────────────────┘  └─────────────────────────┘
+            │                            │
+            └────────┬───────────────────┘
+                     ▼
+        .research-agent/state.db   ← one SQLite file
+```
 
-For the distilled rationale of each major decision: **[`docs/adr/`](docs/adr/)**.
+The two terminals don't talk to each other directly — they both read and write the same SQLite file. This is the central design choice: every module collaborates through a shared database, not over the network.
 
-Looking ahead: **[`docs/roadmap.md`](docs/roadmap.md)** lays out the post-v3.0 directions.
+| Role | Where | What it does |
+|---|---|---|
+| **Claude Code** | Terminal A | Drives the research: understands your question, calls tools, writes and runs code |
+| **MCP servers** | Background | Provide the tools Claude calls — memory, verification, literature search, proof generation |
+| **Hooks** | Auto-loaded at startup | Run safety checks before/after every tool call (block data leaks, log provenance) |
+| **Cockpit TUI** | Terminal B | Shows live state; lets you approve, reject, or redirect hypotheses |
+| **SQLite** | `.research-agent/state.db` | The single file that holds all state: hypotheses, evidence, ratings, metrics, events |
 
-Historical design decisions live in **[`docs/archive/`](docs/archive/)**.
+## What you can do with it
 
-## What is in the box
-
-- **Memory MCP** — hypothesis graph (with proof-trunk node kinds), Bradley-Terry ranking (cross-kind for hypothesis + proof_skeleton), calibration ledger, replay branches (proof-aware snapshot), failure ledger (cross-domain), compressed literature notes
-- **Verify MCP** — leakage detection, refreshable provenance DAG, pinned metrics, seed perturbation, baseline fairness, sequestered-dataset budget enforcement, preregistration with BH/Bonferroni correction, resource ledger
-- **Prove MCP** *(v4.0)* — proof corpus + bidirectional max-matching retrieval, NL workflow (segment → diagnose → correct), Lean reinsurance interface (triage + attempt log)
-- **Hooks** — PreToolUse leakage and destructive-command guards, PostToolUse provenance logger, intervention pump, proof-aware stop flush
-- **Cockpit TUI** — terminal-first monitoring and steering surface, with English/Chinese label switching, a live Bradley-Terry leaderboard, and proof-trunk events
-- **Cold-start data** — `data/proof_corpus_seed.jsonl` (≥80 statistical proof problems) + `data/proof_failure_seed.jsonl` (≥60 common proof failure modes), loaded by `scripts/seed_proof_corpus.py` / `scripts/seed_proof_failures.py`
+- **Track your research thinking.** Every hypothesis, piece of evidence, and branching decision lives in a persistent graph. Papers you read along the way are compressed and searchable. Come back next week — it's all there. Want to revisit a direction you pruned? Run a counterfactual replay without touching the live state.
+- **Rank competing ideas.** A Bradley-Terry tournament compares hypotheses head-to-head and produces a leaderboard with confidence intervals, so you know which direction is actually winning.
+- **Lock your goalposts before experimenting.** Preregistration makes you commit to a metric, direction, and threshold before you see results. Multiple-comparison correction is applied automatically.
+- **Make your numbers trustworthy.** Every reported number gets checked: Is it reproducible across random seeds? Which files produced it? Has anything changed since? Baseline comparisons are checked for fair compute budgets. A reviewer agent blocks any unverified claim from reaching a writeup.
+- **Catch mistakes before they compound.** A failure ledger remembers every debugging session. Next time you hit a similar problem, the system surfaces how you fixed it before.
+- **Watch and steer in real time.** The cockpit TUI shows the hypothesis tree, ratings, and event stream live. Press a key to reject a bad hypothesis or inject a note — interventions are picked up at the next turn.
+- **Generate and verify statistical proofs** *(v4.0).* A proof trunk handles drafting, segmentation, diagnosis against known error patterns, and optional Lean 4 formal verification.
 
 ## Quick start
 
-Install dependencies from the repository root:
+Install:
 
 ```powershell
-uv sync                  # ML/empirical trunk only
-uv sync --extra proof    # also installs sentence-transformers for the proof trunk
+uv sync                  # ML/experiment workflow only
+uv sync --extra proof    # also pulls in sentence-transformers for the proof trunk
 ```
 
-After `uv sync --extra proof`, seed the proof corpus once:
+If you installed the proof extra, seed the corpus once:
 
 ```powershell
 uv run python scripts/seed_proof_corpus.py
 uv run python scripts/seed_proof_failures.py
 ```
 
-The default embedding backend is `local` (sentence-transformers/all-MiniLM-L6-v2). Override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests pin `mock` automatically.
-
-Lean reinsurance is **opt-in**. To enable, follow [`docs/setup-lean.md`](docs/setup-lean.md) (one-time elan + mathlib + lean-lsp-mcp install).
-
-For normal local use, open two terminals from the repository root.
-
-**Terminal A** runs Claude Code, which will use `.claude/settings.json` to launch the memory, verify, cockpit, arxiv, and openalex MCP servers:
+Run — open two terminals from the repo root:
 
 ```powershell
+# Terminal A: Claude Code
 cd D:\aiscientist\claudescientist
 claude
-```
 
-**Terminal B** runs the cockpit TUI:
-
-```powershell
+# Terminal B: cockpit TUI
 cd D:\aiscientist\claudescientist
 uv run python -m cockpit.tui
 ```
@@ -71,22 +81,40 @@ uv run python -m cockpit.tui
 For the Chinese UI on Windows Terminal:
 
 ```powershell
-cd D:\aiscientist\claudescientist
 chcp 65001
 $env:PYTHONUTF8=1
 uv run python -m cockpit.tui --lang zh
 ```
 
-Inside the TUI, press `L` to toggle English / Chinese labels.
+Press `L` inside the TUI to toggle English / Chinese labels.
 
-## Runtime layout
+Lean formal verification is a separate opt-in setup — see [`docs/setup-lean.md`](docs/setup-lean.md).
 
-Default local state:
+## Where to go next
 
-- shared runtime DB at `.research-agent/state.db` under the repository root
-- sequestered dataset directory under `%USERPROFILE%`, configurable via `RESEARCH_AGENT_HELDOUT_DIR`
+If you're new, read in this order:
 
-Useful commands:
+1. **[`docs/overview.md`](docs/overview.md)** — the complete mental model: how the pieces fit, what happens end-to-end, the three design principles
+2. **[`docs/workflows/first-research-task.md`](docs/workflows/first-research-task.md)** — walk through one full task from start to finish
+3. **[`docs/architecture.md`](docs/architecture.md)** — the contracts between modules (treat as binding)
+4. **[`docs/tool-reference.md`](docs/tool-reference.md)** — every MCP tool, with signature and usage guidance
+
+More:
+
+- Design rationale for each major decision → [`docs/adr/`](docs/adr/)
+- Where the project is headed → [`docs/roadmap.md`](docs/roadmap.md)
+- Historical plans → [`docs/archive/`](docs/archive/)
+- Agent and contributor rules → [`AGENTS.md`](AGENTS.md)
+
+## Runtime details
+
+Default paths:
+
+- Shared state: `.research-agent/state.db` under the repo root
+- Held-out datasets: `%USERPROFILE%`, configurable via `RESEARCH_AGENT_HELDOUT_DIR`
+- Embedding backend: `local` (sentence-transformers/all-MiniLM-L6-v2); override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests use `mock` automatically.
+
+Dev server commands for individual MCP modules:
 
 ```powershell
 uv run python -m memory_mcp.dev_server
@@ -98,7 +126,7 @@ uv run python -m claudescientist.heldout register <name> <path>
 
 ## Validation
 
-Typical checks before shipping a change:
+Before shipping a change:
 
 ```powershell
 uv run ruff check
@@ -107,13 +135,15 @@ uv run python -m cockpit.tui --once --lang zh
 uv run python -c "import memory_mcp.server; import verify_mcp.server; import prove_mcp.server; import cockpit.mcp_server; print('OK')"
 ```
 
-## Status and scope limits
+## Current status
 
-This repository is suitable for local development and integration work, but it should not be described as production-ready without a fresh end-to-end validation pass.
+The repo works for local development and integration. A fresh end-to-end validation pass is needed before calling it production-ready.
 
-- **Auto-prune is dry-run by default.** Set `RESEARCH_AGENT_AUTO_PRUNE=1` to let `suggest_pause_low_strength` actually flip `mem_bt_ratings.status` to `paused`.
-- **The cockpit is terminal-first.** There is no supported browser frontend, no Vite, and no `uvicorn` process to run.
-- **The prover agent is activated** in v4.0.0a0 with `mcp__lean__*` tools whitelisted, but the `lean` MCP server entry stays disabled (`_lean`) until the user runs `docs/setup-lean.md`. Without that, the prover agent reports `lean MCP not configured` and bails cleanly — the NL proof workflow remains fully usable without Lean.
-- **`mem_nodes.elo_score` is preserved** as a backwards-compatibility column. New code should read `mem_bt_ratings.strength` and friends.
+A few things to know:
 
-For the complete tool list and all known scope limits, see [`docs/tool-reference.md`](docs/tool-reference.md) and [`AGENTS.md`](AGENTS.md).
+- **Auto-prune is dry-run by default.** Set `RESEARCH_AGENT_AUTO_PRUNE=1` to let it actually pause weak branches.
+- **The cockpit is terminal-only.** No browser frontend, no web server.
+- **The prover agent works without Lean.** The NL proof workflow runs on its own; Lean is extra insurance you can set up later via [`docs/setup-lean.md`](docs/setup-lean.md).
+- **`mem_nodes.elo_score` is a legacy column.** New code should read `mem_bt_ratings.strength`.
+
+Full tool list and scope details: [`docs/tool-reference.md`](docs/tool-reference.md) and [`AGENTS.md`](AGENTS.md).

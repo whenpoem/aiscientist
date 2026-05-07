@@ -1,9 +1,20 @@
 # 架构与设计契约
 
 > English version: [architecture.md](architecture.md)
-> 这份文档描述了系统正确运行所必须维持的跨模块契约。请把每一节都视为不变量：除非有迁移脚本和配套测试，否则不要修改。
 
-## 1. 模块全景
+这份文档描述了模块之间的契约——系统正确运行所依赖的规则。修改任何一条都必须配上迁移脚本和对应测试。
+
+## 怎么用这份文档
+
+**第一部分**讲的是动代码之前你需要理解的契约：模块是什么、怎么共享状态、什么受保护、什么故意留了弹性。先读这部分。
+
+**第二部分**是参考资料：BT 数学公式、事件 schema、hook 接线、v4.0 主干布局。需要查细节的时候来这里翻。
+
+---
+
+## 第一部分 — 契约
+
+### 1. 模块全景
 
 ClaudeScientist 由四个运行时层和一个共享状态文件组成。
 
@@ -13,29 +24,73 @@ ClaudeScientist 由四个运行时层和一个共享状态文件组成。
 | **Memory MCP** | `memory_mcp` | 每个 Claude Code 会话启动一个 stdio 子进程 | SQLite、通过 stdio 与 Claude 通信 |
 | **Verify MCP** | `verify_mcp` | 每个 Claude Code 会话启动一个 stdio 子进程 | SQLite、通过 stdio 与 Claude 通信 |
 | **Cockpit** | `cockpit` | TUI 进程（终端 B） **加** stdio MCP 桥 | SQLite |
-| **Hooks** | `.claude/hooks/*.py` | Claude Code 在生命周期事件触发时启动的短生命周期进程 | SQLite |
+| **Hooks** | `.claude/hooks/*.py` | Claude Code 在生命周期事件触发时启动的短命进程 | SQLite |
 
-这五层之间**从不直接互相调用**。它们只通过读写共享的 SQLite 文件 `.research-agent/state.db` 进行通信。
+这五层**从不直接互相调用**。它们全部通过 `.research-agent/state.db` 这个 SQLite 文件来通信。
 
-## 2. 共享运行时
-
-`claudescientist.runtime` 模块拥有所有跨模块基础设施：
-
-- **路径解析**：`state_db_path()`、`heldout_root()` 等函数是定位共享资源的**唯一**合法途径。功能包不得自己实现路径解析；特别是 held-out 数据根目录必须来自 `runtime.heldout_root()` 或注册过的 `ver_heldout_budgets.heldout_path` 行。
-- **SQLite 连接配置**：`connect_sqlite()` 启用 WAL 模式、外键约束以及 5 秒的 busy timeout。请始终通过它连接，不要直接打开原始 `sqlite3` 连接。
-- **Schema 迁移记账**：`ra_migrations` 表按组件记录 schema 版本号、schema 哈希、应用状态以及失败时的错误信息。任何无法用 `CREATE TABLE IF NOT EXISTS` 表达的结构性升级都必须使用显式的兼容性辅助函数，并附带测试。
-- **Cockpit 事件写入**：`emit_cockpit_event()` 是向 cockpit 推送事件的标准方式。生产者应当在与底层状态变更相同的事务里调用它。
-
-## 3. SQLite 状态契约
+### 2. 状态文件
 
 `.research-agent/state.db` 是 memory、verify、cockpit、hooks 四个模块的**唯一本地状态边界**。两条规则：
 
-1. **每个组件仍然拥有自己的表**。请遵守前缀约定：`mem_*`、`ver_*`、`res_*`、`cockpit_*`，加上共享的 `ra_migrations` 和 `meta_*` 表。
-2. **跨组件信号必须通过 `cockpit_events` 表**传递。只有在测试中做只读检查时，才允许直接读取其他模块的内部表。
+1. **每个组件拥有自己的表。** 前缀约定：`mem_*`、`ver_*`、`res_*`、`cockpit_*`，加上共享的 `ra_migrations` 和 `meta_*` 表。
+2. **跨组件信号走 `cockpit_events` 表。** 直接读其他模块的内部表只允许在测试中做只读检查。
 
-### 当前的事件类型
+打开数据库请一律走 `connect_sqlite()`——它会设好 WAL 模式、外键约束和 5 秒的 busy timeout。不要自己开原始 `sqlite3` 连接。
 
-cockpit 目前响应以下事件类型。生产者在写入 JSON payload 时，必须包含 `node_id`、`hypothesis_id` 之一或两者兼具（如果相关的话）：
+### 3. Held-out 数据保护
+
+held-out 数据（通常是测试集）受到双重保护。两层保护必须同时成立，契约才完整。
+
+- **直接文件访问被 hook 拦截。** PreToolUse Hook `leakage_guard.py` 会拒绝任何路径解析到已注册 held-out 目录下的 `Read`/`Write`/`Edit`/`Bash` 调用。拦截是无条件的，唯一例外是环境变量 `RESEARCH_AGENT_VERIFY=1`——这个变量只允许 `verify_mcp` 自己设置。
+- **`query_heldout` 是唯一合法的访问路径。** 它在运行模型脚本**之前**就预留预算，记录一行查询记录，**且不返回原始 stdout/stderr**——因为里面可能包含泄漏的标签或样本。即使脚本执行失败，预留的预算也会被消耗，因为脚本已经被授权访问过数据了。
+
+如果某个 hook 或工具确实需要绕过这些保护，绕过本身必须附带书面理由和一个额外的单元测试。
+
+### 4. 子智能体工具契约
+
+子智能体的 prompt 和工具白名单是架构的一部分，不只是配置。两条规则：
+
+1. **当一个 MCP 工具进入研究工作流时，必须更新对应的 agent 文件。** 给它加一个 smoke 断言——工具名是否出现在 agent prompt 里——让 prompt 和现实不会悄悄走偏。
+2. **verifier 角色是验证工具的集成点。** 它必须能访问泄漏检测、provenance、种子稳定性、baseline 公平性以及 held-out 预算工具。其他角色只能访问严格的子集。
+
+当前的角色分配定义在 `.claude/agents/` 目录下。请将其视为事实来源的一部分。
+
+### 5. 这份契约故意留白的部分
+
+以下内容刻意没有固定下来，因为它们预期会演化：
+
+- **MCP 工具的具体集合。** 按照 v3.0 计划，新工具落地到现有的 memory 和 verify 服务器，无需新建 MCP 服务器。
+- **Cockpit 面板布局。** 只要数据契约不变，网格、模态框、快捷键都可以调整。
+- **子智能体 prompt。** 可以自由修改，前提是工具白名单与角色契约保持一致（§4）。
+- **外部文献 MCP。** `arxiv-mcp-server` 与 `openalex-research-mcp` 按原样安装；我们只拥有 `memory_mcp` 中的 `ingest_paper` 压缩层。
+
+### 6. 何时打破契约
+
+如果未来的修改必须打破上述某条契约：
+
+1. 提一个 issue，说明什么会被打破以及为什么。
+2. 写迁移脚本，把数据库前推。
+3. **在写代码之前**先更新本文档。
+4. 添加或更新对应的测试，把新契约钉住。
+
+悄无声息地修改契约，是这个项目里严重程度最高的 bug 类型。
+
+---
+
+## 第二部分 — 参考资料
+
+### 7. 共享运行时细节
+
+`claudescientist.runtime` 模块拥有所有跨模块基础设施：
+
+- **路径解析。** `state_db_path()`、`heldout_root()` 等函数是定位共享资源的唯一合法途径。功能包不得自己实现路径解析；特别是 held-out 数据根目录必须来自 `runtime.heldout_root()` 或注册过的 `ver_heldout_budgets.heldout_path` 行。
+- **SQLite 连接配置。** `connect_sqlite()` 启用 WAL 模式、外键约束和 5 秒 busy timeout。
+- **Schema 迁移记账。** `ra_migrations` 表按组件记录 schema 版本号、schema 哈希、应用状态和失败错误信息。无法用 `CREATE TABLE IF NOT EXISTS` 表达的结构性升级必须使用显式兼容性辅助函数，并附带测试。
+- **Cockpit 事件写入。** `emit_cockpit_event()` 是向 cockpit 推送事件的标准方式。生产者应当在与底层状态变更相同的事务里调用它。
+
+### 8. 事件类型与 cockpit 标签
+
+cockpit 响应以下事件类型。生产者在写入 JSON payload 时，如果相关，必须包含 `node_id`、`hypothesis_id` 之一或两者兼具：
 
 | 事件类型 | 生产者 | 何时触发 |
 |---|---|---|
@@ -54,41 +109,21 @@ cockpit 目前响应以下事件类型。生产者在写入 JSON payload 时，�
 | `note` | cockpit | 一条自由形式的 `:note` 备注 |
 | `turn_end` | hook | `Stop` Hook 触发 |
 
-cockpit 始终允许用户手动刷新，但常规工作流不应当依赖手动刷新来发现重要的状态变化。
+cockpit 始终允许手动刷新，但常规工作流不应当依赖手动刷新来发现重要的状态变化。
 
-### 用户可见标签
+**用户可见标签**：所有 cockpit 中可见的文本标签都必须经过 `cockpit.i18n` 模块，以保证英文和中文模式始终对齐。在 widget 内部硬编码字符串是退化行为。
 
-所有 cockpit 中可见的文本标签都必须经过 `cockpit.i18n` 模块，以保证英文和中文模式始终对齐。在 widget 内部硬编码字符串是退化行为。
+### 9. Bradley-Terry 排名层（v3.0）
 
-## 4. Held-out 数据契约
+替换了 v0.2 Elo 层的假说排名系统。
 
-held-out 数据（通常是测试集）受到双重保护。两层保护必须同时维持，契约才完整。
-
-- **直接文件访问由 hooks 拦截**。PreToolUse Hook `leakage_guard.py` 会拒绝任何路径解析到已注册 held-out 目录下的 `Read`/`Write`/`Edit`/`Bash` 调用。这个拦截是无条件的，唯一例外是设置了环境变量 `RESEARCH_AGENT_VERIFY=1`——而这个环境变量只允许 `verify_mcp` 自己设置。
-- **`query_heldout` 是唯一合法的访问路径**。它在运行模型脚本**之前**就预留预算，记录一行查询记录，**且不返回原始 stdout/stderr**——因为这些流可能包含泄漏的标签或样本。即使脚本执行失败，预留的预算也会被消耗，因为脚本已经被授权访问过 held-out 数据了。
-
-如果某个 hook 或工具确实需要绕过这些保护，绕过本身必须附带书面理由和一个额外的单元测试。
-
-## 5. 子智能体工具契约
-
-子智能体的 prompt 和工具白名单是架构的一部分，不只是配置。两条规则：
-
-1. **当一个 MCP 工具进入研究工作流时，必须更新对应的 agent 文件**。要为这个工具名是否出现在 agent prompt 里加一个 smoke 断言，避免 prompt 与现实悄悄走偏。
-2. **verifier 角色是验证工具的集成点**。它必须能访问泄漏检测、provenance、种子稳定性、baseline 公平性以及 held-out 预算工具。其他角色只能访问严格的子集。
-
-当前的角色分配定义在 `.claude/agents/` 目录下。请将其视为事实来源的一部分。
-
-## 6. Bradley-Terry 排名层（v3.0）
-
-这是替换了 v0.2 Elo 层的假说排名系统。
-
-- **`mem_bt_ratings` 是假说排名的权威来源**。新读者应当优先使用 `strength`、`strength_var`、`n_comparisons` 三列。
-- **`mem_nodes.elo_score` 仅作为向后兼容保留**。已有的 v0.2 读者（以及树形面板末尾的展示）仍然可以读取它，但任何新功能都不应依赖它。
+- **`mem_bt_ratings` 是假说排名的权威来源。** 优先使用 `strength`、`strength_var`、`n_comparisons` 三列。
+- **`mem_nodes.elo_score` 仅作为向后兼容保留。** 已有的 v0.2 读者（以及树形面板末尾的展示）仍然可以读取它，但任何新功能都不应依赖它。
 - **`record_judgement` 是唯一进行双写的工具**——它同时写入旧的 `mem_judgements` 和新的 `mem_bt_comparisons`。`update_bt_rating` 只写新表，但接受更广泛的来源类型：`llm_judge`、`metric_diff`、`user_intervention`、`reviewer_critic`。
-- **`suggest_pause_low_strength` 默认是 dry-run**。环境变量 `RESEARCH_AGENT_AUTO_PRUNE=1` 是唯一能把 `mem_bt_ratings.status` 改为 `paused` 的方式。`resume_branch` 是唯一允许的反向操作。
-- **`replay_counterfactual` 不得修改 `mem_nodes` 或 `mem_bt_ratings`**。它只向 `mem_replay_branches` 写入一行。
+- **`suggest_pause_low_strength` 默认是 dry-run。** 环境变量 `RESEARCH_AGENT_AUTO_PRUNE=1` 是唯一能把 `mem_bt_ratings.status` 改为 `paused` 的方式。`resume_branch` 是唯一允许的反向操作。
+- **`replay_counterfactual` 不得修改 `mem_nodes` 或 `mem_bt_ratings`。** 它只向 `mem_replay_branches` 写入一行。
 
-### 数学简述
+#### 数学简述
 
 对于一次 `winner=i, loser=j` 的比较：
 
@@ -105,25 +140,25 @@ var_j := 1 / (1/var_j + fisher)
 
 排行榜上的置信区间为 `lcb = strength - 1.96 * sqrt(var)`、`ucb = strength + 1.96 * sqrt(var)`。初始 `strength_var = 1.0` 加上对 strength 的截断，相当于 Beta(1,1) 收缩先验，能在某节点总是赢的极端情况下避免数值爆炸。
 
-## 7. 预注册与 Provenance DAG（v3.0）
+### 10. 预注册与 Provenance DAG（v3.0）
 
 这两个机制配合起来，构成了"可信数值"的工程化保证。
 
 - **任何最终写入手稿的数值声明都必须可追溯**到一个 `ver_preregistrations.prereg_id`（其 `status='met'`）以及一个 `ver_seed_runs.verdict='stable'`。`reviewer` 子智能体在写作阶段会强制执行这条规则。
-- **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希**。`refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。**provenance 过期是写作的硬阻断项**。
-- **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正**。一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。当前 v3.0 兼容实现中，`bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的别名。
+- **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希。** `refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。**provenance 过期是写作的硬阻断项。**
+- **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正。** 一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。当前 v3.0 兼容实现中，`bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的别名。
 
-## 8. 资源账本契约（v3.0）
+### 11. 资源账本（v3.0）
 
 资源预算机制本身很小，但规范严格。
 
-- **`res_budget_ledger` 行按 `(scope, resource, window)` 三元组唯一**。当前追踪四种资源：`wallclock_sec`、`llm_tokens`、`heldout_queries`、`disk_mb`。
-- **`budget_consume` 是唯一的写入者**。超额尝试返回 `{ok: False, error: "budget_exceeded"}` 并发出 `budget_exceeded` 事件；调用者自行决定是停止还是升级处理。
-- **`budget_check` 是只读的，永远不扣减**。它检查的 `(scope, resource, window)` 边界必须与 `budget_consume` 写入的边界一致，否则两者会在临界值上产生分歧。
+- **`res_budget_ledger` 行按 `(scope, resource, window)` 三元组唯一。** 当前追踪四种资源：`wallclock_sec`、`llm_tokens`、`heldout_queries`、`disk_mb`。
+- **`budget_consume` 是唯一的写入者。** 超额尝试返回 `{ok: False, error: "budget_exceeded"}` 并发出 `budget_exceeded` 事件；调用者自行决定是停止还是升级处理。
+- **`budget_check` 是只读的，永远不扣减。** 它检查的 `(scope, resource, window)` 边界必须与 `budget_consume` 写入的边界一致，否则两者会在临界值上产生分歧。
 
-## 9. Hook 链契约
+### 12. Hook 链
 
-Hook 是系统的机械保证。它们作为短生命周期子进程，由 Claude Code 在生命周期事件触发时启动。契约如下：
+Hook 是系统的机械保证。它们作为短命子进程，由 Claude Code 在生命周期事件触发时启动。
 
 | 事件 | Hook | 效果 |
 |---|---|---|
@@ -133,43 +168,13 @@ Hook 是系统的机械保证。它们作为短生命周期子进程，由 Claud
 | `UserPromptSubmit` | `intervention_pump.py` | 排空 `cockpit_interventions` 注入到 `additionalContext` |
 | `Stop` | `intervention_pump.py` + `stop_flush.py` | 同样排空，并额外发出一个 `turn_end` 事件 |
 
-Hook 必须是幂等的，并且在数据库缺失或损坏时优雅降级（典型场景：首次运行，数据库还没建立）。读不到状态意味着"没有待处理的干预"，而不是崩溃。
+Hook 必须是幂等的，并且在数据库缺失或损坏时优雅降级（典型场景：首次运行，数据库还没建立）。读不到状态意味着"没有待处理的干预"，不是崩溃。
 
-## 10. 这份契约故意留白的部分
+### 13. 共用内核与领域主干（v4.0）
 
-有些事情这份文档刻意没有固定下来，因为它们预期会演化：
+ClaudeScientist v4.0 把架构显式拆成**一个共用内核**加**两条领域主干**。切分线的正式记录在 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)；本节把现有接口归类到内核 / empirical / proof，并列出 v4.0 新增的 proof 主干表面。
 
-- **MCP 工具的具体集合**。按照 v3.0 计划，新工具会落地到现有的 memory 和 verify 服务器，无需新建 MCP 服务器。
-- **Cockpit 面板布局**。只要数据契约保持不变，网格、模态框、快捷键都可以调整。
-- **子智能体 prompt**。可以自由修改，前提是工具白名单与对应角色的契约保持一致（参见 §5.1）。
-- **外部文献 MCP**。`arxiv-mcp-server` 与 `openalex-research-mcp` 都是按原样安装；我们只拥有 `memory_mcp` 中的 `ingest_paper` 压缩层。
-
-## 11. 何时可以打破契约
-
-如果未来的修改必须打破上述某条契约，正确的流程是：
-
-1. 提一个 issue，说明什么会被打破以及为什么。
-2. 写迁移脚本，把数据库前推。
-3. **在写代码之前**先更新本文档。
-4. 添加或更新对应的测试，把新契约钉住。
-
-悄无声息地修改契约，是这个项目里严重程度最高的 bug 类型。
-
-## 12. 再深一层：各模块地图
-
-这份文档讨论的是**跨模块**契约。每个模块的 `__init__.py`（hooks 目录则是 `README.md`）里写有一份结构化地图，列出该模块的公开接口、自有表、关键不变量和"绝对不要"清单。在模块内部做非平凡修改之前，请先阅读：
-
-- [`src/claudescientist/__init__.py`](../src/claudescientist/__init__.py)
-- [`src/memory_mcp/__init__.py`](../src/memory_mcp/__init__.py)
-- [`src/verify_mcp/__init__.py`](../src/verify_mcp/__init__.py)
-- [`src/cockpit/__init__.py`](../src/cockpit/__init__.py)
-- [`.claude/hooks/README.md`](../.claude/hooks/README.md)
-
-## 13. 共用内核与领域主干（v4.0）
-
-ClaudeScientist v4.0 把架构显式拆成 **一个共用内核** 加 **两条领域主干**。这条切分线的正式记录在 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)；本节把现有接口归类到内核 / empirical / proof，并列出 v4.0 新增的 proof 主干表面。
-
-### 内核里有什么
+#### 内核里有什么
 
 内核就是**不知道当前工作是 ML 实证还是统计证明**的那部分。它是项目的护城河——两条主干都靠它复利，跨域共用一本错题本本身就是 v4.0 的真实差异化。
 
@@ -184,7 +189,7 @@ ClaudeScientist v4.0 把架构显式拆成 **一个共用内核** 加 **两条�
 | `cockpit` + `cockpit_events` | 实时 UI + 事件总线 | 一棵树承载两条主干 |
 | 钩子: `destructive_bash_guard`、`intervention_pump`、`stop_flush` | 安全 + 生命周期 | 领域无关 |
 
-### Empirical 主干里有什么
+#### Empirical 主干里有什么
 
 | 接口 | 文件/表 | 备注 |
 |---|---|---|
@@ -194,7 +199,7 @@ ClaudeScientist v4.0 把架构显式拆成 **一个共用内核** 加 **两条�
 
 这些工具与角色在各模块地图里被标 `[empirical]`。仅做证明工作的用户在工具目录里会看到它们，但通常不会调用。
 
-### Proof 主干里有什么
+#### Proof 主干里有什么
 
 v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 
@@ -208,16 +213,16 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 | Skills | `prove-sop` |
 | 第三方 MCP | `lean-lsp-mcp` 与 `arxiv` / `openalex` 并列注册；只有触发规则放行后才会被调用 |
 
-### 四个合作接口
+#### 四个合作接口
 
 两条主干通过**且仅通过**这四个共享接口合作。任何想加第五个的人，请先写一份覆盖 ADR 0008 的新 ADR。
 
-1. **同一棵树**：`mem_nodes.kind` 接受 `proposition`、`proof_skeleton`、`proof_snippet` 与原有 empirical kind。命题节点可以与 hypothesis 节点作为同一个 question 节点的兄弟。
-2. **同一本错题本**：`mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
-3. **同一张排行榜**：BT 比较同时接受 `hypothesis` 与 `proof_skeleton`（仅同 kind）。跨 kind 比较仍被禁止以避免语义混乱。
-4. **同一个评审，两份清单**：`reviewer.md` 按 manuscript 内容自动切清单——empirical 数字断言保持原有四件套（pin / seed verdict / met preregistration / fresh provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证 或 显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
+1. **同一棵树。** `mem_nodes.kind` 接受 `proposition`、`proof_skeleton`、`proof_snippet` 与原有 empirical kind。命题节点可以与 hypothesis 节点作为同一个 question 节点的兄弟。
+2. **同一本错题本。** `mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
+3. **同一张排行榜。** BT 比较同时接受 `hypothesis` 与 `proof_skeleton`（仅同 kind）。跨 kind 比较仍被禁止以避免语义混乱。
+4. **同一个评审，两份清单。** `reviewer.md` 按 manuscript 内容自动切清单——empirical 数字断言保持原有四件套（pin / seed verdict / met preregistration / fresh provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证或显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
 
-### 模块地图标签的读法
+#### 模块地图标签的读法
 
 `src/memory_mcp/__init__.py` 与 `src/verify_mcp/__init__.py` 给每个公开工具与每张自有表加上下列三种标签之一：
 
@@ -227,36 +232,33 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 
 修改任何工具或表前，先看这个标签——它直接告诉你这次改动需要回归哪几条主干。
 
-### 跨主干的 snapshot 范围
+#### 跨主干的 snapshot 范围
 
-`memory_mcp.snapshot()` 写出的 payload 同时覆盖两条主干，确保
-`replay_counterfactual` 回放某条 proof 分支时不丢上下文：
+`memory_mcp.snapshot()` 写出的 payload 同时覆盖两条主干，确保 `replay_counterfactual` 回放某条 proof 分支时不丢上下文：
 
 - `active_frontier` 把 `proposition` 节点与 `question` / `hypothesis` 一起列出。
-- `proof_drafts` / `proof_manifests` / `proof_lean_attempts` 分别快照
-  最近若干行 `mem_nodes(kind='proof_skeleton')`、
-  `prv_diagnostic_manifests`、`prv_lean_attempts`。
+- `proof_drafts` / `proof_manifests` / `proof_lean_attempts` 分别快照最近若干行 `mem_nodes(kind='proof_skeleton')`、`prv_diagnostic_manifests`、`prv_lean_attempts`。
 - `counts.proof_corpus` 是 `prv_corpus_problems` 的总行数。
-- 所有读 `prv_*` 的语句都包了 `sqlite3.OperationalError`，所以一个
-  v3.0 老库（没有证明 schema）也能正常出快照，proof 字段全为空。
+- 所有读 `prv_*` 的语句都包了 `sqlite3.OperationalError`，所以一个 v3.0 老库（没有证明 schema）也能正常出快照，proof 字段全为空。
 
-`stop_flush.py` 的回合摘要遵循同样的模式：digest 中的
-`proof_manifests_*`、`lean_attempts_*`、`lean_wallclock_used_sec`
-聚合在老库下回退为 0。
+`stop_flush.py` 的回合摘要遵循同样的模式：digest 中的 `proof_manifests_*`、`lean_attempts_*`、`lean_wallclock_used_sec` 聚合在老库下回退为 0。
 
-### budgeter 覆盖
+#### budgeter 覆盖
 
-证明主干与 empirical 主干共用 `verify_mcp.budget_check` /
-`budget_consume` 节流。`.claude/agents/prover.md` § Budget 与
-`prove-sop` skill 都要求：
+证明主干与 empirical 主干共用 `verify_mcp.budget_check` / `budget_consume` 节流。`.claude/agents/prover.md` § Budget 与 `prove-sop` skill 都要求：
 
-1. 用 `prove_mcp.triage_for_formalization` 的
-   `estimated_difficulty` 估算 wallclock。
-2. 任何 ≥ 5 分钟的 Lean 尝试，先调
-   `budget_check(scope='hypothesis:<proposition_id>',
-   resource='wallclock_sec', requested=<估算>)`。
-3. 尝试结束后用真实 `duration_sec` 调 `budget_consume`，
-   让 `res_budget_ledger` 与 `prv_lean_attempts` 保持一致。
+1. 用 `prove_mcp.triage_for_formalization` 的 `estimated_difficulty` 估算 wallclock。
+2. 任何 >= 5 分钟的 Lean 尝试，先调 `budget_check(scope='hypothesis:<proposition_id>', resource='wallclock_sec', requested=<估算>)`。
+3. 尝试结束后用真实 `duration_sec` 调 `budget_consume`，让 `res_budget_ledger` 与 `prv_lean_attempts` 保持一致。
 
-直接 `record_lean_attempt(status='timeout')` 而事先没过
-`budget_check`，会被 reviewer 视为审计可疑。
+直接 `record_lean_attempt(status='timeout')` 而事先没过 `budget_check`，会被 reviewer 视为审计可疑。
+
+### 14. 各模块地图
+
+这份文档讨论的是**跨模块**契约。每个模块的 `__init__.py`（hooks 目录则是 `README.md`）里写有一份结构化地图，列出该模块的公开接口、自有表、关键不变量和"不要做"清单。在模块内部做改动之前请先阅读：
+
+- [`src/claudescientist/__init__.py`](../src/claudescientist/__init__.py)
+- [`src/memory_mcp/__init__.py`](../src/memory_mcp/__init__.py)
+- [`src/verify_mcp/__init__.py`](../src/verify_mcp/__init__.py)
+- [`src/cockpit/__init__.py`](../src/cockpit/__init__.py)
+- [`.claude/hooks/README.md`](../.claude/hooks/README.md)

@@ -1,4 +1,4 @@
-# MCP Tool Reference (v3.0)
+# MCP Tool Reference (v4.0.0a0)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -13,6 +13,55 @@
   - [Corpus + retrieval](#corpus-and-retrieval) · [Proof nodes](#proof-nodes) · [Segmentation + diagnosis](#segmentation-and-diagnosis) · [Correction](#correction) · [Lean reinsurance](#lean-reinsurance)
 - **cockpit MCP** — 3 tools that let Claude push to the cockpit
   - [Cockpit bridge](#cockpit-bridge)
+
+---
+
+## Common patterns
+
+Most tasks use a handful of tools in a predictable order. Here are the five patterns you'll reach for most often. Each one links to the detailed entries below.
+
+### Starting a research task
+
+1. `match_signatures` — check if you've hit a similar problem before
+2. `query_literature` — see what's already published
+3. `propose_hypothesis` (several times) — generate candidates
+4. `judge_hypotheses` + `record_judgement` (in pairs) — run a tournament
+5. `get_bt_leaderboard` — see which hypothesis is winning
+
+### Running an experiment
+
+1. `preregister` — lock the metric, direction, and threshold before you see results
+2. `leakage_check` — scan the training script for data leaks
+3. `budget_check` — make sure you have enough budget
+4. Run the experiment (hooks handle provenance logging automatically)
+5. `seed_perturb` — check reproducibility across seeds
+6. `pin_metric` — record the headline number
+7. `resolve_preregistration` — did you hit the target?
+
+### Writing up results
+
+1. `check_provenance` — for each claim, verify it has backing
+2. `refresh_claim` — make sure the input files haven't changed
+3. `find_contradictions` — check for conflicting claims in the graph
+4. `baseline_fairness` — verify fair comparison with baselines
+
+The `reviewer` agent calls these automatically and blocks any claim missing a pin, a stable seed verdict, a met preregistration, or fresh provenance.
+
+### When something goes wrong
+
+1. `match_signatures` — search for similar past failures before debugging
+2. Fix the problem
+3. `record_failure` — save the diagnosis so you (or Claude) never repeat it
+4. `replay_counterfactual` — if you're second-guessing a pruned branch, explore "what if" without touching the live graph
+
+### Proof workflow (v4.0)
+
+1. `retrieve_skeletons` — find structurally similar proofs in the corpus
+2. `propose_proposition` + `propose_proof_skeleton` — create the proof target and a candidate skeleton
+3. `segment_proof` — break the draft into snippets
+4. `diagnose_snippet` — check each snippet against the failure ledger
+5. `apply_correction` — fix diagnosed issues
+6. `triage_for_formalization` — if eligible, hand off to the prover agent for Lean verification
 
 ---
 
