@@ -125,6 +125,28 @@ TEXT: dict[str, dict[str, str]] = {
         "risk_high": "high",
         "risk_medium": "medium",
         "risk_low": "low",
+        # Proof trunk events (P5).
+        "event_proof_corpus_ingested": "proof corpus ingested: {problem_id}",
+        "event_proof_segmented": "proof segmented: draft {draft_id} ({snippet_count} snippets)",
+        "event_proof_diagnosis_recorded": (
+            "diagnosis recorded: snippet {snippet_id} flawed={is_flawed}"
+        ),
+        "event_proof_diagnosis_complete": (
+            "diagnosis complete: manifest {manifest_id} -> {status} "
+            "({flawed_count}/{entry_count} flawed)"
+        ),
+        "event_proof_correction_applied": (
+            "proof correction applied: draft {old_draft_id} -> {new_draft_id}"
+        ),
+        "event_lean_proof_succeeded": (
+            "Lean verified: proposition {proposition_id} (attempt {attempt_id})"
+        ),
+        "event_lean_proof_failed": (
+            "Lean failed: proposition {proposition_id} (attempt {attempt_id})"
+        ),
+        "event_lean_proof_recorded": (
+            "Lean attempt recorded: proposition {proposition_id} status {status}"
+        ),
     },
     "zh": {
         "app_name": "研究座舱",
@@ -245,6 +267,28 @@ TEXT: dict[str, dict[str, str]] = {
         "risk_high": "高",
         "risk_medium": "中",
         "risk_low": "低",
+        # 证明主干事件 (P5)
+        "event_proof_corpus_ingested": "证明语料入库: {problem_id}",
+        "event_proof_segmented": "证明已切片: 草稿 {draft_id}（{snippet_count} 个片段）",
+        "event_proof_diagnosis_recorded": (
+            "诊断已记录: 片段 {snippet_id} 是否有瑕疵={is_flawed}"
+        ),
+        "event_proof_diagnosis_complete": (
+            "诊断完成: 清单 {manifest_id} -> {status}"
+            "（{flawed_count}/{entry_count} 处瑕疵）"
+        ),
+        "event_proof_correction_applied": (
+            "证明已修正: 草稿 {old_draft_id} -> {new_draft_id}"
+        ),
+        "event_lean_proof_succeeded": (
+            "Lean 验证通过: 命题 {proposition_id}（尝试 {attempt_id}）"
+        ),
+        "event_lean_proof_failed": (
+            "Lean 验证失败: 命题 {proposition_id}（尝试 {attempt_id}）"
+        ),
+        "event_lean_proof_recorded": (
+            "Lean 尝试已记录: 命题 {proposition_id} 状态 {status}"
+        ),
     },
 }
 
@@ -289,6 +333,9 @@ def kind_label(lang: str, kind: str) -> str:
             "experiment": "experiment",
             "evidence": "evidence",
             "conclusion": "conclusion",
+            "proposition": "proposition",
+            "proof_skeleton": "proof skeleton",
+            "proof_snippet": "proof snippet",
         },
         "zh": {
             "question": "问题",
@@ -296,6 +343,27 @@ def kind_label(lang: str, kind: str) -> str:
             "experiment": "实验",
             "evidence": "证据",
             "conclusion": "结论",
+            "proposition": "命题",
+            "proof_skeleton": "证明骨架",
+            "proof_snippet": "证明片段",
         },
     }
     return labels[normalize_lang(lang)].get(kind, kind)
+
+
+# Trunk-aware icons for tree pane rendering (architecture.md §13).
+# Empirical kinds get the gear glyph; proof kinds get the triangle.
+KIND_ICONS = {
+    "question": "?",
+    "hypothesis": "*",
+    "experiment": "x",
+    "evidence": ".",
+    "conclusion": "!",
+    "proposition": "T",
+    "proof_skeleton": "S",
+    "proof_snippet": "s",
+}
+
+
+def kind_icon(kind: str) -> str:
+    return KIND_ICONS.get(kind, "-")

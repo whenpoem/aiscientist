@@ -97,14 +97,22 @@ def mark_refuted(node_id: str, reason: str, evidence_ids: list[str] | None = Non
 
 
 def get_active_frontier() -> list[dict]:
-    """Return active question and hypothesis nodes ordered by recency."""
+    """Return active question, hypothesis, and proposition nodes by recency.
+
+    Propositions (proof-trunk peers of hypotheses, see architecture.md §13)
+    are surfaced on the frontier so the main model treats them on equal
+    footing during planning. Skeletons and snippets are intentionally
+    omitted — they are too granular for the frontier view; query them
+    directly via mem_nodes when needed.
+    """
     con = _connect()
     try:
         rows = con.execute(
             """
             SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
             FROM mem_nodes
-            WHERE state = 'active' AND kind IN ('question', 'hypothesis')
+            WHERE state = 'active'
+              AND kind IN ('question', 'hypothesis', 'proposition')
             ORDER BY created_at DESC
             LIMIT 50
             """

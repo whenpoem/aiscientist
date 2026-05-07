@@ -10,6 +10,19 @@
       "args": ["run", "python", "-m", "verify_mcp.dev_server"],
       "env": { "RESEARCH_AGENT_DEV": "1" }
     },
+    "prove": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "prove_mcp.dev_server"],
+      "env": { "RESEARCH_AGENT_DEV": "1", "RESEARCH_AGENT_EMBED_BACKEND": "mock" }
+    },
+    "_lean": {
+      "_comment": "Lean reinsurance MCP (P4). Inactive by default: rename '_lean' -> 'lean' AFTER following docs/setup-lean.md (install elan, lean-lsp-mcp, bootstrap mathlib4 project). Restart Claude Code to pick up the change.",
+      "command": "uv",
+      "args": ["tool", "run", "lean-lsp-mcp"],
+      "env": {
+        "LEAN_PROJECT_PATH": "${CLAUDE_PROJECT_DIR}/.research-agent/lean/claudescientist-proofs"
+      }
+    },
     "cockpit": {
       "command": "uv",
       "args": ["run", "python", "-m", "cockpit.mcp_server"],

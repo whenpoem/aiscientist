@@ -11,7 +11,7 @@ ClaudeScientist v3.0 has reached a usable level on the engineering of research w
 - **Methodological layer is mature** — Bradley-Terry ranking, preregistration, provenance DAG, multiple-comparison correction are all in place
 - **Ecosystem layer is shallow** — still a single-user, single-session, purely local tool; no cross-project collaboration, no cloud sync, no published comparison benchmark
 
-The directions below cluster into three layers: **deepening existing capabilities** (1-4), **filling adjacent gaps** (5-7), and **moving toward an ecosystem** (8-10).
+The directions below cluster into three layers: **deepening existing capabilities** (1-4), **filling adjacent gaps** (5-7), and **moving toward an ecosystem** (8-10). Direction 11 is the v4.0 commitment that supersedes the prior "no Lean" stance and adds a parallel proof trunk; it is documented separately in [ADR 0008](adr/0008-two-trunk-domain-architecture.md) and the v4.0 phasing plan.
 
 ---
 
@@ -208,6 +208,29 @@ After extraction, the user manually confirms or rejects each candidate before it
 
 ---
 
+## IV. Domain expansion (v4.0)
+
+### Direction 11: Proof trunk — NL primary path with Lean reinsurance
+
+**Today**: ClaudeScientist is a single-trunk system focused on ML empirical reproducibility. The `prover` agent has been a stub since v0.1 and Lean integration was previously listed under "do not pursue" (see superseded note at the bottom of this document).
+
+**Proposal**: Adopt a two-trunk architecture (formalised in [ADR 0008](adr/0008-two-trunk-domain-architecture.md)). The existing v3.0 surface becomes the **empirical trunk**; a new **proof trunk** is added in `src/prove_mcp/`. The proof trunk's primary path is StatProver-style: corpus retrieval (bidirectional max-matching, dual-keyword embeddings), draft generation, snippet segmentation, diagnosis against `mem_failures(domain='proof')`, delayed global correction. A Lean formalisation layer is bolted on as **reinsurance**, not as the main path: only propositions that pass `triage_for_formalization` are sent to the prover agent (now backed by `lean-lsp-mcp`); successful Lean verifications attach as strong evidence, failures feed back into the cross-domain failure ledger.
+
+The two trunks share four cooperation interfaces (one tree, one failure ledger, one BT leaderboard, one reviewer with two checklists) and exactly four — see architecture.md §13.
+
+**Value**: Very high. Statistical research projects mix theoretical and empirical work; bridging them under one toolchain is a real product-level differentiator. None of the current single-trunk competitors (StatProver, EvoScientist, AI Scientist v2) offer the cross-domain failure matching or the dual-checklist reviewer.
+
+**Complexity**: High. ~10 weeks across six phases (P0 docs → P1 core domain-agnostic → P2 retrieval → P3 NL workflow → P4 Lean reinsurance → P5 cooperation surface). A new MCP server (`prove_mcp`) is added — the v3.0 default of "no new MCP server" is intentionally relaxed for this domain expansion.
+
+**Constraints**:
+- Layering doctrine ([ADR 0007](adr/0007-tools-skills-hooks-layering.md)) is binding from day one. New proof tools must remain atomic verbs; the StatProver pipeline lives in `prove-sop` skill markdown, not in code.
+- We will not match StatProver's 40k-corpus / 80k-error-repo scale. Our wedge is workflow integration, not retrieval quality.
+- Lean reinsurance is opt-in per proposition; we never gate the workflow on Lean success.
+
+**Status**: in flight (v4.0 phasing plan).
+
+---
+
 ## Suggested execution order
 
 If you start today, I would suggest this order:
@@ -223,6 +246,8 @@ If you start today, I would suggest this order:
 9. **Direction 9 (Git archaeology)** — extend cold-start once the core stabilizes
 10. **Direction 10 (comparison benchmark)** — only after the system has driven a few real research projects
 
+**Direction 11 (Proof trunk) is treated separately** as an in-flight v4.0 commitment, not as a "should we do it" question — see ADR 0008 and the phasing plan.
+
 ## A few directions explicitly **not** on the roadmap
 
 To avoid misinterpretation, here are directions I would not pursue:
@@ -230,7 +255,7 @@ To avoid misinterpretation, here are directions I would not pursue:
 - **Bring back the Web UI**. v0.2 had good reasons to delete it; do not retrace.
 - **Replace SQLite with Postgres**. The single-file state boundary is one of the project's core advantages.
 - **Support languages beyond English/Chinese**. No demand, and the i18n infrastructure can extend on demand.
-- **Wire in Lean formal proofs**. Cost is high and value is narrow; if mathematical verification becomes a real need, try SymPy-based symbolic checks first as a lightweight substitute.
+- ~~**Wire in Lean formal proofs**.~~ **Superseded by Direction 11 (v4.0)**: the proof trunk integrates Lean as a reinsurance layer with NL as the primary path. The original objection (high cost, narrow value) was correct in a single-trunk world; the two-trunk architecture changes the calculus by sharing the existing infrastructure (BT, calibration, provenance, replay, cockpit, failure ledger) with the proof workflow at near-zero marginal cost. See [ADR 0008](adr/0008-two-trunk-domain-architecture.md).
 
 ## Closing thought
 

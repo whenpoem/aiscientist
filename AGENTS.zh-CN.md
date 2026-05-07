@@ -89,4 +89,6 @@ Claude 的设置已经接好了下列 MCP 服务器：`memory`、`verify`、`coc
 
 本仓库已经交付了 v3.0 计划（[`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)）。不要在没有亲自验证剩余产品和运维预期的情况下，把它随便改写成 "V1.0 complete" 或 "production-ready"。
 
+**v4.0（证明主干）在做、未交付。** 新的 `prove_mcp` MCP server、`prove-sop` skill、以及 `prover` agent 的激活都属于 v4.0 分期计划的内容。在 P5 合作面落地之前，对大多数用户来说项目仍以单主干 empirical 工具的形态出现。架构层面的决策见 [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md)；新增能力的入场纪律见 [ADR 0007](docs/adr/0007-tools-skills-hooks-layering.md)；内核/主干切分线见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+
 完整的当前范围与 MCP 工具清单请见 [`docs/tool-reference.zh-CN.md`](docs/tool-reference.zh-CN.md)。

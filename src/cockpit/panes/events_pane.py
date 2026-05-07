@@ -136,6 +136,46 @@ class EventStreamPane(RichLog):
             return str(payload.get("text", ""))
         if kind == "snapshot_created":
             return f"{payload.get('snapshot_id', '-')} {payload.get('label', '')}".strip()
+        # Proof trunk events (P5).
+        if kind == "proof_corpus_ingested":
+            return (
+                f"{payload.get('problem_id', '-')} "
+                f"lex={payload.get('n_lexical', 0)} "
+                f"sem={payload.get('n_semantic', 0)}"
+            ).strip()
+        if kind == "proof_segmented":
+            return (
+                f"draft={payload.get('draft_id', '-')} "
+                f"manifest={payload.get('manifest_id', '-')} "
+                f"snippets={payload.get('snippet_count', 0)}"
+            )
+        if kind == "proof_diagnosis_recorded":
+            flag = "FLAW" if payload.get("is_flawed") else "ok"
+            return (
+                f"manifest={payload.get('manifest_id', '-')} "
+                f"snippet={payload.get('snippet_id', '-')} {flag}"
+            )
+        if kind == "proof_diagnosis_complete":
+            return (
+                f"manifest={payload.get('manifest_id', '-')} "
+                f"status={payload.get('status', '-')} "
+                f"flawed={payload.get('flawed_count', 0)}/"
+                f"{payload.get('entry_count', 0)}"
+            )
+        if kind == "proof_correction_applied":
+            return (
+                f"old={payload.get('old_draft_id', '-')} -> "
+                f"new={payload.get('new_draft_id', '-')}"
+            )
+        if kind in {"lean_proof_succeeded", "lean_proof_failed", "lean_proof_recorded"}:
+            duration = payload.get("duration_sec")
+            duration_str = f" {duration:.1f}s" if isinstance(duration, (int, float)) else ""
+            return (
+                f"prop={payload.get('proposition_id', '-')} "
+                f"attempt={payload.get('attempt_id', '-')} "
+                f"status={payload.get('status', kind)}"
+                f"{duration_str}"
+            )
         return str(payload)
 
     def _format_timestamp(self, raw: str) -> str:

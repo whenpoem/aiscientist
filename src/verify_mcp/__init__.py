@@ -18,14 +18,27 @@ Sequestered-data CLI:     heldout_cli.main  (re-exported as
 
 Owned tables (ver_*, res_*)
 ---------------------------
-ver_provenance         Append-only numeric-claim ledger; the source of truth.
-ver_metric_pins        Pinned headline numbers; reviewer reads these on writeup.
-ver_provenance_dag     Per-claim input-file hashes; refresh_claim re-checks.
-ver_seed_runs          One row per seed_perturb invocation (mean / std / verdict).
-ver_heldout_budgets    Sequestered-dataset registration + remaining budget.
-ver_heldout_queries    One row per query_heldout invocation; FK to budgets.
-ver_preregistrations   Locked falsification targets + correction state.
-res_budget_ledger      Wallclock / tokens / heldout / disk budgets per scope.
+ver_provenance         [empirical] Append-only numeric-claim ledger; the source of truth.
+ver_metric_pins        [empirical] Pinned headline numbers; reviewer reads these on writeup.
+ver_provenance_dag     [empirical] Per-claim input-file hashes; refresh_claim re-checks.
+ver_seed_runs          [empirical] One row per seed_perturb invocation (mean / std / verdict).
+ver_heldout_budgets    [empirical] Sequestered-dataset registration + remaining budget.
+ver_heldout_queries    [empirical] One row per query_heldout invocation; FK to budgets.
+ver_preregistrations   [empirical] Locked falsification targets + correction state.
+res_budget_ledger      [empirical] Wallclock / tokens / heldout / disk budgets per scope.
+
+Domain labels (see ADR 0008 + architecture.md §13)
+--------------------------------------------------
+[core]      Domain-agnostic; usable from either trunk.
+[empirical] Only meaningful in the ML / reproducibility workflow.
+[proof]     v4.0 addition; lives in prove_mcp.
+
+verify_mcp is entirely [empirical]: every tool here is grounded in
+ML reproducibility primitives (held-out splits, multi-seed perturbation,
+metric pinning, baseline fairness, preregistered hypothesis testing).
+Proof workflows have their own analogues in prove_mcp; cross-trunk
+cooperation flows through the four shared interfaces documented in
+architecture.md §13, not through this module.
 
 Critical invariants
 -------------------

@@ -30,6 +30,10 @@ BT_VALID_SOURCES = {
     "reviewer_critic",
 }
 
+# Kinds that may participate in a BT comparison. Cross-kind comparison is
+# forbidden to keep semantics clean (architecture.md §13, ADR 0008).
+BT_RANKABLE_KINDS = ("hypothesis", "proof_skeleton")
+
 
 def _expected_score(rating_a: float, rating_b: float) -> float:
     return 1.0 / (1.0 + 10 ** ((rating_b - rating_a) / 400.0))
@@ -114,8 +118,18 @@ def _bt_apply_comparison(
         raise ValueError(f"unknown winner node: {winner_id}")
     if loser_node is None:
         raise ValueError(f"unknown loser node: {loser_id}")
-    if winner_node["kind"] != "hypothesis" or loser_node["kind"] != "hypothesis":
-        raise ValueError("BT comparisons require hypothesis nodes")
+    winner_kind = winner_node["kind"]
+    loser_kind = loser_node["kind"]
+    if winner_kind not in BT_RANKABLE_KINDS or loser_kind not in BT_RANKABLE_KINDS:
+        raise ValueError(
+            f"BT comparisons require kinds in {BT_RANKABLE_KINDS}; "
+            f"got winner={winner_kind!r}, loser={loser_kind!r}"
+        )
+    if winner_kind != loser_kind:
+        raise ValueError(
+            f"BT comparison forbids cross-kind: winner is {winner_kind!r}, "
+            f"loser is {loser_kind!r}"
+        )
 
     winner_row = _ensure_bt_row(con, winner_id)
     loser_row = _ensure_bt_row(con, loser_id)
@@ -334,13 +348,27 @@ def update_bt_rating(
         )
 
 
-def get_bt_leaderboard(top_k: int = 20, include_paused: bool = False) -> list[dict]:
-    """Return active hypotheses ordered by Bradley-Terry strength.
+def get_bt_leaderboard(
+    top_k: int = 20,
+    include_paused: bool = False,
+    kind: str = "hypothesis",
+) -> list[dict]:
+    """Return active nodes of one ``kind`` ordered by Bradley-Terry strength.
+
+    Default ``kind='hypothesis'`` preserves v3.0 backward compatibility.
+    Pass ``kind='proof_skeleton'`` to view the proof-trunk leaderboard.
+    Cross-kind leaderboards are intentionally not supported; the BT
+    comparison primitive forbids cross-kind matches, so a mixed table
+    would conflate unrelated rankings.
 
     Each row carries a 95% LUCB-style interval ``[lcb, ucb]`` derived from
     the Laplace posterior variance. Nodes whose ``n_comparisons`` is below
     ``BT_MIN_COMPARISONS_FOR_RANK`` get an ``insufficient_samples`` flag.
     """
+    if kind not in BT_RANKABLE_KINDS:
+        raise ValueError(
+            f"get_bt_leaderboard kind must be in {BT_RANKABLE_KINDS}; got {kind!r}"
+        )
     top_k = max(1, int(top_k))
     statuses = ("active", "paused") if include_paused else ("active",)
     placeholders = ",".join("?" for _ in statuses)
@@ -354,12 +382,12 @@ def get_bt_leaderboard(top_k: int = 20, include_paused: bool = False) -> list[di
             FROM mem_bt_ratings r
             JOIN mem_nodes n ON n.node_id = r.node_id
             WHERE r.status IN ({placeholders})
-              AND n.kind = 'hypothesis'
+              AND n.kind = ?
               AND n.state = 'active'
             ORDER BY r.strength DESC, r.n_comparisons DESC, r.node_id ASC
             LIMIT ?
             """,
-            (*statuses, top_k),
+            (*statuses, kind, top_k),
         ).fetchall()
     finally:
         con.close()
@@ -483,14 +511,26 @@ def resume_branch(node_id: str, reason: str) -> dict:
     return {"node_id": node_id, "previous_status": previous, "status": "active"}
 
 
-def expected_information_gain(candidate_node_ids: list[str]) -> list[dict]:
-    """Score candidate hypotheses by predicted reduction in posterior entropy.
+def expected_information_gain(
+    candidate_node_ids: list[str],
+    kind: str = "hypothesis",
+) -> list[dict]:
+    """Score candidate nodes by predicted reduction in posterior entropy.
 
-    For each candidate we compare it against the current top hypothesis (by
-    BT strength) and approximate the expected drop in posterior variance the
-    next comparison would yield. High-variance underdogs score highest, which
-    is what drives the experiment-selection loop in P3+.
+    For each candidate we compare it against the current top node *of the
+    same ``kind``* (by BT strength) and approximate the expected drop in
+    posterior variance the next comparison would yield. High-variance
+    underdogs score highest, which is what drives the experiment-selection
+    loop in P3+.
+
+    The ``kind`` parameter (default ``hypothesis`` for v3.0 compat) ensures
+    the reference top node can actually be compared against the candidates;
+    BT forbids cross-kind comparison.
     """
+    if kind not in BT_RANKABLE_KINDS:
+        raise ValueError(
+            f"expected_information_gain kind must be in {BT_RANKABLE_KINDS}; got {kind!r}"
+        )
     if not candidate_node_ids:
         return []
     placeholders = ",".join("?" for _ in candidate_node_ids)
@@ -498,20 +538,24 @@ def expected_information_gain(candidate_node_ids: list[str]) -> list[dict]:
     try:
         top = con.execute(
             """
-            SELECT node_id, strength, strength_var
-            FROM mem_bt_ratings
-            WHERE status = 'active'
-            ORDER BY strength DESC
+            SELECT r.node_id, r.strength, r.strength_var
+            FROM mem_bt_ratings r
+            JOIN mem_nodes n ON n.node_id = r.node_id
+            WHERE r.status = 'active' AND n.kind = ?
+            ORDER BY r.strength DESC
             LIMIT 1
-            """
+            """,
+            (kind,),
         ).fetchone()
         rows = con.execute(
             f"""
-            SELECT node_id, strength, strength_var, n_comparisons
-            FROM mem_bt_ratings
-            WHERE node_id IN ({placeholders})
+            SELECT r.node_id, r.strength, r.strength_var, r.n_comparisons
+            FROM mem_bt_ratings r
+            JOIN mem_nodes n ON n.node_id = r.node_id
+            WHERE r.node_id IN ({placeholders})
+              AND n.kind = ?
             """,
-            tuple(candidate_node_ids),
+            (*candidate_node_ids, kind),
         ).fetchall()
     finally:
         con.close()

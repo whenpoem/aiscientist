@@ -164,3 +164,65 @@ Hook 必须是幂等的，并且在数据库缺失或损坏时优雅降级（典
 - [`src/verify_mcp/__init__.py`](../src/verify_mcp/__init__.py)
 - [`src/cockpit/__init__.py`](../src/cockpit/__init__.py)
 - [`.claude/hooks/README.md`](../.claude/hooks/README.md)
+
+## 13. 共用内核与领域主干（v4.0）
+
+ClaudeScientist v4.0 把架构显式拆成 **一个共用内核** 加 **两条领域主干**。这条切分线的正式记录在 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)；本节把现有接口归类到内核 / empirical / proof，并列出 v4.0 新增的 proof 主干表面。
+
+### 内核里有什么
+
+内核就是**不知道当前工作是 ML 实证还是统计证明**的那部分。它是项目的护城河——两条主干都靠它复利，跨域共用一本错题本本身就是 v4.0 的真实差异化。
+
+| 接口 | 组件 | 为什么属于内核 |
+|---|---|---|
+| `claudescientist.runtime` | 路径、SQLite、迁移、事件 | 与领域无关的基础设施 |
+| `mem_nodes` / `mem_edges` | 假设/命题图 | `kind` 字段携带领域；表本身不区分 |
+| `mem_failures` + FTS5 | 跨域错题本 | 新增 `domain` 列做过滤；匹配算法本身领域无关 |
+| `mem_bt_ratings` + 锦标赛工具 | 排序 + LUCB 区间 | 跨 kind 比较仍被禁止；同 kind 比较对 `hypothesis` 与 `proof_skeleton` 同样适用 |
+| `meta_calibration` | 单 agent 可靠性 | 校准按裁判记录，与领域无关 |
+| `mem_replay_branches` | 反事实快照 | 领域无关 |
+| `cockpit` + `cockpit_events` | 实时 UI + 事件总线 | 一棵树承载两条主干 |
+| 钩子: `destructive_bash_guard`、`intervention_pump`、`stop_flush` | 安全 + 生命周期 | 领域无关 |
+
+### Empirical 主干里有什么
+
+| 接口 | 文件/表 | 备注 |
+|---|---|---|
+| `verify_mcp` | leakage / heldout / seed_perturb / baseline_fairness / 预注册 / provenance DAG / pin_metric / budget | 现有 v3.0 工具集 |
+| 钩子: `leakage_guard.py`、`provenance_log.py` | `.claude/hooks/` | ML 专属（heldout 路径、指标提取） |
+| Agents: engineer、verifier | `.claude/agents/` | ML 专属角色 |
+
+这些工具与角色在各模块地图里被标 `[empirical]`。仅做证明工作的用户在工具目录里会看到它们，但通常不会调用。
+
+### Proof 主干里有什么
+
+v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
+
+| 接口 | 备注 |
+|---|---|
+| `prv_corpus_problems`、`prv_corpus_keywords` | StatEval 风格的检索语料；双关键词（lexical + semantic）+ 向量 |
+| `prv_diagnostic_manifests` | 片段级诊断的输出 |
+| `prv_lean_attempts` | 记录每一次 Lean 形式化尝试，无论成败 |
+| 工具 | `ingest_proof_corpus`、`retrieve_skeletons`、`segment_proof`、`diagnose_snippet`（调用 `mem_failures` 时带 `domain='proof'`）、`apply_correction`、`triage_for_formalization` |
+| Agents | prover（v0.1 stub 在 v4.0 真正激活，挂 `lean-lsp-mcp`） |
+| Skills | `prove-sop` |
+| 第三方 MCP | `lean-lsp-mcp` 与 `arxiv` / `openalex` 并列注册；只有触发规则放行后才会被调用 |
+
+### 四个合作接口
+
+两条主干通过**且仅通过**这四个共享接口合作。任何想加第五个的人，请先写一份覆盖 ADR 0008 的新 ADR。
+
+1. **同一棵树**：`mem_nodes.kind` 接受 `proposition`、`proof_skeleton`、`proof_snippet` 与原有 empirical kind。命题节点可以与 hypothesis 节点作为同一个 question 节点的兄弟。
+2. **同一本错题本**：`mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
+3. **同一张排行榜**：BT 比较同时接受 `hypothesis` 与 `proof_skeleton`（仅同 kind）。跨 kind 比较仍被禁止以避免语义混乱。
+4. **同一个评审，两份清单**：`reviewer.md` 按 manuscript 内容自动切清单——empirical 数字断言保持原有四件套（pin / seed verdict / met preregistration / fresh provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证 或 显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
+
+### 模块地图标签的读法
+
+`src/memory_mcp/__init__.py` 与 `src/verify_mcp/__init__.py` 给每个公开工具与每张自有表加上下列三种标签之一：
+
+- `[core]`：领域无关，两条主干都能用。
+- `[empirical]`：只在 empirical 工作流下有意义。
+- `[proof]`：v4.0 新增，位于 `prove_mcp`。
+
+修改任何工具或表前，先看这个标签——它直接告诉你这次改动需要回归哪几条主干。

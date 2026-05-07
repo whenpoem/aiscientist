@@ -6,6 +6,8 @@ ClaudeScientist 是给 Claude Code 加装的一层科研增强层。它不替换
 
 仓库当前交付的是 **v3.0** 计划：把研究流程做成一场带预算控制的 Bradley-Terry 锦标赛，配以诚实的 95% 置信区间、可刷新的溯源 DAG，以及带多重比较校正的预注册机制。
 
+**v4.0 在做**：项目正在向**两主干架构**扩展——现有的 ML 可重复性接口成为 *empirical 主干*，新增的 *proof 主干*（`prove_mcp`）用于统计证明生成，附带 Lean 形式化保险层。两条主干共用一个内核：假设图、错题本、BT 锦标赛、校准、replay、cockpit。详见 [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+
 ## 五分钟入门
 
 如果你是第一次接触本项目，建议按下面的顺序阅读：

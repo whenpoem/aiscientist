@@ -6,6 +6,8 @@ ClaudeScientist is a research-agent augmentation layer for Claude Code. It does 
 
 The repository currently ships the **v3.0** plan: a continuously-running, budgeted Bradley-Terry tournament with honest 95% confidence intervals, refreshable provenance DAGs, and preregistration with multiple-comparison correction.
 
+**v4.0 is in flight**: ClaudeScientist is being extended into a **two-trunk architecture** — the existing ML reproducibility surface becomes the *empirical trunk*, and a new *proof trunk* (`prove_mcp`) is being added for statistical proof generation with Lean reinsurance. Both trunks share one core: hypothesis graph, failure ledger, BT tournament, calibration, replay, cockpit. See [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) and [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
+
 ## Five-minute orientation
 
 If you are new to the project, read in this order:

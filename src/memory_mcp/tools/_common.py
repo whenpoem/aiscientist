@@ -23,6 +23,10 @@ def _node_id(kind: str) -> str:
         "question": "q",
         "experiment": "exp",
         "conclusion": "con",
+        # Proof trunk kinds (architecture.md §13).
+        "proposition": "prop",
+        "proof_skeleton": "psk",
+        "proof_snippet": "psnp",
     }.get(kind, "node")
     return f"{prefix}_{uuid4().hex[:12]}"
 

@@ -167,3 +167,90 @@ making non-trivial changes inside a module:
 - [`src/verify_mcp/__init__.py`](../src/verify_mcp/__init__.py)
 - [`src/cockpit/__init__.py`](../src/cockpit/__init__.py)
 - [`.claude/hooks/README.md`](../.claude/hooks/README.md)
+
+## 13. Core vs domain trunks (v4.0)
+
+ClaudeScientist v4.0 separates the architecture into a **shared core**
+and **two domain trunks** that live on top of it. The split is documented
+formally in [ADR 0008](adr/0008-two-trunk-domain-architecture.md); this
+section names which existing surface is which, and what new surface v4.0
+adds.
+
+### What is in the shared core
+
+The core is everything that does not know whether the work in flight is
+empirical or theoretical. The core is the moat — both trunks compound
+through it, and a single failure ledger across both is one of v4.0's
+real differentiators.
+
+| Surface | Component | Why it is core |
+|---|---|---|
+| `claudescientist.runtime` | path, SQLite, migrations, event emission | Domain-free infrastructure |
+| `mem_nodes` / `mem_edges` | hypothesis/proposition graph | `kind` field carries the domain; the table itself does not |
+| `mem_failures` + FTS5 | cross-domain failure ledger | New `domain` column gates filtering; the matching algorithm is domain-free |
+| `mem_bt_ratings` + tournament tools | ranking + LUCB intervals | Cross-kind comparison stays disallowed; same-kind comparison works for `hypothesis` and `proof_skeleton` alike |
+| `meta_calibration` | per-agent reliability | Calibration is per-judge, not per-domain |
+| `mem_replay_branches` | counterfactual snapshots | Domain-free |
+| `cockpit` + `cockpit_events` | live UI + event bus | One tree, two trunks |
+| Hooks: `destructive_bash_guard`, `intervention_pump`, `stop_flush` | safety + lifecycle | Domain-free |
+
+### What is in the empirical trunk
+
+| Surface | File / table | Notes |
+|---|---|---|
+| `verify_mcp` | leakage / heldout / seed_perturb / baseline_fairness / preregistration / provenance DAG / pin_metric / budget | Existing v3.0 toolset |
+| Hooks: `leakage_guard.py`, `provenance_log.py` | `.claude/hooks/` | ML-specific (held-out paths, metric extraction) |
+| Agents: engineer, verifier | `.claude/agents/` | ML-specific roles |
+
+These tools and agents are tagged `[empirical]` in the per-module maps.
+A proof-only user will see them in the catalogue but should not need to
+invoke them.
+
+### What is in the proof trunk
+
+New in v4.0; lives in [`src/prove_mcp/`](../src/prove_mcp/):
+
+| Surface | Notes |
+|---|---|
+| `prv_corpus_problems`, `prv_corpus_keywords` | StatEval-style retrieval corpus, dual lexical+semantic keywords with embeddings |
+| `prv_diagnostic_manifests` | snippet-level diagnosis output |
+| `prv_lean_attempts` | tracks every Lean formalisation attempt regardless of outcome |
+| Tools | `ingest_proof_corpus`, `retrieve_skeletons`, `segment_proof`, `diagnose_snippet` (queries `mem_failures` with `domain='proof'`), `apply_correction`, `triage_for_formalization` |
+| Agents | prover (the v0.1 stub is activated against `lean-lsp-mcp`) |
+| Skills | `prove-sop` |
+| External MCP | `lean-lsp-mcp` registered alongside `arxiv` / `openalex`; only invoked when triage rules pass |
+
+### The four cooperation interfaces
+
+The two trunks compose through exactly four shared interfaces, no more.
+Anyone tempted to add a fifth should write a superseding ADR first.
+
+1. **One tree.** `mem_nodes.kind` accepts `proposition`, `proof_skeleton`,
+   and `proof_snippet` as well as the empirical kinds. A proposition can
+   sit as a sibling of a hypothesis under the same question.
+2. **One failure ledger.** `mem_failures.domain` partitions records by
+   domain; `match_signatures` accepts an optional `domain` filter and
+   defaults to cross-domain. An off-by-one signature stored from a script
+   crash can match an off-by-one signature in a proof snippet.
+3. **One tournament.** BT comparison accepts both `hypothesis` and
+   `proof_skeleton` kinds (same-kind only). Cross-kind comparison is
+   forbidden to keep semantics clean.
+4. **One reviewer, two checklists.** `reviewer.md` switches its checklist
+   by manuscript content: empirical numeric claims keep the existing
+   four gates (pin / seed verdict / met preregistration / fresh
+   provenance); theorem claims add an empty diagnostic manifest plus
+   either a Lean verification or an explicit `unverified` flag.
+   The `unverified` flag is a manuscript-level annotation, not a
+   `prv_diagnostic_manifests.status` value.
+
+### Reading the per-module map labels
+
+`src/memory_mcp/__init__.py` and `src/verify_mcp/__init__.py` tag every
+public tool and every owned table with one of three labels:
+
+- `[core]` — domain-agnostic; usable from either trunk.
+- `[empirical]` — only meaningful in the empirical workflow.
+- `[proof]` — added in v4.0, lives in `prove_mcp`.
+
+When a contributor changes a tool or table, the label tells them which
+trunks they need to re-test.

@@ -169,6 +169,8 @@ class HypothesisTreePane(Tree[str]):
         if node.kind == "hypothesis":
             title.append(self._bt_suffix(node), style="dim")
             title.append(f"  elo {node.elo_score:.0f}", style="dim")
+        elif node.kind == "proof_skeleton":
+            title.append(self._bt_suffix(node), style="dim")
         if node.bt_status == "paused":
             title.append("  [paused]", style="#d29922")
         if node.state == "refuted":
@@ -204,6 +206,10 @@ class HypothesisTreePane(Tree[str]):
             "experiment": "E",
             "evidence": "EV",
             "conclusion": "C",
+            # Proof trunk kinds (architecture.md §13)
+            "proposition": "T",
+            "proof_skeleton": "PS",
+            "proof_snippet": "ps",
         }.get(node.kind, "-")
 
     @staticmethod
@@ -216,4 +222,9 @@ class HypothesisTreePane(Tree[str]):
             "experiment": "#d29922",
             "evidence": "#3fb950",
             "conclusion": "#bc8cff",
+            # Proof trunk: amber-ish so it visually pairs with experiment
+            # without colliding with hypothesis blue.
+            "proposition": "#e3b341",
+            "proof_skeleton": "#d29922",
+            "proof_snippet": "#a98012",
         }.get(node.kind, "#c9d1d9")

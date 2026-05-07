@@ -19,6 +19,8 @@ it from both sides.
 | [0004](0004-elo-to-bradley-terry.md) | Replace Elo with Bradley-Terry ranking | Accepted | v3.0 |
 | [0005](0005-auto-prune-opt-in.md) | Auto-prune is dry-run by default; opt-in via env var | Accepted | v3.0 |
 | [0006](0006-preregistration-as-writeup-gate.md) | Preregistration correction aliases as the writeup gate | Accepted | v3.0 |
+| [0007](0007-tools-skills-hooks-layering.md) | Tools / Skills / Hooks layering doctrine | Accepted | v4.0 |
+| [0008](0008-two-trunk-domain-architecture.md) | Two-trunk domain architecture (empirical + proof) on a shared core | Accepted | v4.0 |
 
 ## Writing a new ADR
 

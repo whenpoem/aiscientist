@@ -9,6 +9,8 @@
   - [Hypothesis graph](#hypothesis-graph) · [Failures](#failures) · [BT ranking](#bradley-terry-ranking) · [Calibration](#calibration) · [Replay](#replay) · [Snapshots](#snapshots) · [Literature](#literature)
 - **verify MCP** — 13 tools for leakage, provenance, metrics, preregistration, held-out, and budget
   - [Leakage](#leakage) · [Provenance](#provenance) · [Pinned metrics](#pinned-metrics) · [Seed and fairness](#seed-and-fairness) · [Held-out](#held-out) · [Preregistration](#preregistration) · [Resource budget](#resource-budget)
+- **prove MCP** *(v4.0)* — 18 tools for the proof trunk: corpus retrieval, NL workflow, Lean reinsurance
+  - [Corpus + retrieval](#corpus-and-retrieval) · [Proof nodes](#proof-nodes) · [Segmentation + diagnosis](#segmentation-and-diagnosis) · [Correction](#correction) · [Lean reinsurance](#lean-reinsurance)
 - **cockpit MCP** — 3 tools that let Claude push to the cockpit
   - [Cockpit bridge](#cockpit-bridge)
 
@@ -307,6 +309,98 @@ Atomically decrement the budget. Overflow returns `{"ok": False, "error": "budge
 **Returns**: `{"ok": True, "remaining": ...}` on success.
 
 **When to use**: by the budgeter agent or directly by the engineer, immediately before consuming resources.
+
+---
+
+## prove MCP *(v4.0)*
+
+Backed by the `prv_*` tables and the cross-domain `mem_failures.domain` column. Exposed via `mcp__prove__<name>`. The proof trunk's primary path is StatProver-style (corpus retrieval -> draft -> segment -> diagnose -> correct); Lean is reinsurance on top. See [ADR 0008](adr/0008-two-trunk-domain-architecture.md) and [architecture.md §13](architecture.md#13-core-vs-domain-trunks-v40).
+
+### Corpus and retrieval
+
+#### `ingest_proof_corpus(source, problems)`
+Bulk-ingest a list of proof problems into `prv_corpus_problems` + `prv_corpus_keywords`. Each problem must include `problem_id`, `statement`, and at least one of `lexical_keywords` / `semantic_keywords`. Optional fields: `reference_proof`, `domain_tags`. Re-ingesting an existing `problem_id` replaces it (idempotent upsert). Keywords are vectorised through the active embedding backend (`RESEARCH_AGENT_EMBED_BACKEND`: `mock` | `local` | `openai`; Claude settings default to `mock` so the MCP starts without optional embedding packages); each keyword row records `embed_backend` + `embed_dim` so retrieval can refuse cross-backend mixing.
+
+**Returns**: `{"ingested": int, "replaced": int, "backend": str, "dim": int}`
+
+**When to use**: at project start to seed the corpus from StatEval / arXiv / hand-curated examples.
+
+#### `list_corpus(source=None, limit=20)`
+Browse the corpus with aggregated keyword counts.
+
+**Returns**: list of `{problem_id, source, statement, reference_proof, domain_tags, n_lexical, n_semantic, ingested_at}`.
+
+#### `retrieve_skeletons(proposition_text, lexical_keywords, semantic_keywords, k=5)`
+Bidirectional max-matching retrieval (architecture.md §13 formula). The agent extracts keyword sets from the proposition via an LLM call before invoking; this tool does pure vector math.
+
+**Returns**: list of `{problem_id, source, statement, reference_proof, domain_tags, lexical_score, semantic_score, similarity}`. Sorted by `similarity` descending.
+
+**When to use**: at the top of `prove-sop` to find structurally similar lemmas before drafting.
+
+### Proof nodes
+
+#### `propose_proposition(text, parent_id=None)`
+Create a `proposition` node (the proof-trunk peer of a hypothesis). Attach to a question node so propositions and hypotheses share one tree.
+
+**Returns**: `{"node_id": "prop_..."}`
+
+#### `propose_proof_skeleton(proposition_id, text, note="")`
+Create a candidate proof skeleton under a proposition. Seeds a `mem_bt_ratings` row for the proof-skeleton tournament.
+
+**Returns**: `{"node_id": "psk_..."}`
+
+#### `register_proof_draft(skeleton_id, draft_text, note="")`
+Persist a generated LaTeX draft as a child `proof_skeleton` revision. The parent chain encodes revision history.
+
+**Returns**: `{"node_id": "psk_...", "parent_skeleton_id": "..."}`
+
+#### `list_proof_drafts(proposition_id, limit=20)`
+List `proof_skeleton` descendants under a proposition, ordered deepest-first and newest-first. Used by the reviewer proof checklist to find the latest draft before calling `list_diagnostic_manifests`.
+
+### Segmentation and diagnosis
+
+#### `segment_proof(draft_id, snippets)`
+Persist agent-segmented snippets and open a fresh diagnostic manifest in `status='open'`.
+
+**Returns**: `{"manifest_id": int, "snippet_ids": [...]}`
+
+#### `list_proof_snippets(draft_id)`
+Browse snippets in insertion order.
+
+#### `diagnose_snippet(snippet_id, k=5)`
+Read-only. Searches `mem_failures` with `domain='proof'` for the top-k historical proof errors resembling this snippet; returns the candidates plus a structured prompt for the agent's judgment.
+
+**Returns**: `{snippet_id, snippet_text, candidates: [...], prompt: str}`
+
+#### `register_diagnosis(manifest_id, snippet_id, is_flawed, description, matched_failure_ids=[])`
+Append one diagnosis entry to a manifest. Allowed only while the manifest is `status='open'`.
+
+#### `finalize_manifest(manifest_id)`
+Close diagnosis: `empty` if no flawed entries, else stays `open` for correction.
+
+#### `list_diagnostic_manifests(draft_id=None, status=None)`
+Browse manifests. Used by the reviewer's proof checklist (P5).
+
+### Correction
+
+#### `compose_correction_prompt(draft_id, manifest_id)`
+Read-only. Assembles the original draft + per-flaw descriptions into a single global-fix prompt for the agent.
+
+#### `apply_correction(draft_id, manifest_id, corrected_text, note="")`
+Persist the corrected draft as a new `proof_skeleton` revision and mark the manifest `status='applied'`.
+
+**Returns**: `{new_draft_id, old_draft_id, manifest_id, manifest_status}`
+
+### Lean reinsurance
+
+#### `triage_for_formalization(proposition_id)`
+Decide whether to hand a proposition to the prover agent. Returns `{eligible, reasons, estimated_difficulty, whitelist_hits, blacklist_hits, length}`. Pure read; the agent inspects `eligible` before spawning prover.
+
+#### `record_lean_attempt(proposition_id, status, lean_source="", stderr="", duration_sec=None, triage=None)`
+Persist a Lean attempt to `prv_lean_attempts`. **No automatic cross-trunk side effects** -- the prover agent's prompt explicitly calls `attach_evidence` on success and `record_failure(domain='proof')` on failure so each side effect is auditable in the cockpit.
+
+#### `list_lean_attempts(proposition_id=None, status=None)`
+Browse Lean attempts.
 
 ---
 

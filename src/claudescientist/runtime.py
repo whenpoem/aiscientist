@@ -232,6 +232,7 @@ def extract_metric_tokens(text: str) -> list[str]:
 KNOWN_BOOTSTRAP_COMPONENTS: tuple[str, ...] = (
     "memory_mcp.db",
     "verify_mcp.db",
+    "prove_mcp.db",
 )
 
 

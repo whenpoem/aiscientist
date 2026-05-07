@@ -3,7 +3,10 @@ PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS mem_nodes (
   node_id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('question', 'hypothesis', 'experiment', 'evidence', 'conclusion')),
+  kind TEXT NOT NULL CHECK(kind IN (
+    'question', 'hypothesis', 'experiment', 'evidence', 'conclusion',
+    'proposition', 'proof_skeleton', 'proof_snippet'
+  )),
   text TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active', 'refuted', 'superseded', 'archived')),
   elo_score REAL NOT NULL DEFAULT 1500.0,
@@ -56,8 +59,11 @@ CREATE TABLE IF NOT EXISTS mem_failures (
   signature TEXT,
   seen_count INTEGER NOT NULL DEFAULT 1,
   first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  domain TEXT NOT NULL DEFAULT 'empirical' CHECK(domain IN ('empirical', 'proof'))
 );
+-- idx_mem_failures_domain is created in db.py::_ensure_failures_domain
+-- so the v3.0 → v5 migration order (ALTER TABLE first, INDEX second) is preserved.
 
 CREATE VIRTUAL TABLE IF NOT EXISTS mem_failures_fts USING fts5(
   trigger,

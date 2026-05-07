@@ -108,49 +108,109 @@ def _find_contradictions(con) -> list[dict]:
     return contradictions
 
 
-def record_failure(trigger: str, symptom: str, root_cause: str = "", resolution: str = "") -> dict:
-    """Store a failure signature for later matching."""
+_VALID_DOMAINS = {"empirical", "proof"}
+
+
+def _check_domain(domain: str) -> str:
+    if domain not in _VALID_DOMAINS:
+        raise ValueError(
+            f"failure domain must be one of {sorted(_VALID_DOMAINS)}; got {domain!r}"
+        )
+    return domain
+
+
+def record_failure(
+    trigger: str,
+    symptom: str,
+    root_cause: str = "",
+    resolution: str = "",
+    domain: str = "empirical",
+) -> dict:
+    """Store a failure signature for later matching.
+
+    The ``domain`` parameter (default ``empirical`` for v3.0 backward
+    compat) tags the record so cross-domain searches can filter; pass
+    ``domain='proof'`` from the proof trunk. See architecture.md §13 +
+    ADR 0008 for the cross-domain match rationale.
+    """
+    _check_domain(domain)
     signature = _signature(trigger, symptom, root_cause, resolution)
     with tx() as con:
         cur = con.execute(
             """
             INSERT INTO mem_failures(
               trigger, symptom, root_cause, resolution, signature,
-              seen_count, first_seen, last_seen
+              seen_count, first_seen, last_seen, domain
             )
-            VALUES(?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            VALUES(?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?)
             """,
-            (trigger, symptom, root_cause, resolution, signature),
+            (trigger, symptom, root_cause, resolution, signature, domain),
         )
         failure_id = int(cur.lastrowid)
         _emit_event(
             con,
             "failure_added",
-            {"failure_id": failure_id, "trigger": trigger, "symptom": symptom},
+            {
+                "failure_id": failure_id,
+                "trigger": trigger,
+                "symptom": symptom,
+                "domain": domain,
+            },
         )
-    return {"failure_id": failure_id}
+    return {"failure_id": failure_id, "domain": domain}
 
 
-def match_signatures(situation: str, k: int = 5) -> list[dict]:
-    """FTS search prior failures ranked by BM25 relevance."""
+def match_signatures(
+    situation: str,
+    k: int = 5,
+    domain: str | None = None,
+) -> list[dict]:
+    """FTS search prior failures ranked by BM25 relevance.
+
+    The ``domain`` parameter filters by failure domain. Default ``None``
+    means cross-domain search — an empirical failure can match a proof
+    failure and vice versa, which is exactly the cross-trunk failure
+    leverage described in architecture.md §13. Pass ``'empirical'`` or
+    ``'proof'`` explicitly to scope the search.
+    """
+    if domain is not None:
+        _check_domain(domain)
     query = _fts_query(situation)
     if not query:
         return []
     con = _connect()
     try:
-        rows = con.execute(
-            """
-            SELECT f.failure_id, f.trigger, f.symptom, f.root_cause, f.resolution,
-                   f.signature, f.seen_count, f.first_seen, f.last_seen,
-                   bm25(mem_failures_fts) AS bm25_score
-            FROM mem_failures f
-            JOIN mem_failures_fts ON mem_failures_fts.rowid = f.failure_id
-            WHERE mem_failures_fts MATCH ?
-            ORDER BY bm25_score
-            LIMIT ?
-            """,
-            (query, max(1, k)),
-        ).fetchall()
+        if domain is None:
+            rows = con.execute(
+                """
+                SELECT f.failure_id, f.trigger, f.symptom, f.root_cause, f.resolution,
+                       f.signature, f.seen_count, f.first_seen, f.last_seen,
+                       f.domain,
+                       bm25(mem_failures_fts) AS bm25_score
+                FROM mem_failures f
+                JOIN mem_failures_fts ON mem_failures_fts.rowid = f.failure_id
+                WHERE mem_failures_fts MATCH ?
+                ORDER BY bm25_score
+                LIMIT ?
+                """,
+                (query, max(1, k)),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                """
+                SELECT f.failure_id, f.trigger, f.symptom, f.root_cause, f.resolution,
+                       f.signature, f.seen_count, f.first_seen, f.last_seen,
+                       f.domain,
+                       bm25(mem_failures_fts) AS bm25_score
+                FROM mem_failures f
+                JOIN mem_failures_fts ON mem_failures_fts.rowid = f.failure_id
+                WHERE mem_failures_fts MATCH ?
+                  AND f.domain = ?
+                ORDER BY bm25_score
+                LIMIT ?
+                """,
+                (query, domain, max(1, k)),
+            ).fetchall()
         return [dict(row) for row in rows]
     finally:
         con.close()
