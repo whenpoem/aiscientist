@@ -7,7 +7,7 @@
 
 ClaudeScientist 不是一个独立的科研智能体，而是**给 Claude Code 加装的一层科研增强层**：让它具备持久记忆、可验证的实验结果、可干预的研究过程，以及实时的人机协作面板。
 
-它的设计前提是 Claude Code 已经把"调度、对话、子智能体、工具调用"做得足够好，因此本项目只补三件事：**记忆（memory）、验证（verify）、监控（cockpit）**。
+它的设计前提是 Claude Code 已经把"调度、对话、子智能体、工具调用"做得足够好，因此本项目只补四件事：**记忆（memory）、验证（verify）、统计证明生成（prove，v4.0）、监控（cockpit）**。
 
 ## 2. 你眼前实际看到什么
 
@@ -43,7 +43,7 @@ ClaudeScientist 不是一个独立的科研智能体，而是**给 Claude Code �
 | **Cockpit TUI** | 终端 B | 实时显示状态，让你手动干预 | 监控大屏 |
 | **SQLite** | `.research-agent/state.db` | 存放一切：假说、证据、失败、评分、预注册、事件 | 共享黑板 |
 
-**MCP（Model Context Protocol）** 是一种让 AI 能调用外部 Python 函数的协议。Claude Code 启动时会读 `.claude/settings.json`，按里面的配置启动几个子进程：`memory_mcp`、`verify_mcp`、`cockpit.mcp_server`，再加上两个外部包 `arxiv` 和 `openalex`。它们都通过标准输入输出和 Claude 通话，但**都对同一个 SQLite 文件读写**。
+**MCP（Model Context Protocol）** 是一种让 AI 能调用外部 Python 函数的协议。Claude Code 启动时会读 `.claude/settings.json`，按里面的配置启动几个子进程：`memory_mcp`、`verify_mcp`、`prove_mcp`（v4.0 证明主干）、`cockpit.mcp_server`，再加上两个外部包 `arxiv` 和 `openalex`，以及可选的 `lean`（按 `docs/setup-lean.zh-CN.md` 自行启用）。它们都通过标准输入输出和 Claude 通话，但**都对同一个 SQLite 文件读写**。
 
 ## 4. 一次研究任务的完整流程
 

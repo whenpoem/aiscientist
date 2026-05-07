@@ -21,7 +21,7 @@ Minimum baseline:
 
 ```powershell
 uv run ruff check
-uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/cockpit tests/e2e
+uv run pytest tests/memory_mcp tests/verify_mcp tests/prove_mcp tests/hooks tests/cockpit tests/scripts tests/e2e
 ```
 
 If cockpit code changed, also smoke-test the TUI entrypoint:
@@ -34,7 +34,7 @@ uv run python -m cockpit.tui --once --lang zh
 If integration points changed, also smoke-test the backend:
 
 ```powershell
-uv run python -c "import memory_mcp.server; import verify_mcp.server; import cockpit.mcp_server; print('OK')"
+uv run python -c "import memory_mcp.server; import verify_mcp.server; import prove_mcp.server; import cockpit.mcp_server; print('OK')"
 ```
 
 ## What to read before a non-trivial change

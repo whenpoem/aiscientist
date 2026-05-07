@@ -21,7 +21,7 @@
 
 ```powershell
 uv run ruff check
-uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/cockpit tests/e2e
+uv run pytest tests/memory_mcp tests/verify_mcp tests/prove_mcp tests/hooks tests/cockpit tests/scripts tests/e2e
 ```
 
 改了 cockpit 代码，再 smoke-test TUI 入口：
@@ -34,7 +34,7 @@ uv run python -m cockpit.tui --once --lang zh
 改了集成点，再 smoke-test 后端：
 
 ```powershell
-uv run python -c "import memory_mcp.server; import verify_mcp.server; import cockpit.mcp_server; print('OK')"
+uv run python -c "import memory_mcp.server; import verify_mcp.server; import prove_mcp.server; import cockpit.mcp_server; print('OK')"
 ```
 
 ## 做非平凡改动之前要读什么

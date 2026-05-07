@@ -7,7 +7,7 @@
 
 ClaudeScientist is not a standalone research agent. It is **an augmentation layer that bolts onto Claude Code**, giving it persistent memory, verifiable experiment results, an interruptible research loop, and a real-time human-in-the-loop dashboard.
 
-The design assumes Claude Code already does scheduling, dialogue, sub-agents, and tool invocation well enough on its own, so this project only fills in three things: **memory, verification, and a cockpit**.
+The design assumes Claude Code already does scheduling, dialogue, sub-agents, and tool invocation well enough on its own, so this project only fills in four things: **memory, verification, statistical proof generation (v4.0), and a cockpit**.
 
 ## 2. What you actually see
 
@@ -43,7 +43,7 @@ Open two terminal windows side by side:
 | **Cockpit TUI** | Terminal B | Live state display; lets you intervene by hand | Monitoring screen |
 | **SQLite** | `.research-agent/state.db` | Stores everything: hypotheses, evidence, failures, ratings, preregistrations, events | Shared blackboard |
 
-**MCP (Model Context Protocol)** is a wire protocol that lets an AI invoke external Python functions. At startup, Claude Code reads `.claude/settings.json` and spawns several subprocesses: `memory_mcp`, `verify_mcp`, `cockpit.mcp_server`, plus two external packages `arxiv` and `openalex`. They all communicate with Claude over stdio, but **all of them read and write the same SQLite file**.
+**MCP (Model Context Protocol)** is a wire protocol that lets an AI invoke external Python functions. At startup, Claude Code reads `.claude/settings.json` and spawns several subprocesses: `memory_mcp`, `verify_mcp`, `prove_mcp` (v4.0 proof trunk), `cockpit.mcp_server`, plus two external packages `arxiv` and `openalex`, with optional `lean` (opt-in via `docs/setup-lean.md`). They all communicate with Claude over stdio, but **all of them read and write the same SQLite file**.
 
 ## 4. End-to-end flow of a research task
 

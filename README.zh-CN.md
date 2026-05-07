@@ -91,6 +91,7 @@ uv run python -m cockpit.tui --lang zh
 ```powershell
 uv run python -m memory_mcp.dev_server
 uv run python -m verify_mcp.dev_server
+uv run python -m prove_mcp.dev_server
 uv run python -m cockpit.mcp_server
 uv run python -m claudescientist.heldout register <name> <path>
 ```
@@ -101,9 +102,9 @@ uv run python -m claudescientist.heldout register <name> <path>
 
 ```powershell
 uv run ruff check
-uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/cockpit tests/e2e
+uv run pytest tests/memory_mcp tests/verify_mcp tests/prove_mcp tests/hooks tests/cockpit tests/scripts tests/e2e
 uv run python -m cockpit.tui --once --lang zh
-uv run python -c "import memory_mcp.server; import verify_mcp.server; import cockpit.mcp_server; print('OK')"
+uv run python -c "import memory_mcp.server; import verify_mcp.server; import prove_mcp.server; import cockpit.mcp_server; print('OK')"
 ```
 
 ## 状态与范围限制
@@ -112,7 +113,7 @@ uv run python -c "import memory_mcp.server; import verify_mcp.server; import coc
 
 - **自动剪枝默认是 dry-run**。设置 `RESEARCH_AGENT_AUTO_PRUNE=1` 才会让 `suggest_pause_low_strength` 真正把 `mem_bt_ratings.status` 翻到 `paused`。
 - **Cockpit 是终端优先**。没有受支持的浏览器前端，没有 Vite，也没有需要启动的 `uvicorn` 进程。
-- **Prover agent 还是占位**。Lean MCP 在本仓库中尚未接入。
+- **Prover agent 在 v4.0.0a0 已激活**，prompt 已挂上 `mcp__lean__*` 工具白名单；但 `.claude/settings.json` 里 `lean` MCP server 仍以 `_lean` 形式禁用，需用户按 `docs/setup-lean.zh-CN.md` 装好 elan + mathlib + lean-lsp-mcp 后手动启用。在那之前 prover agent 调 lean 时会清晰报错并退出——NL 证明工作流不依赖 Lean，没装也照样能用。
 - **`mem_nodes.elo_score` 作为向后兼容列保留**。新代码应当读 `mem_bt_ratings.strength` 等字段。
 
 完整的工具列表和已知范围限制请见 [`docs/tool-reference.zh-CN.md`](docs/tool-reference.zh-CN.md) 和 [`AGENTS.md`](AGENTS.md)。

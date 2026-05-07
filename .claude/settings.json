@@ -16,10 +16,10 @@
       "args": ["run", "python", "-m", "prove_mcp.dev_server"],
       "env": { "RESEARCH_AGENT_DEV": "1" }
     },
-    "_lean": {
-      "_comment": "Lean reinsurance MCP (P4). Inactive by default: rename '_lean' -> 'lean' AFTER following docs/setup-lean.md (install elan, lean-lsp-mcp, bootstrap mathlib4 project). Restart Claude Code to pick up the change.",
+    "lean": {
+      "_comment": "Lean reinsurance MCP (P4). Auto-dispatched via scripts/lean_mcp_or_noop.py: if elan + lake + lean are on PATH the wrapper forwards to lean-lsp-mcp; otherwise it exits 0 with a stderr note and the prover agent reports the tool as absent. Follow docs/setup-lean.md to install the toolchain.",
       "command": "uv",
-      "args": ["tool", "run", "lean-lsp-mcp"],
+      "args": ["run", "python", "scripts/lean_mcp_or_noop.py"],
       "env": {
         "LEAN_PROJECT_PATH": "${CLAUDE_PROJECT_DIR}/.research-agent/lean/claudescientist-proofs"
       }

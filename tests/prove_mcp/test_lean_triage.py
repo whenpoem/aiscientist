@@ -58,7 +58,10 @@ def test_triage_rejects_blacklist_hit(workspace):
     out = impl.triage_for_formalization(prop["node_id"])
     assert out["eligible"] is False
     assert "brownian motion" in out["blacklist_hits"]
-    assert "ito" in out["blacklist_hits"]
+    # Bug B/C fix: blacklist now uses multi-word phrases to avoid substring
+    # false-positives. 'ito calculus' instead of bare 'ito'.
+    assert "ito calculus" in out["blacklist_hits"]
+    assert "stochastic differential" in out["blacklist_hits"]
 
 
 def test_triage_difficulty_med_when_long_but_eligible(workspace):
@@ -72,6 +75,62 @@ def test_triage_difficulty_med_when_long_but_eligible(workspace):
     out = impl.triage_for_formalization(prop["node_id"])
     assert out["eligible"] is True
     assert out["estimated_difficulty"] in {"low", "med"}
+
+
+def test_triage_accepts_extended_whitelist(workspace):
+    """Bug A fix: extended whitelist covers Borel-Cantelli, Hoeffding,
+    Rao-Blackwell, sub-Gaussian, KL, etc. — propositions that obviously
+    belong in mathlib's coverage but were rejected by the v1 keyword set."""
+    impl = workspace["prove_mcp.impl"]
+    cases = [
+        "Borel-Cantelli first lemma: summable probabilities exclude i.o. events",
+        "Hoeffding inequality for bounded independent sums",
+        "Rao-Blackwell theorem: conditioning on a sufficient statistic",
+        "sub-gaussian tail bound from MGF control",
+        "Pinsker inequality bounding TV by sqrt of KL divergence",
+        "Glivenko-Cantelli: empirical CDF converges uniformly almost surely",
+    ]
+    for text in cases:
+        prop = impl.propose_proposition(text)
+        out = impl.triage_for_formalization(prop["node_id"])
+        assert out["eligible"], f"expected eligible for {text!r}; got {out}"
+        assert out["estimated_difficulty"] in {"low", "med"}
+
+
+def test_triage_word_boundary_no_false_positive(workspace):
+    """Bug C fix: 'controls' must not trigger an 'ols' whitelist hit."""
+    impl = workspace["prove_mcp.impl"]
+    prop = impl.propose_proposition(
+        "We compare across experimental controls and check the moment estimate."
+    )
+    out = impl.triage_for_formalization(prop["node_id"])
+    assert "ols" not in out["whitelist_hits"], (
+        f"'ols' substring matched 'controls'; whitelist_hits={out['whitelist_hits']}"
+    )
+
+
+def test_triage_rejected_difficulty_is_na(workspace):
+    """Bug D fix: rejected propositions get difficulty='n/a', not 'high'."""
+    impl = workspace["prove_mcp.impl"]
+    prop = impl.propose_proposition(
+        "Use Brownian motion stochastic differential equation."
+    )
+    out = impl.triage_for_formalization(prop["node_id"])
+    assert out["eligible"] is False
+    assert out["estimated_difficulty"] == "n/a"
+
+
+def test_triage_lebesgue_no_longer_blacklisted(workspace):
+    """Bug B fix: 'lebesgue integral' was over-aggressively blacklisted;
+    mathlib has full Lebesgue integration coverage. A proposition mentioning
+    a Lebesgue integral should be allowed if it has whitelist hits."""
+    impl = workspace["prove_mcp.impl"]
+    prop = impl.propose_proposition(
+        "By dominated convergence, the Lebesgue integral of f_n converges "
+        "to the integral of f, giving the moment bound and concentration."
+    )
+    out = impl.triage_for_formalization(prop["node_id"])
+    assert out["eligible"] is True, f"unexpectedly rejected: {out}"
 
 
 def test_triage_unknown_proposition_raises(workspace):

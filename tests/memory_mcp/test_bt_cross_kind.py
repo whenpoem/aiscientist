@@ -28,6 +28,20 @@ def _insert_skeleton(con, node_id: str, text: str) -> None:
     )
 
 
+def _insert_hypothesis(con, node_id: str, text: str) -> None:
+    con.execute(
+        """
+        INSERT INTO mem_nodes(node_id, kind, text, state, created_by, parent_id)
+        VALUES(?,?,?,?,?,?)
+        """,
+        (node_id, "hypothesis", text, "active", "test", None),
+    )
+    con.execute(
+        "INSERT OR IGNORE INTO mem_bt_ratings(node_id) VALUES(?)",
+        (node_id,),
+    )
+
+
 def test_update_bt_rating_allows_proof_skeleton_pair(workspace):
     impl = workspace["memory_mcp.impl"]
     db = workspace["memory_mcp.db"]
@@ -159,3 +173,65 @@ def test_expected_information_gain_filters_candidates_to_requested_kind(workspac
         kind="proof_skeleton",
     )
     assert {row["node_id"] for row in scores} == {"psk_eig_a", "psk_eig_b"}
+
+
+def test_suggest_pause_covers_proof_skeletons(workspace):
+    """Bug M fix: suggest_pause_low_strength used to hardcode kind='hypothesis',
+    leaving the proof tournament unprunable. Now it walks both BT-rankable
+    kinds by default."""
+    impl = workspace["memory_mcp.impl"]
+    db = workspace["memory_mcp.db"]
+    con = db._connect()
+    try:
+        _insert_hypothesis(con, "hyp_weak", "weak hypothesis")
+        _insert_skeleton(con, "psk_weak", "weak proof skeleton")
+        # Bump n_comparisons past the min threshold of 6 so they're eligible
+        # for pause; leave strength at 0 so UCB stays low.
+        for nid in ("hyp_weak", "psk_weak"):
+            con.execute(
+                "UPDATE mem_bt_ratings SET n_comparisons = 6 WHERE node_id = ?",
+                (nid,),
+            )
+    finally:
+        con.close()
+
+    out = impl.suggest_pause_low_strength(ucb_threshold=10.0, min_comparisons=6)
+    suggested_ids = {row["node_id"] for row in out["suggested"]}
+    assert "hyp_weak" in suggested_ids
+    assert "psk_weak" in suggested_ids
+    # Each row carries kind so consumers can filter by trunk if needed.
+    by_id = {row["node_id"]: row["kind"] for row in out["suggested"]}
+    assert by_id["hyp_weak"] == "hypothesis"
+    assert by_id["psk_weak"] == "proof_skeleton"
+
+
+def test_suggest_pause_kind_filter(workspace):
+    """When kind is explicitly set, only that trunk is considered."""
+    impl = workspace["memory_mcp.impl"]
+    db = workspace["memory_mcp.db"]
+    con = db._connect()
+    try:
+        _insert_hypothesis(con, "hyp_only", "weak hypothesis")
+        _insert_skeleton(con, "psk_only", "weak proof skeleton")
+        for nid in ("hyp_only", "psk_only"):
+            con.execute(
+                "UPDATE mem_bt_ratings SET n_comparisons = 6 WHERE node_id = ?",
+                (nid,),
+            )
+    finally:
+        con.close()
+
+    only_proof = impl.suggest_pause_low_strength(
+        ucb_threshold=10.0, min_comparisons=6, kind="proof_skeleton"
+    )
+    suggested = {row["node_id"] for row in only_proof["suggested"]}
+    assert "psk_only" in suggested
+    assert "hyp_only" not in suggested
+
+
+def test_suggest_pause_invalid_kind_raises(workspace):
+    impl = workspace["memory_mcp.impl"]
+    with pytest.raises(ValueError, match="kind must be in"):
+        impl.suggest_pause_low_strength(
+            ucb_threshold=0.0, min_comparisons=1, kind="evidence"
+        )

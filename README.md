@@ -91,6 +91,7 @@ Useful commands:
 ```powershell
 uv run python -m memory_mcp.dev_server
 uv run python -m verify_mcp.dev_server
+uv run python -m prove_mcp.dev_server
 uv run python -m cockpit.mcp_server
 uv run python -m claudescientist.heldout register <name> <path>
 ```
@@ -101,9 +102,9 @@ Typical checks before shipping a change:
 
 ```powershell
 uv run ruff check
-uv run pytest tests/memory_mcp tests/verify_mcp tests/hooks tests/cockpit tests/e2e
+uv run pytest tests/memory_mcp tests/verify_mcp tests/prove_mcp tests/hooks tests/cockpit tests/scripts tests/e2e
 uv run python -m cockpit.tui --once --lang zh
-uv run python -c "import memory_mcp.server; import verify_mcp.server; import cockpit.mcp_server; print('OK')"
+uv run python -c "import memory_mcp.server; import verify_mcp.server; import prove_mcp.server; import cockpit.mcp_server; print('OK')"
 ```
 
 ## Status and scope limits
@@ -112,7 +113,7 @@ This repository is suitable for local development and integration work, but it s
 
 - **Auto-prune is dry-run by default.** Set `RESEARCH_AGENT_AUTO_PRUNE=1` to let `suggest_pause_low_strength` actually flip `mem_bt_ratings.status` to `paused`.
 - **The cockpit is terminal-first.** There is no supported browser frontend, no Vite, and no `uvicorn` process to run.
-- **The prover agent is still a placeholder.** Lean MCP is not wired in this repository.
+- **The prover agent is activated** in v4.0.0a0 with `mcp__lean__*` tools whitelisted, but the `lean` MCP server entry stays disabled (`_lean`) until the user runs `docs/setup-lean.md`. Without that, the prover agent reports `lean MCP not configured` and bails cleanly — the NL proof workflow remains fully usable without Lean.
 - **`mem_nodes.elo_score` is preserved** as a backwards-compatibility column. New code should read `mem_bt_ratings.strength` and friends.
 
 For the complete tool list and all known scope limits, see [`docs/tool-reference.md`](docs/tool-reference.md) and [`AGENTS.md`](AGENTS.md).

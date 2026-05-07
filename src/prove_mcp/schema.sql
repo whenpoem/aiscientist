@@ -69,8 +69,11 @@ CREATE TABLE IF NOT EXISTS prv_lean_attempts (
   duration_sec REAL,
   triage_eligible INTEGER NOT NULL DEFAULT 0 CHECK(triage_eligible IN (0, 1)),
   triage_reasons TEXT NOT NULL DEFAULT '[]',
+  -- 'n/a' added in schema_version=4 (Plan v2 / Bug D fix): rejected propositions
+  -- get 'n/a' instead of an over-strong 'high' label so audit consumers can
+  -- distinguish "rejected by triage" from "eligible but expected to be hard".
   triage_difficulty TEXT NOT NULL DEFAULT 'unknown'
-    CHECK(triage_difficulty IN ('low', 'med', 'high', 'unknown')),
+    CHECK(triage_difficulty IN ('low', 'med', 'high', 'n/a', 'unknown')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -420,6 +420,7 @@ def get_bt_leaderboard(
 def suggest_pause_low_strength(
     ucb_threshold: float,
     min_comparisons: int = 6,
+    kind: str | None = None,
 ) -> dict:
     """Suggest pausing branches whose Bradley-Terry UCB lies below a threshold.
 
@@ -428,25 +429,38 @@ def suggest_pause_low_strength(
     environment variable is truthy we additionally flip ``mem_bt_ratings.status``
     to ``paused`` and emit ``branch_paused`` events. The dry-run default keeps
     the system safe: pause is reversible via :func:`resume_branch`.
+
+    ``kind`` filters which BT-rankable kinds participate. ``None`` (default)
+    walks both ``hypothesis`` and ``proof_skeleton`` so the proof-trunk
+    tournament is auto-prunable too. Pass an explicit kind to scope to one
+    trunk.
     """
     min_n = max(1, int(min_comparisons))
     auto = _auto_prune_enabled()
     suggested: list[dict] = []
     paused: list[dict] = []
 
+    if kind is not None and kind not in BT_RANKABLE_KINDS:
+        raise ValueError(
+            f"suggest_pause_low_strength kind must be in {BT_RANKABLE_KINDS} or None; "
+            f"got {kind!r}"
+        )
+    target_kinds = (kind,) if kind is not None else BT_RANKABLE_KINDS
+    placeholders = ",".join("?" for _ in target_kinds)
+
     with tx() as con:
         rows = con.execute(
-            """
+            f"""
             SELECT r.node_id, r.strength, r.strength_var, r.n_comparisons,
-                   r.status, n.text
+                   r.status, n.kind, n.text
             FROM mem_bt_ratings r
             JOIN mem_nodes n ON n.node_id = r.node_id
             WHERE r.status = 'active'
-              AND n.kind = 'hypothesis'
+              AND n.kind IN ({placeholders})
               AND n.state = 'active'
               AND r.n_comparisons >= ?
             """,
-            (min_n,),
+            (*target_kinds, min_n),
         ).fetchall()
 
         for row in rows:
@@ -457,6 +471,7 @@ def suggest_pause_low_strength(
                 continue
             payload = {
                 "node_id": row["node_id"],
+                "kind": row["kind"],
                 "text": row["text"],
                 "strength": round(strength, 6),
                 "ucb": round(ucb, 6),

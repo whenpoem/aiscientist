@@ -39,62 +39,172 @@ from prove_mcp.db import _connect, tx
 from ._common import _emit_event
 
 VALID_STATUS = {"queued", "running", "verified", "failed", "timeout"}
-VALID_DIFFICULTY = {"low", "med", "high", "unknown"}
+# Difficulty buckets only apply to eligible propositions. Ineligible ones
+# get 'n/a' so downstream consumers can distinguish "rejected by triage" from
+# "eligible but expected to be hard". 'unknown' remains for legacy callers
+# that record_lean_attempt without passing a triage payload.
+VALID_DIFFICULTY = {"low", "med", "high", "n/a", "unknown"}
 
 _WHITELIST = {
+    # Probability inequalities (mathlib-friendly).
+    "markov",
+    "chebyshev",
+    "cauchy-schwarz",
+    "cauchy schwarz",
+    "jensen",
+    "holder",
+    "hoeffding",
+    "bernstein",
+    "bonferroni",
+    "union bound",
+    "mcdiarmid",
+    # Borel-Cantelli + zero-one laws.
+    "borel-cantelli",
+    "borel cantelli",
+    # Convergence theorems (mathlib has these).
+    "central limit",
+    "law of large numbers",
+    "lindeberg",
+    "slutsky",
+    "continuous mapping",
+    "delta method",
+    "donsker",
+    "glivenko-cantelli",
+    "glivenko cantelli",
+    "portmanteau",
+    "skorokhod",
+    "characteristic function",
+    "levy",
+    # Concentration / tails.
+    "concentration",
+    "tail bound",
+    "sub-gaussian",
+    "subgaussian",
+    "sub-exponential",
+    "subexponential",
+    "azuma",
+    # Estimation theory.
     "expectation",
     "variance",
+    "covariance",
+    "correlation",
     "moment",
     "independent",
     "iid",
     "sample mean",
+    "sample variance",
     "unbiased",
     "estimator",
     "linearity",
-    "cauchy-schwarz",
-    "cauchy schwarz",
-    "chebyshev",
-    "markov",
-    "jensen",
-    "bonferroni",
-    "central limit",
-    "law of large numbers",
+    "rao-blackwell",
+    "rao blackwell",
+    "lehmann-scheffe",
+    "lehmann scheffe",
+    "fisher information",
+    "cramer-rao",
+    "cramer rao",
+    "score function",
     "mle",
+    "maximum likelihood",
     "consistency",
-    "delta method",
+    "asymptotic normality",
+    "asymptotic efficiency",
+    "sufficient",
+    "sufficiency",
+    "ancillary",
+    "basu",
+    # Hypothesis testing.
+    "neyman-pearson",
+    "neyman pearson",
+    "likelihood ratio",
+    "wald test",
+    "score test",
+    "lr test",
+    "uniformly most powerful",
+    "ump",
+    "monotone likelihood ratio",
+    "karlin-rubin",
+    "p-value",
+    "p value",
+    # Bayes.
     "bayes",
     "posterior",
+    "conjugate",
+    "bernstein-von mises",
+    "bernstein von mises",
+    # Regression.
     "regression",
-    "ols",
-    "concentration",
-    "tail bound",
+    "gauss-markov",
+    "gauss markov",
+    "blue",
+    "leverage",
+    "hat matrix",
+    "homoskedastic",
+    # Information theory.
+    "kl divergence",
+    "kullback-leibler",
+    "kullback leibler",
+    "pinsker",
+    "fano",
+    "data processing",
+    "entropy",
+    # Distributions / common settings.
     "binomial",
+    "poisson",
     "gaussian",
-    "normal",
+    "normal distribution",
+    "bernoulli",
 }
 
 _BLACKLIST = {
+    # Functional-analytic objects mathlib has but stat-proofs rarely need;
+    # appearance signals an out-of-scope abstraction level.
     "banach",
     "hilbert",
     "frechet",
     "sobolev",
-    "stochastic differential",
-    "ito",
-    "brownian motion",
-    "infinite-dimensional",
-    "measure-preserving",
-    "ergodic",
-    "lebesgue integral",
     "operator algebra",
+    "infinite-dimensional",
+    "infinite dimensional",
+    # Stochastic processes / SDEs — mathlib coverage is genuinely thin.
+    "stochastic differential",
+    "brownian motion",
+    "ito calculus",
+    "ito's lemma",
+    "ito formula",
+    # NOTE: removed 'lebesgue integral', 'ergodic', 'measure-preserving' from
+    # earlier blacklist - mathlib has them. They were over-aggressive.
 }
+
+# Whitelist tokens that need word-boundary protection because their substring
+# also appears inside common English words. E.g. 'ols' is inside 'controls',
+# 'tools'; 'mle' could appear inside an arbitrary word; 'rao' inside 'narrate'.
+# These are matched with re word-boundary instead of plain substring.
+_WORD_BOUNDARY_REQUIRED = {"ols", "mle", "rao", "ump", "blue", "ito"}
+
 
 def _normalize_for_keywords(text: str) -> str:
     return (text or "").lower()
 
 
 def _keyword_hits(text: str, vocab: set[str]) -> list[str]:
+    """Return sorted list of vocab keywords that appear in text.
+
+    Most keywords match by simple substring (covers multi-word terms like
+    "central limit" cleanly). Tokens listed in ``_WORD_BOUNDARY_REQUIRED``
+    use a regex word-boundary check so they don't false-positive on words
+    like ``controls`` (which contains the substring ``ols``).
+    """
+    import re as _re
     haystack = _normalize_for_keywords(text)
-    return sorted({kw for kw in vocab if kw in haystack})
+    hits: set[str] = set()
+    for kw in vocab:
+        if kw in _WORD_BOUNDARY_REQUIRED:
+            if _re.search(rf"\b{_re.escape(kw)}\b", haystack):
+                hits.add(kw)
+        elif kw in haystack:
+            hits.add(kw)
+    return sorted(hits)
 
 
 def triage_for_formalization(proposition_id: str) -> dict[str, Any]:
@@ -146,12 +256,15 @@ def triage_for_formalization(proposition_id: str) -> dict[str, Any]:
             f"blacklist keywords matched (mathlib coverage thin): {blacklist_hits}"
         )
 
-    if eligible and n <= 250 and len(whitelist_hits) >= 2:
+    if not eligible:
+        # Rejected: don't pretend to estimate effort. The agent treats this
+        # as "do not attempt" regardless; downstream audits should distinguish
+        # rejection from a hard-but-eligible attempt.
+        difficulty = "n/a"
+    elif n <= 250 and len(whitelist_hits) >= 2:
         difficulty = "low"
-    elif eligible:
-        difficulty = "med"
     else:
-        difficulty = "high"
+        difficulty = "med"
 
     return {
         "proposition_id": proposition_id,

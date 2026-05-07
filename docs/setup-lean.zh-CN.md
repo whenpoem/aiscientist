@@ -67,25 +67,17 @@ lake build
 
 ## 4. 启用 lean MCP 服务器
 
-`.claude/settings.json` 默认把 `lean` mcpServer 块**注释掉**了
-（key 上加 `_` 前缀），避免没装 Lean 的人启动 Claude Code 时报错。要启用，
-编辑文件去掉前缀：
+**不用改 settings.json**。`.claude/settings.json` 里已经登记了一个 `lean`
+mcpServer，命令是 `scripts/lean_mcp_or_noop.py`。这个 wrapper 启动时检测
+PATH 上是否有 `lake` 和 `lean`：
 
-```json
-{
-  "mcpServers": {
-    "lean": {
-      "command": "uv",
-      "args": ["tool", "run", "lean-lsp-mcp"],
-      "env": {
-        "LEAN_PROJECT_PATH": "D:/aiscientist/claudescientist/.research-agent/lean/claudescientist-proofs"
-      }
-    }
-  }
-}
-```
+- 工具链已装 → wrapper 把 stdio 透传给真正的 `lean-lsp-mcp`
+- 工具链未装 → wrapper 干净退出（exit 0）+ 一行 stderr 说明；
+  prover agent 调时看到没有 `mcp__lean__*` 工具，按 prompt 自动终止
 
-改完重启 Claude Code session。
+所以做完 1-3 节后**直接重启 Claude Code 就行**，lean MCP 自动上线。
+不需要手改 JSON、不需要重命名。以后哪天卸了 elan / mathlib，wrapper
+自动回退，不用做任何撤销。
 
 ## 4b. 预先放入 spike 模板
 
