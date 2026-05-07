@@ -95,6 +95,26 @@ def _snapshot(con: sqlite3.Connection) -> dict[str, Any]:
         ORDER BY id
         """,
     )
+    # Proof trunk additions (architecture.md §13). _safe_rows returns []
+    # when prv_* tables don't exist yet (legacy v3.0 DB).
+    proof_manifests = _safe_rows(
+        con,
+        """
+        SELECT manifest_id, status
+        FROM prv_diagnostic_manifests
+        ORDER BY manifest_id DESC
+        LIMIT 200
+        """,
+    )
+    lean_attempts = _safe_rows(
+        con,
+        """
+        SELECT attempt_id, status, coalesce(duration_sec, 0.0) AS duration_sec
+        FROM prv_lean_attempts
+        ORDER BY attempt_id DESC
+        LIMIT 200
+        """,
+    )
 
     node_states = {row["node_id"]: row["state"] for row in nodes}
     node_details = {
@@ -105,6 +125,20 @@ def _snapshot(con: sqlite3.Connection) -> dict[str, Any]:
         }
         for row in nodes
     }
+    proof_manifests_open = sum(1 for row in proof_manifests if row["status"] == "open")
+    proof_manifests_applied = sum(
+        1 for row in proof_manifests if row["status"] == "applied"
+    )
+    proof_manifests_empty = sum(
+        1 for row in proof_manifests if row["status"] == "empty"
+    )
+    lean_verified = sum(1 for row in lean_attempts if row["status"] == "verified")
+    lean_failed = sum(1 for row in lean_attempts if row["status"] == "failed")
+    lean_timeout = sum(1 for row in lean_attempts if row["status"] == "timeout")
+    lean_wallclock_used_sec = float(
+        sum(float(row["duration_sec"] or 0.0) for row in lean_attempts)
+    )
+
     summary = {
         "nodes_total": len(nodes),
         "active_nodes": sum(1 for row in nodes if row["state"] == "active"),
@@ -114,6 +148,15 @@ def _snapshot(con: sqlite3.Connection) -> dict[str, Any]:
         "failure_hits_total": sum(int(row["seen_count"]) for row in failures),
         "papers_total": len(papers),
         "provenance_total": len(provenance),
+        "proof_manifests_total": len(proof_manifests),
+        "proof_manifests_open": proof_manifests_open,
+        "proof_manifests_applied": proof_manifests_applied,
+        "proof_manifests_empty": proof_manifests_empty,
+        "lean_attempts_total": len(lean_attempts),
+        "lean_attempts_verified": lean_verified,
+        "lean_attempts_failed": lean_failed,
+        "lean_attempts_timeout": lean_timeout,
+        "lean_wallclock_used_sec": round(lean_wallclock_used_sec, 3),
     }
     return {
         "summary": summary,
@@ -126,6 +169,12 @@ def _snapshot(con: sqlite3.Connection) -> dict[str, Any]:
             },
             "paper_ids": [str(row["paper_id"]) for row in papers],
             "provenance_max_id": max((int(row["id"]) for row in provenance), default=0),
+            "proof_manifest_max_id": max(
+                (int(row["manifest_id"]) for row in proof_manifests), default=0
+            ),
+            "lean_attempt_max_id": max(
+                (int(row["attempt_id"]) for row in lean_attempts), default=0
+            ),
         },
         "rows": {
             "nodes": nodes,
@@ -133,6 +182,8 @@ def _snapshot(con: sqlite3.Connection) -> dict[str, Any]:
             "failures": failures,
             "papers": papers,
             "provenance": provenance,
+            "proof_manifests": proof_manifests,
+            "lean_attempts": lean_attempts,
         },
     }
 
@@ -145,6 +196,8 @@ def _build_delta(previous: dict[str, Any], current: dict[str, Any]) -> dict[str,
     }
     prev_paper_ids = {str(paper_id) for paper_id in previous.get("paper_ids", [])}
     prev_provenance_max_id = int(previous.get("provenance_max_id", 0))
+    prev_proof_manifest_max_id = int(previous.get("proof_manifest_max_id", 0))
+    prev_lean_attempt_max_id = int(previous.get("lean_attempt_max_id", 0))
 
     node_details = current["state"]["node_details"]
     new_nodes = [
@@ -214,6 +267,23 @@ def _build_delta(previous: dict[str, Any], current: dict[str, Any]) -> dict[str,
         for row in current["rows"]["provenance"]
         if int(row["id"]) > prev_provenance_max_id
     ]
+    new_proof_manifests = [
+        {
+            "manifest_id": int(row["manifest_id"]),
+            "status": row["status"],
+        }
+        for row in current["rows"].get("proof_manifests", [])
+        if int(row["manifest_id"]) > prev_proof_manifest_max_id
+    ]
+    new_lean_attempts = [
+        {
+            "attempt_id": int(row["attempt_id"]),
+            "status": row["status"],
+            "duration_sec": float(row["duration_sec"] or 0.0),
+        }
+        for row in current["rows"].get("lean_attempts", [])
+        if int(row["attempt_id"]) > prev_lean_attempt_max_id
+    ]
 
     counts = {
         "new_nodes": len(new_nodes),
@@ -223,6 +293,8 @@ def _build_delta(previous: dict[str, Any], current: dict[str, Any]) -> dict[str,
         "repeated_failures": len(repeated_failures),
         "new_papers": len(new_papers),
         "new_provenance": len(new_provenance),
+        "new_proof_manifests": len(new_proof_manifests),
+        "new_lean_attempts": len(new_lean_attempts),
     }
     return {
         "counts": counts,
@@ -233,6 +305,8 @@ def _build_delta(previous: dict[str, Any], current: dict[str, Any]) -> dict[str,
         "repeated_failures": _sample(repeated_failures),
         "new_papers": _sample(new_papers),
         "new_provenance": _sample(new_provenance),
+        "new_proof_manifests": _sample(new_proof_manifests),
+        "new_lean_attempts": _sample(new_lean_attempts),
         "has_changes": any(count > 0 for count in counts.values()),
     }
 

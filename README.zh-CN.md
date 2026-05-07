@@ -6,7 +6,7 @@ ClaudeScientist 是给 Claude Code 加装的一层科研增强层。它不替换
 
 仓库当前交付的是 **v3.0** 计划：把研究流程做成一场带预算控制的 Bradley-Terry 锦标赛，配以诚实的 95% 置信区间、可刷新的溯源 DAG，以及带多重比较校正的预注册机制。
 
-**v4.0 在做**：项目正在向**两主干架构**扩展——现有的 ML 可重复性接口成为 *empirical 主干*，新增的 *proof 主干*（`prove_mcp`）用于统计证明生成，附带 Lean 形式化保险层。两条主干共用一个内核：假设图、错题本、BT 锦标赛、校准、replay、cockpit。详见 [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+**v4.0.0a0（alpha）已发布**：项目已扩展为**两主干架构**——现有的 ML 可重复性接口是 *empirical 主干*，新增的 *proof 主干*（`prove_mcp`）负责统计证明生成，可选 Lean 形式化保险层。两条主干共用一个内核：假设图、错题本、BT 锦标赛、校准、replay、cockpit。冷启动数据放在 `data/`；Lean 是按需启用（详见 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md)）。详见 [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ## 五分钟入门
 
@@ -25,18 +25,32 @@ ClaudeScientist 是给 Claude Code 加装的一层科研增强层。它不替换
 
 ## 项目里有什么
 
-- **Memory MCP** —— 假说图、Bradley-Terry 排名、校准账本、回放分支、失败记忆、压缩文献笔记
+- **Memory MCP** —— 假说图（含 proof 主干 node kind）、Bradley-Terry 排名（hypothesis 与 proof_skeleton 跨 kind 互比）、校准账本、回放分支（覆盖 proof 子树）、错题本（跨域）、压缩文献笔记
 - **Verify MCP** —— 泄漏检测、可刷新的溯源 DAG、指标 pin、种子扰动、baseline 公平性、隔离数据集预算控制、带 BH/Bonferroni 校正的预注册、资源账本
-- **Hooks** —— PreToolUse 的泄漏与破坏性命令拦截、PostToolUse 的溯源记录、干预注入、stop flush
-- **Cockpit TUI** —— 终端优先的监控与干预界面，支持中英文标签切换，自带实时 Bradley-Terry 排行榜
+- **Prove MCP** *(v4.0)* —— 证明语料 + 双向 max-matching 检索、NL 工作流（切片 → 诊断 → 修正）、Lean 形式化保险层接口（triage + attempt log）
+- **Hooks** —— PreToolUse 的泄漏与破坏性命令拦截、PostToolUse 的溯源记录、干预注入、感知 proof 事件的 stop flush
+- **Cockpit TUI** —— 终端优先的监控与干预界面，支持中英文标签切换，自带实时 Bradley-Terry 排行榜，能渲染 proof 主干事件
+- **冷启动数据** —— `data/proof_corpus_seed.jsonl`（≥80 道统计证明问题）+ `data/proof_failure_seed.jsonl`（≥60 条常见证明错误模式），由 `scripts/seed_proof_corpus.py` / `scripts/seed_proof_failures.py` 加载
 
 ## 快速开始
 
 在仓库根目录安装依赖：
 
 ```powershell
-uv sync
+uv sync                  # 只装 ML / empirical 主干
+uv sync --extra proof    # 同时装 sentence-transformers，用于 proof 主干
 ```
+
+`uv sync --extra proof` 之后，灌一次冷启动语料：
+
+```powershell
+uv run python scripts/seed_proof_corpus.py
+uv run python scripts/seed_proof_failures.py
+```
+
+默认 embedding 后端是 `local`（sentence-transformers/all-MiniLM-L6-v2）。可用 `RESEARCH_AGENT_EMBED_BACKEND=mock|openai` 覆盖；测试自动 pin 为 `mock`。
+
+Lean 形式化保险层是**按需启用**。需要时按 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md) 一次性安装 elan + mathlib + lean-lsp-mcp。
 
 日常使用时，从仓库根目录打开两个终端。
 

@@ -10,8 +10,10 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RESEARCH_AGENT_STATE_DIR", str(tmp_path / ".research-agent"))
     # Tests run under the deterministic mock embedding backend so they need
-    # neither sentence-transformers nor an OPENAI_API_KEY. See ADR 0008 +
-    # prove_mcp/embedding.py for the available backends.
+    # neither sentence-transformers nor an OPENAI_API_KEY. The live MCP server
+    # defaults to the 'local' backend (sentence-transformers); install via
+    # `uv sync --extra proof`. See ADR 0008 + prove_mcp/embedding.py for the
+    # available backends.
     monkeypatch.setenv("RESEARCH_AGENT_EMBED_BACKEND", "mock")
     module_names = [
         "memory_mcp.db",

@@ -17,7 +17,7 @@ table below is a human summary.
 | `destructive_bash_guard.py` | PreToolUse | `Bash` | Deny destructive commands (`rm -rf`, `git reset --hard`, etc.) unless `# CONFIRM_DESTRUCTIVE` is in the command. |
 | `provenance_log.py` | PostToolUse | `Bash` | Extract numeric tokens from stdout via `extract_metric_tokens` and write them to `ver_provenance`. |
 | `intervention_pump.py` | UserPromptSubmit + Stop | (any) | Drain rows from `cockpit_interventions` and inject as `additionalContext` for the next turn. |
-| `stop_flush.py` | Stop | (any) | Emit a `turn_end` cockpit event. |
+| `stop_flush.py` | Stop | (any) | Emit a `turn_end` cockpit event. Summary covers both trunks: empirical counts (nodes, edges, failures, papers, provenance) plus proof aggregates (`proof_manifests_*`, `lean_attempts_*`, `lean_wallclock_used_sec`). Reads `prv_diagnostic_manifests` / `prv_lean_attempts` defensively (zero on legacy DBs without the proof schema). |
 
 ## Critical invariants
 
@@ -43,7 +43,7 @@ table below is a human summary.
 | `destructive_bash_guard.py` | (none) | (none) |
 | `provenance_log.py` | (none) | `ver_provenance` |
 | `intervention_pump.py` | `cockpit_interventions` | `cockpit_interventions.delivered_at` |
-| `stop_flush.py` | (none) | `cockpit_events` (`turn_end`) |
+| `stop_flush.py` | `mem_nodes`, `mem_edges`, `mem_failures`, `mem_lit_compressed`, `ver_provenance`, `prv_diagnostic_manifests` *(safe-fallback)*, `prv_lean_attempts` *(safe-fallback)* | `cockpit_events` (`turn_end`) |
 
 ## Do NOT
 

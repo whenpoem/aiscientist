@@ -1,7 +1,7 @@
 [project]
 name = "claudescientist"
-version = "0.2.0"
-description = "Research-agent augmentation layer for Claude Code with SQLite memory, verification MCPs, and a Textual cockpit TUI."
+version = "4.0.0a0"
+description = "Research-agent augmentation layer for Claude Code with SQLite memory, verification MCPs, a proof trunk with NL workflow + Lean reinsurance, and a Textual cockpit TUI."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -15,6 +15,10 @@ keywords = [
     "sqlite",
     "textual",
     "tui",
+    "proof",
+    "lean",
+    "statistics",
+    "formal-methods",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -23,6 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
@@ -30,6 +35,15 @@ dependencies = [
     "pydantic>=2.13.1",
     "textual>=8.2,<9.0",
 ]
+
+[project.optional-dependencies]
+# Live embedding backends for the proof trunk (`prove_mcp`). Tests stay on the
+# deterministic mock backend (see tests/conftest.py); these extras are for
+# real cold-start ingest of the proof corpus + diagnose_snippet retrievals.
+embed-local  = ["sentence-transformers>=2.2"]
+embed-openai = ["openai>=1.0"]
+proof        = ["sentence-transformers>=2.2"]   # alias: recommended local setup
+all          = ["sentence-transformers>=2.2", "openai>=1.0"]
 
 [project.urls]
 Repository = "https://github.com/whenpoem/aiscientist"

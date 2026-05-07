@@ -118,11 +118,17 @@ class LocalEmbedder(EmbeddingBackend):
         except ImportError as exc:
             raise RuntimeError(
                 "LocalEmbedder requires the optional 'sentence-transformers' "
-                "package. Install via `uv add sentence-transformers` or "
-                "switch backend with RESEARCH_AGENT_EMBED_BACKEND=mock."
+                "package. Install via `uv sync --extra proof` (recommended) or "
+                "`uv add sentence-transformers`, or switch backend with "
+                "RESEARCH_AGENT_EMBED_BACKEND=mock."
             ) from exc
         self._model = SentenceTransformer(self.model_name)
-        self._dim = int(self._model.get_sentence_embedding_dimension())
+        # sentence-transformers 5.x renamed get_sentence_embedding_dimension to
+        # get_embedding_dimension. Prefer the new name; fall back for <5.x.
+        get_dim = getattr(
+            self._model, "get_embedding_dimension", None
+        ) or self._model.get_sentence_embedding_dimension
+        self._dim = int(get_dim())
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if self._model is None:
@@ -167,8 +173,8 @@ class OpenAIEmbedder(EmbeddingBackend):
         except ImportError as exc:
             raise RuntimeError(
                 "OpenAIEmbedder requires the optional 'openai' package. "
-                "Install via `uv add openai` or switch backend with "
-                "RESEARCH_AGENT_EMBED_BACKEND=local."
+                "Install via `uv sync --extra embed-openai` or `uv sync --extra all`, "
+                "or switch backend with RESEARCH_AGENT_EMBED_BACKEND=local."
             ) from exc
         self._client = OpenAI()
 

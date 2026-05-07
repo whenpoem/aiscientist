@@ -227,7 +227,16 @@ The two trunks share four cooperation interfaces (one tree, one failure ledger, 
 - We will not match StatProver's 40k-corpus / 80k-error-repo scale. Our wedge is workflow integration, not retrieval quality.
 - Lean reinsurance is opt-in per proposition; we never gate the workflow on Lean success.
 
-**Status**: in flight (v4.0 phasing plan).
+**Status**: alpha shipped in v4.0.0a0 (P0–P5 + Plan v2 cold-start data + Lean activation prep).
+
+**Deferred to v4.x**:
+- Theorem-claim hook gate (the `\begin{theorem}` regex in
+  `leakage_guard.py`).
+- `CHANGELOG.md` capturing the v3.0 → v4.0 jump.
+- FTS5 on `prv_corpus_problems` for >5k corpora (current scale doesn't
+  need it).
+- Domain-aware `meta_calibration` so per-agent reliability tracks
+  empirical vs proof verdicts separately.
 
 ---
 
@@ -246,7 +255,7 @@ If you start today, I would suggest this order:
 9. **Direction 9 (Git archaeology)** — extend cold-start once the core stabilizes
 10. **Direction 10 (comparison benchmark)** — only after the system has driven a few real research projects
 
-**Direction 11 (Proof trunk) is treated separately** as an in-flight v4.0 commitment, not as a "should we do it" question — see ADR 0008 and the phasing plan.
+**Direction 11 (Proof trunk)** has shipped as v4.0.0a0; remaining items are listed under that direction's "Deferred to v4.x" block above.
 
 ## A few directions explicitly **not** on the roadmap
 

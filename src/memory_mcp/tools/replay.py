@@ -3,11 +3,18 @@
 Snapshot reaches into the failures and contradictions submodules to assemble
 its full payload; replay branches are stored in their own table without
 touching ``mem_nodes`` or ``mem_bt_ratings``.
+
+Snapshot scope spans both trunks (architecture.md §13): empirical-side
+``mem_nodes`` plus the proof trunk's ``prv_corpus_problems``,
+``prv_diagnostic_manifests``, and ``prv_lean_attempts``. Reads against
+``prv_*`` are wrapped in ``OperationalError`` so v3.0-only DBs (no proof
+schema yet) snapshot cleanly with empty proof sections.
 """
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from uuid import uuid4
 
 from memory_mcp.db import _connect, tx
@@ -38,8 +45,79 @@ def _graph_snapshot(con) -> tuple[list[dict], list[dict]]:
     return _rows_to_dicts(nodes), _rows_to_dicts(edges)
 
 
+def _proof_snapshot(con) -> dict:
+    """Read proof-trunk state into the snapshot payload.
+
+    Wraps every read in ``sqlite3.OperationalError`` so a v3.0-only DB
+    (where the prv_* tables haven't been bootstrapped yet) snapshots
+    cleanly with empty proof sections.
+    """
+    try:
+        proof_corpus_count = int(
+            con.execute("SELECT COUNT(*) FROM prv_corpus_problems").fetchone()[0]
+        )
+    except sqlite3.OperationalError:
+        proof_corpus_count = 0
+
+    try:
+        proof_drafts = _rows_to_dicts(
+            con.execute(
+                """
+                SELECT node_id, text, state, parent_id, created_at, created_by
+                FROM mem_nodes
+                WHERE kind = 'proof_skeleton' AND state = 'active'
+                ORDER BY created_at DESC
+                LIMIT 50
+                """
+            ).fetchall()
+        )
+    except sqlite3.OperationalError:
+        proof_drafts = []
+
+    try:
+        proof_manifests = _rows_to_dicts(
+            con.execute(
+                """
+                SELECT manifest_id, draft_id, status, created_at
+                FROM prv_diagnostic_manifests
+                ORDER BY manifest_id DESC
+                LIMIT 50
+                """
+            ).fetchall()
+        )
+    except sqlite3.OperationalError:
+        proof_manifests = []
+
+    try:
+        proof_lean_attempts = _rows_to_dicts(
+            con.execute(
+                """
+                SELECT attempt_id, proposition_id, status, duration_sec, created_at
+                FROM prv_lean_attempts
+                ORDER BY attempt_id DESC
+                LIMIT 50
+                """
+            ).fetchall()
+        )
+    except sqlite3.OperationalError:
+        proof_lean_attempts = []
+
+    return {
+        "proof_corpus_count": proof_corpus_count,
+        "proof_drafts": proof_drafts,
+        "proof_manifests": proof_manifests,
+        "proof_lean_attempts": proof_lean_attempts,
+    }
+
+
 def snapshot(label: str = "") -> dict:
-    """Persist a point-in-time snapshot of the graph, failures, and contradiction summary."""
+    """Persist a point-in-time snapshot of the graph, failures, and contradiction summary.
+
+    Includes the proof trunk's frontier (proposition + proof_skeleton
+    nodes) and prv_* aggregates so a counterfactual replay against a
+    proof-side branch can reconstruct enough context. Reads against
+    prv_* fall back to empty for legacy v3.0-only databases.
+    """
     snapshot_id = f"snap_{uuid4().hex[:12]}"
     with tx() as con:
         nodes, edges = _graph_snapshot(con)
@@ -48,7 +126,7 @@ def snapshot(label: str = "") -> dict:
                 """
                 SELECT node_id, kind, text, state, elo_score, created_at, created_by, parent_id
                 FROM mem_nodes
-                WHERE state = 'active' AND kind IN ('question', 'hypothesis')
+                WHERE state = 'active' AND kind IN ('question', 'hypothesis', 'proposition')
                 ORDER BY created_at DESC
                 LIMIT 50
                 """
@@ -58,12 +136,16 @@ def snapshot(label: str = "") -> dict:
         failures = _recent_failures(con)
         paper_count = int(con.execute("SELECT COUNT(*) FROM mem_lit_compressed").fetchone()[0])
         judgement_count = int(con.execute("SELECT COUNT(*) FROM mem_judgements").fetchone()[0])
+        proof = _proof_snapshot(con)
         payload = {
             "nodes": nodes,
             "edges": edges,
             "active_frontier": frontier,
             "contradictions": contradictions,
             "recent_failures": failures,
+            "proof_drafts": proof["proof_drafts"],
+            "proof_manifests": proof["proof_manifests"],
+            "proof_lean_attempts": proof["proof_lean_attempts"],
             "counts": {
                 "nodes": len(nodes),
                 "edges": len(edges),
@@ -72,6 +154,10 @@ def snapshot(label: str = "") -> dict:
                 "recent_failures": len(failures),
                 "papers": paper_count,
                 "judgements": judgement_count,
+                "proof_corpus": proof["proof_corpus_count"],
+                "proof_drafts": len(proof["proof_drafts"]),
+                "proof_manifests": len(proof["proof_manifests"]),
+                "proof_lean_attempts": len(proof["proof_lean_attempts"]),
             },
         }
         con.execute(

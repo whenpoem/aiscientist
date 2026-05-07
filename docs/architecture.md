@@ -254,3 +254,42 @@ public tool and every owned table with one of three labels:
 
 When a contributor changes a tool or table, the label tells them which
 trunks they need to re-test.
+
+### Snapshot scope across trunks
+
+`memory_mcp.snapshot()` writes a payload that covers both trunks so a
+counterfactual `replay_counterfactual` against a proof branch can
+reconstruct enough state:
+
+- `active_frontier` includes `proposition` alongside `question` /
+  `hypothesis`.
+- `proof_drafts` / `proof_manifests` / `proof_lean_attempts` capture
+  recent rows from `mem_nodes(kind='proof_skeleton')`,
+  `prv_diagnostic_manifests`, and `prv_lean_attempts`.
+- `counts.proof_corpus` is the size of `prv_corpus_problems`.
+- Every `prv_*` read is wrapped in `sqlite3.OperationalError` so a
+  v3.0-only DB (no proof schema yet) snapshots cleanly with empty
+  proof sections.
+
+`stop_flush.py` digests follow the same pattern: the per-turn summary
+includes `proof_manifests_*`, `lean_attempts_*`, and
+`lean_wallclock_used_sec` aggregates, with the same legacy-DB
+fallback.
+
+### Budgeter coverage
+
+The proof trunk obeys the same `verify_mcp.budget_check` /
+`budget_consume` gating that the empirical trunk uses. Both
+`.claude/agents/prover.md` § Budget and the `prove-sop` skill require:
+
+1. Estimating wallclock cost from
+   `prove_mcp.triage_for_formalization`'s `estimated_difficulty`.
+2. Calling `budget_check(scope='hypothesis:<proposition_id>',
+   resource='wallclock_sec', requested=<estimate>)` before any Lean
+   attempt ≥ 5 minutes.
+3. Calling `budget_consume` with the actual `duration_sec` after the
+   attempt completes, so `res_budget_ledger` and `prv_lean_attempts`
+   stay consistent.
+
+A `record_lean_attempt(status='timeout')` without a prior
+`budget_check` is grounds for the reviewer to flag the audit trail.

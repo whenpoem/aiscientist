@@ -6,7 +6,7 @@ ClaudeScientist is a research-agent augmentation layer for Claude Code. It does 
 
 The repository currently ships the **v3.0** plan: a continuously-running, budgeted Bradley-Terry tournament with honest 95% confidence intervals, refreshable provenance DAGs, and preregistration with multiple-comparison correction.
 
-**v4.0 is in flight**: ClaudeScientist is being extended into a **two-trunk architecture** — the existing ML reproducibility surface becomes the *empirical trunk*, and a new *proof trunk* (`prove_mcp`) is being added for statistical proof generation with Lean reinsurance. Both trunks share one core: hypothesis graph, failure ledger, BT tournament, calibration, replay, cockpit. See [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) and [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
+**v4.0.0a0 (alpha) is shipped**: ClaudeScientist is now a **two-trunk architecture** — the existing ML reproducibility surface is the *empirical trunk*, and a new *proof trunk* (`prove_mcp`) handles statistical proof generation with optional Lean reinsurance. Both trunks share one core: hypothesis graph, failure ledger, BT tournament, calibration, replay, cockpit. Cold-start data ships in `data/`; Lean is opt-in (see [`docs/setup-lean.md`](docs/setup-lean.md)). See [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) and [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
 
 ## Five-minute orientation
 
@@ -25,18 +25,32 @@ Historical design decisions live in **[`docs/archive/`](docs/archive/)**.
 
 ## What is in the box
 
-- **Memory MCP** — hypothesis graph, Bradley-Terry ranking, calibration ledger, replay branches, failure ledger, compressed literature notes
+- **Memory MCP** — hypothesis graph (with proof-trunk node kinds), Bradley-Terry ranking (cross-kind for hypothesis + proof_skeleton), calibration ledger, replay branches (proof-aware snapshot), failure ledger (cross-domain), compressed literature notes
 - **Verify MCP** — leakage detection, refreshable provenance DAG, pinned metrics, seed perturbation, baseline fairness, sequestered-dataset budget enforcement, preregistration with BH/Bonferroni correction, resource ledger
-- **Hooks** — PreToolUse leakage and destructive-command guards, PostToolUse provenance logger, intervention pump, stop flush
-- **Cockpit TUI** — terminal-first monitoring and steering surface, with English/Chinese label switching and a live Bradley-Terry leaderboard
+- **Prove MCP** *(v4.0)* — proof corpus + bidirectional max-matching retrieval, NL workflow (segment → diagnose → correct), Lean reinsurance interface (triage + attempt log)
+- **Hooks** — PreToolUse leakage and destructive-command guards, PostToolUse provenance logger, intervention pump, proof-aware stop flush
+- **Cockpit TUI** — terminal-first monitoring and steering surface, with English/Chinese label switching, a live Bradley-Terry leaderboard, and proof-trunk events
+- **Cold-start data** — `data/proof_corpus_seed.jsonl` (≥80 statistical proof problems) + `data/proof_failure_seed.jsonl` (≥60 common proof failure modes), loaded by `scripts/seed_proof_corpus.py` / `scripts/seed_proof_failures.py`
 
 ## Quick start
 
 Install dependencies from the repository root:
 
 ```powershell
-uv sync
+uv sync                  # ML/empirical trunk only
+uv sync --extra proof    # also installs sentence-transformers for the proof trunk
 ```
+
+After `uv sync --extra proof`, seed the proof corpus once:
+
+```powershell
+uv run python scripts/seed_proof_corpus.py
+uv run python scripts/seed_proof_failures.py
+```
+
+The default embedding backend is `local` (sentence-transformers/all-MiniLM-L6-v2). Override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests pin `mock` automatically.
+
+Lean reinsurance is **opt-in**. To enable, follow [`docs/setup-lean.md`](docs/setup-lean.md) (one-time elan + mathlib + lean-lsp-mcp install).
 
 For normal local use, open two terminals from the repository root.
 

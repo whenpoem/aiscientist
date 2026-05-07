@@ -226,3 +226,37 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 - `[proof]`：v4.0 新增，位于 `prove_mcp`。
 
 修改任何工具或表前，先看这个标签——它直接告诉你这次改动需要回归哪几条主干。
+
+### 跨主干的 snapshot 范围
+
+`memory_mcp.snapshot()` 写出的 payload 同时覆盖两条主干，确保
+`replay_counterfactual` 回放某条 proof 分支时不丢上下文：
+
+- `active_frontier` 把 `proposition` 节点与 `question` / `hypothesis` 一起列出。
+- `proof_drafts` / `proof_manifests` / `proof_lean_attempts` 分别快照
+  最近若干行 `mem_nodes(kind='proof_skeleton')`、
+  `prv_diagnostic_manifests`、`prv_lean_attempts`。
+- `counts.proof_corpus` 是 `prv_corpus_problems` 的总行数。
+- 所有读 `prv_*` 的语句都包了 `sqlite3.OperationalError`，所以一个
+  v3.0 老库（没有证明 schema）也能正常出快照，proof 字段全为空。
+
+`stop_flush.py` 的回合摘要遵循同样的模式：digest 中的
+`proof_manifests_*`、`lean_attempts_*`、`lean_wallclock_used_sec`
+聚合在老库下回退为 0。
+
+### budgeter 覆盖
+
+证明主干与 empirical 主干共用 `verify_mcp.budget_check` /
+`budget_consume` 节流。`.claude/agents/prover.md` § Budget 与
+`prove-sop` skill 都要求：
+
+1. 用 `prove_mcp.triage_for_formalization` 的
+   `estimated_difficulty` 估算 wallclock。
+2. 任何 ≥ 5 分钟的 Lean 尝试，先调
+   `budget_check(scope='hypothesis:<proposition_id>',
+   resource='wallclock_sec', requested=<估算>)`。
+3. 尝试结束后用真实 `duration_sec` 调 `budget_consume`，
+   让 `res_budget_ledger` 与 `prv_lean_attempts` 保持一致。
+
+直接 `record_lean_attempt(status='timeout')` 而事先没过
+`budget_check`，会被 reviewer 视为审计可疑。

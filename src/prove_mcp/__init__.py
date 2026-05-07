@@ -24,6 +24,16 @@ Owned tables (prv_*)
 prv_corpus_problems       [proof] StatEval-style retrieval corpus.
 prv_corpus_keywords       [proof] Per-problem lexical+semantic keywords with
                                  embeddings; backend+dim metadata pinned.
+prv_diagnostic_manifests  [proof] Per-draft snippet diagnoses + manifest
+                                 lifecycle (open / empty / applied).
+prv_lean_attempts         [proof] Audit trail of every Lean reinsurance
+                                 attempt (verified / failed / timeout +
+                                 source + duration_sec). Designed to be
+                                 paired with a ``verify_mcp.budget_check``
+                                 call before the attempt and a
+                                 ``budget_consume`` after; see
+                                 .claude/agents/prover.md § Budget for
+                                 the contract.
 
 Critical invariants
 -------------------
@@ -39,6 +49,10 @@ Critical invariants
   ``Sim(B→A)``, where each direction averages the max cosine of every
   source keyword across all target keywords. This rewards strong local
   matches over generic terminology overlap.
+- ``record_lean_attempt`` is intentionally a pure log: it does NOT
+  call ``attach_evidence`` or ``record_failure`` on the caller's
+  behalf. The prover agent's prompt explicitly performs those
+  cross-trunk writes so each side effect is auditable in cockpit_events.
 
 Where things live
 -----------------

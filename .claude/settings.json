@@ -11,9 +11,10 @@
       "env": { "RESEARCH_AGENT_DEV": "1" }
     },
     "prove": {
+      "_comment": "Default embedding backend is 'local' (sentence-transformers). Run 'uv sync --extra proof' first. Override with RESEARCH_AGENT_EMBED_BACKEND=mock|openai if needed; tests pin 'mock' via conftest.py.",
       "command": "uv",
       "args": ["run", "python", "-m", "prove_mcp.dev_server"],
-      "env": { "RESEARCH_AGENT_DEV": "1", "RESEARCH_AGENT_EMBED_BACKEND": "mock" }
+      "env": { "RESEARCH_AGENT_DEV": "1" }
     },
     "_lean": {
       "_comment": "Lean reinsurance MCP (P4). Inactive by default: rename '_lean' -> 'lean' AFTER following docs/setup-lean.md (install elan, lean-lsp-mcp, bootstrap mathlib4 project). Restart Claude Code to pick up the change.",

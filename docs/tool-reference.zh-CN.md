@@ -1,4 +1,4 @@
-# MCP 工具参考（v3.0）
+# MCP 工具参考（v4.0.0a0）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。
@@ -9,6 +9,8 @@
   - [假说图](#假说图) · [失败记忆](#失败记忆) · [BT 排名](#bradley-terry-排名) · [校准](#校准) · [回放](#回放) · [快照](#快照) · [文献](#文献)
 - **verify MCP** — 13 个工具，覆盖泄漏、溯源、指标、预注册、held-out、预算
   - [泄漏检测](#泄漏检测) · [溯源](#溯源) · [指标 pin](#指标-pin) · [种子与公平性](#种子与公平性) · [Held-out](#held-out) · [预注册](#预注册) · [资源预算](#资源预算)
+- **prove MCP** *(v4.0)* — 18 个工具，覆盖证明主干：语料检索、NL 工作流、Lean 形式化保险层
+  - [语料与检索](#语料与检索) · [证明节点](#证明节点) · [切片与诊断](#切片与诊断) · [修正](#修正) · [Lean 形式化保险层](#lean-形式化保险层)
 - **cockpit MCP** — 3 个工具，让 Claude 向 cockpit 推送
   - [Cockpit 桥](#cockpit-桥)
 
@@ -307,6 +309,98 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 **返回**：成功时 `{"ok": True, "remaining": ...}`。
 
 **何时使用**：由 budgeter agent 调用，或者由 engineer 在消耗资源前直接调用。
+
+---
+
+## prove MCP *(v4.0)*
+
+由 `prv_*` 表 + 跨域的 `mem_failures.domain` 列支撑。通过 `mcp__prove__<name>` 暴露。证明主干的主路是 StatProver 风格的（语料检索 → 起草 → 切片 → 诊断 → 修正）；Lean 是顶在上面的形式化保险层。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](architecture.zh-CN.md#13-核心与领域主干v40)。
+
+### 语料与检索
+
+#### `ingest_proof_corpus(source, problems)`
+批量入库一组证明问题到 `prv_corpus_problems` + `prv_corpus_keywords`。每条 problem 必须包含 `problem_id`、`statement`，并至少有 `lexical_keywords` / `semantic_keywords` 之一。可选字段：`reference_proof`、`domain_tags`。重复 ingest 相同 `problem_id` 等于替换（幂等 upsert）。关键词通过当前 embedding 后端向量化（`RESEARCH_AGENT_EMBED_BACKEND`：`mock` | `local` | `openai`；新克隆的 Claude settings 默认 `local`）；每行关键词都记录 `embed_backend` + `embed_dim`，跨后端的检索会被显式拒绝。
+
+**返回**：`{"ingested": int, "replaced": int, "backend": str, "dim": int}`
+
+**何时使用**：项目启动时把 StatEval / arXiv / 手工种子语料一次性灌进来。
+
+#### `list_corpus(source=None, limit=20)`
+浏览语料，附带每题的关键词聚合计数。
+
+**返回**：`{problem_id, source, statement, reference_proof, domain_tags, n_lexical, n_semantic, ingested_at}` 列表。
+
+#### `retrieve_skeletons(proposition_text, lexical_keywords, semantic_keywords, k=5)`
+双向 max-matching 检索（公式见 architecture §13）。调用前主模型自己用 LLM 提取关键词集；这个工具只做纯向量计算。
+
+**返回**：`{problem_id, source, statement, reference_proof, domain_tags, lexical_score, semantic_score, similarity}` 列表，按 `similarity` 降序。
+
+**何时使用**：在 `prove-sop` 的开头，起草前先找结构相似的引理。
+
+### 证明节点
+
+#### `propose_proposition(text, parent_id=None)`
+创建一个 `proposition` 节点（证明主干里对应假说的对等节点）。挂在 question 节点下，命题与假说就共享一棵树。
+
+**返回**：`{"node_id": "prop_..."}`
+
+#### `propose_proof_skeleton(proposition_id, text, note="")`
+在命题下挂一条候选证明骨架。同时初始化一行 `mem_bt_ratings`，让证明骨架进入自己的 BT 锦标赛。
+
+**返回**：`{"node_id": "psk_..."}`
+
+#### `register_proof_draft(skeleton_id, draft_text, note="")`
+把生成好的 LaTeX 草稿存为骨架的子修订（`proof_skeleton`）。父链编码修订历史。
+
+**返回**：`{"node_id": "psk_...", "parent_skeleton_id": "..."}`
+
+#### `list_proof_drafts(proposition_id, limit=20)`
+列出某命题下所有 `proof_skeleton` 后代，按"最深 + 最新"排序。reviewer 的证明清单（P5）用它定位最新草稿，再去查 `list_diagnostic_manifests`。
+
+### 切片与诊断
+
+#### `segment_proof(draft_id, snippets)`
+持久化主模型切好的 snippet 列表，并开一个新的 `status='open'` 诊断清单。
+
+**返回**：`{"manifest_id": int, "snippet_ids": [...]}`
+
+#### `list_proof_snippets(draft_id)`
+按插入顺序浏览 snippet。
+
+#### `diagnose_snippet(snippet_id, k=5)`
+只读。用 `domain='proof'` 在 `mem_failures` 里搜索与该 snippet 类似的历史证明错误（top-k），返回候选 + 一份给主模型判断的结构化 prompt。
+
+**返回**：`{snippet_id, snippet_text, candidates: [...], prompt: str}`
+
+#### `register_diagnosis(manifest_id, snippet_id, is_flawed, description, matched_failure_ids=[])`
+向 manifest 追加一条诊断条目。仅在 `status='open'` 时允许。
+
+#### `finalize_manifest(manifest_id)`
+关闭诊断：没有 flaw → `empty`；否则保持 `open` 等待修正。
+
+#### `list_diagnostic_manifests(draft_id=None, status=None)`
+浏览 manifest。reviewer 证明清单（P5）会用。
+
+### 修正
+
+#### `compose_correction_prompt(draft_id, manifest_id)`
+只读。把原始草稿 + 每条 flaw 描述拼成一份"延迟全局修正"prompt，交给主模型。
+
+#### `apply_correction(draft_id, manifest_id, corrected_text, note="")`
+把修正后的草稿存为新的 `proof_skeleton` 修订，并把 manifest 标为 `status='applied'`。
+
+**返回**：`{new_draft_id, old_draft_id, manifest_id, manifest_status}`
+
+### Lean 形式化保险层
+
+#### `triage_for_formalization(proposition_id)`
+判断要不要把命题交给 prover agent。返回 `{eligible, reasons, estimated_difficulty, whitelist_hits, blacklist_hits, length}`。纯只读；主模型在 spawn prover 之前自己看 `eligible`。
+
+#### `record_lean_attempt(proposition_id, status, lean_source="", stderr="", duration_sec=None, triage=None)`
+把一次 Lean 尝试持久化到 `prv_lean_attempts`。**没有任何自动跨主干副作用**——prover agent 的 prompt 显式地：成功时调 `attach_evidence`，失败时调 `record_failure(domain='proof')`，每条副作用都在 cockpit 里能看到。
+
+#### `list_lean_attempts(proposition_id=None, status=None)`
+浏览 Lean 尝试。
 
 ---
 

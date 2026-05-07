@@ -227,7 +227,13 @@ WHERE prereg_id = ? AND version = ?;
 - 我们不会去匹敌 StatProver 的 40k 语料 / 80k 错误库规模。我们的差异化点是工作流整合，不是检索质量。
 - Lean 保险层按命题逐个 opt-in；任何工作流都不会卡在 Lean 成功才放行。
 
-**状态**：在做（v4.0 分期计划）。
+**状态**：v4.0.0a0 alpha 已发布（P0–P5 + Plan v2 冷启动数据 + Lean 激活准备）。
+
+**v4.x 待办**：
+- 定理类断言的 hook gate（在 `leakage_guard.py` 加 `\begin{theorem}` 正则）。
+- `CHANGELOG.md`，记录 v3.0 → v4.0 的跳跃。
+- 给 `prv_corpus_problems` 加 FTS5（语料量 >5k 时再做；当前规模不需要）。
+- 让 `meta_calibration` 感知 domain，分别追踪 empirical / proof 的代理可靠度。
 
 ---
 
@@ -246,7 +252,7 @@ WHERE prereg_id = ? AND version = ?;
 9. **方向 9（Git 考古）** —— 等核心稳定后再扩展冷启动
 10. **方向 10（对比基准）** —— 等系统真正用过几个真实研究任务后再做
 
-**方向 11（证明主干）单独处理**——它是已经在做的 v4.0 承诺，不在"是否值得做"的讨论范畴里，详见 ADR 0008 与分期计划。
+**方向 11（证明主干）已交付为 v4.0.0a0 alpha**；剩余事项在该方向"v4.x 待办"块里列出。
 
 ## 几个不属于路线图的方向
 

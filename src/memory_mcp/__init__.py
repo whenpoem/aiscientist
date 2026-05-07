@@ -30,7 +30,12 @@ mem_failures           [core]      Cross-domain trigger / symptom / cause / reso
 mem_failures_fts       [core]      FTS5 index over mem_failures for match_signatures.
 mem_lit_compressed     [core]      Structured paper compressions; trust-weighted BM25.
 mem_lit_fts            [core]      FTS5 over the compression for query_literature.
-mem_snapshots          [core]      Frozen graph snapshots used by replay.
+mem_snapshots          [core]      Frozen graph snapshots used by replay. Payload covers
+                                   both trunks: empirical frontier (question/hypothesis)
+                                   plus proof frontier (proposition) and prv_* aggregates
+                                   (corpus count, recent drafts/manifests/lean attempts).
+                                   prv_* reads are defensively wrapped so legacy v3.0 DBs
+                                   still snapshot cleanly with empty proof sections.
 mem_replay_branches    [core]      Counterfactual branches; never mutate the main graph.
 meta_calibration       [core]      Per-agent reliability-diagram buckets.
 
