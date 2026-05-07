@@ -7,7 +7,7 @@ import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -41,10 +41,14 @@ FOCUS_ORDER = ("tree", "detail", "events", "tabs")
 class StatusBar(Static):
     """Single-line status header."""
 
-    def __init__(self, *, lang: str = "en") -> None:
+    def __init__(self, *, lang: str = "en", theme: str = "claude-warm-dark") -> None:
         super().__init__("")
         self.id = "status-bar"
         self.lang = normalize_lang(lang)
+        # Theme name shown next to the language code in the HUD so users have
+        # a constant reminder of which theme is active (the T-key notification
+        # is transient).
+        self.theme_name = theme
         self.current_text = ""
         self._summary = {
             "active_hypotheses": 0,
@@ -65,6 +69,10 @@ class StatusBar(Static):
         self.lang = normalize_lang(lang)
         self._refresh_display()
 
+    def set_theme_name(self, theme: str) -> None:
+        self.theme_name = theme
+        self._refresh_display()
+
     def set_summary(self, summary: dict) -> None:
         self._summary = dict(summary)
         self._refresh_display()
@@ -74,6 +82,9 @@ class StatusBar(Static):
         self._refresh_display()
 
     def _refresh_display(self) -> None:
+        # Compact theme tag (drops the "claude-" prefix) so the HUD doesn't
+        # bloat. e.g. "claude-warm-dark" -> "warm-dark".
+        compact_theme = self.theme_name.removeprefix("claude-") or self.theme_name
         self.current_text = t(
             self.lang,
             "hud",
@@ -85,6 +96,8 @@ class StatusBar(Static):
             heldout=self._format_heldout(),
             risks=self._summary.get("risks", 0),
             last_event=self._format_last_event(),
+            theme=compact_theme,
+            lang_code=self.lang.upper(),
             clock=self._clock,
         )
         self.update(self.current_text)
@@ -220,6 +233,12 @@ class CockpitApp(App[None]):
         self.lang = normalize_lang(self._settings.lang)
         self.show_refuted = self._settings.show_refuted
         self.relative_timestamps = self._settings.relative_timestamps
+        # Snapshot the saved focused pane BEFORE Textual's reactive system
+        # has a chance to fire watch_focused_pane with the default ("tree")
+        # during mount and overwrite self._settings.focused_pane. on_mount
+        # consumes this snapshot to restore the user's last focus.
+        saved_focus = self._settings.focused_pane
+        self._initial_focus = saved_focus if saved_focus in FOCUS_ORDER else "tree"
         self.graph = data.GraphSnapshot(nodes={})
         self.selected_node_id: str | None = None
         self._command_mode: str | None = None
@@ -229,7 +248,7 @@ class CockpitApp(App[None]):
         self._stop_event_worker = False
 
     def compose(self) -> ComposeResult:
-        yield StatusBar(lang=self.lang)
+        yield StatusBar(lang=self.lang, theme=self._settings.theme)
         # Compose order is load-bearing for the grid auto-flow.
         #
         # Textual's grid placement is row-major (left-to-right, then next row),
@@ -263,11 +282,13 @@ class CockpitApp(App[None]):
         self._apply_theme(self._settings.theme, persist=False, notify=False)
         self._apply_language()
         self.refresh_state(include_events=True)
-        self._set_focus("tree")
+        # Use the snapshot taken in __init__ — by now the reactive init-fire
+        # has overwritten self._settings.focused_pane with the default.
+        self._set_focus(self._initial_focus)
         self._apply_layout(persist=False)
         self.events_worker()
 
-    def on_resize(self, event=None) -> None:  # noqa: ARG002
+    def on_resize(self, event: events.Resize) -> None:  # noqa: ARG002
         # Re-evaluate the active layout whenever the terminal resizes. The
         # saved preset is preserved; only the *resolved* class on body-grid
         # changes (e.g. wide → narrow when the user shrinks the window).
@@ -283,30 +304,46 @@ class CockpitApp(App[None]):
     def _register_themes(self) -> None:
         """Register all bundled themes with Textual's theme system.
 
-        Idempotent: re-registering the same name is a no-op in modern Textual.
-        Catches errors silently so an old Textual without the theme API still
-        boots (the fallback color table in tokens.py keeps things readable).
+        Idempotent: re-registering the same name is a no-op in modern
+        Textual. We narrowly catch ``AttributeError`` (older Textual
+        without ``register_theme``) and ``TypeError`` (signature drift
+        across versions); other exceptions still propagate so real bugs
+        surface during development. The static fallback color table in
+        tokens.py keeps things readable even if registration fails.
         """
         for theme in ALL_THEMES:
             try:
                 self.register_theme(theme)
-            except Exception:  # pragma: no cover - depends on Textual version
+            except (AttributeError, TypeError):  # pragma: no cover
                 pass
 
     def _apply_theme(self, name: str, *, persist: bool, notify: bool) -> None:
         """Switch the active theme and refresh widgets that compose Rich
         Text styles dynamically (event stream, tree prefixes, detail header).
+
+        If ``name`` is unknown (e.g. settings.toml was hand-edited), we
+        silently fall back to the default theme. ``self._settings.theme``
+        is then rewritten to the resolved name so the bad value doesn't
+        survive — next launch starts cleanly.
         """
-        theme = get_theme(name) or get_theme(default_theme_name())
+        theme = get_theme(name)
+        fallback_used = False
         if theme is None:
+            theme = get_theme(default_theme_name())
+            fallback_used = True
+        if theme is None:  # pragma: no cover - default theme should always exist
             return
         # Update the in-process token cache so render code in panes resolves
         # to the new colors on the very next paint.
         update_theme_vars(theme)
         try:
             self.theme = theme.name
-        except Exception:  # pragma: no cover - older Textual
+        except (AttributeError, TypeError):  # pragma: no cover - older Textual
             pass
+        # Heal a corrupted theme name in settings: write the resolved name
+        # back so a subsequent quit doesn't re-persist garbage.
+        if fallback_used and persist is False:
+            persist = True
         self._settings.theme = theme.name
         if persist:
             self._persist_settings()
@@ -315,6 +352,7 @@ class CockpitApp(App[None]):
             self.notify(t(self.lang, "theme_changed", name=label))
         # Re-render any pane that builds Rich Text styles outside TCSS.
         if self.is_mounted:
+            self.status_bar.set_theme_name(theme.name)
             self._refresh_detail()
             # Tree label styles are baked at load time; reload to pick up the
             # new kind colors.
@@ -368,11 +406,20 @@ class CockpitApp(App[None]):
             self._persist_settings()
 
     def action_toggle_focus(self) -> None:
-        """Toggle single-pane focus mode. Saves the choice so the next
-        launch starts in the same mode."""
+        """Toggle single-pane focus mode. Preserves the user's prior layout
+        preset so exiting focus mode returns to wide / narrow / whatever
+        they had instead of always snapping to wide.
+
+        Persists the choice so the next launch starts in the same mode.
+        """
         if self._settings.layout_preset == LAYOUT_FOCUS:
-            self._settings.layout_preset = LAYOUT_WIDE
+            # Exit focus → restore the preset that was active before we
+            # entered focus mode. Fallback to wide if we somehow lost it.
+            restored = getattr(self, "_pre_focus_preset", LAYOUT_WIDE) or LAYOUT_WIDE
+            self._settings.layout_preset = restored
         else:
+            # Enter focus → remember what we're leaving so we can restore.
+            self._pre_focus_preset = self._settings.layout_preset
             self._settings.layout_preset = LAYOUT_FOCUS
         self._apply_layout(persist=True)
 
@@ -442,10 +489,14 @@ class CockpitApp(App[None]):
                 widget.remove_class("pane-active")
         self.context_bar.set_pane(new)
         # Persist the new focus + refresh layout-active class so single-pane
-        # focus mode swaps to the newly focused pane immediately.
+        # focus mode swaps to the newly focused pane immediately. Persist to
+        # disk too so the next launch restores the same focused pane (only
+        # while mounted — the watcher fires once during mount before
+        # _persist_settings could find a config dir, which is safe to skip).
         self._settings.focused_pane = new
         if self.is_mounted:
             self._apply_layout(persist=False)
+            self._persist_settings()
 
     def on_tree_node_selected(self, event: HypothesisTreePane.NodeSelected) -> None:
         node_id = event.node.data if isinstance(event.node.data, str) else None
@@ -597,13 +648,18 @@ class CockpitApp(App[None]):
 
     def action_toggle_language(self) -> None:
         self.lang = toggle_lang(self.lang)
+        # Keep settings.lang in lockstep so a hard kill before on_unmount
+        # still preserves the choice. _persist_settings() is the single
+        # source of truth for both syncing and writing to disk.
         self._apply_language()
         self.refresh_state(include_events=True)
         self.notify(t(self.lang, "language_notice"))
+        self._persist_settings()
 
     def action_toggle_timestamp_mode(self) -> None:
         self.relative_timestamps = not self.relative_timestamps
         self.events_pane.set_relative_timestamps(self.relative_timestamps)
+        self._persist_settings()
 
     def action_toggle_refuted(self) -> None:
         self.show_refuted = not self.show_refuted
@@ -614,6 +670,7 @@ class CockpitApp(App[None]):
             selected_node_id=self.selected_node_id,
         )
         self._refresh_detail()
+        self._persist_settings()
 
     def action_force_refresh(self) -> None:
         self.refresh_state(include_events=True)

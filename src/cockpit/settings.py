@@ -58,16 +58,21 @@ class CockpitSettings:
     def from_dict(cls, data: dict) -> "CockpitSettings":
         """Build from a parsed TOML dict, ignoring unknown keys.
 
-        Treats type mismatches as 'use default' rather than raising — the
-        cockpit must boot even if the config file has been hand-edited
-        incorrectly.
+        Coerces values to the declared field type. Anything that can't be
+        coerced (e.g. ``theme = 42`` from a hand-edited TOML) silently falls
+        back to the field's default. The cockpit must boot even if the
+        config file has been mangled — broken settings should never block
+        the UI.
         """
         kwargs: dict[str, object] = {}
         valid = {f.name: f.type for f in fields(cls)}
-        for key, value in data.items():
+        for key, raw in data.items():
             if key not in valid:
                 continue
-            kwargs[key] = value
+            coerced = _coerce_value(valid[key], raw)
+            if coerced is _SENTINEL:
+                continue  # leave the field at its default
+            kwargs[key] = coerced
         try:
             return cls(**kwargs)  # type: ignore[arg-type]
         except TypeError:
@@ -128,3 +133,58 @@ def _render_value(value: object) -> str:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
     raise TypeError(f"Unsupported TOML value type: {type(value)!r}")
+
+
+# Sentinel used by _coerce_value to mean "skip this key, keep the default".
+# Distinct from None so that fields whose default IS None remain reachable.
+_SENTINEL = object()
+
+
+def _coerce_value(declared_type, raw):
+    """Coerce a TOML value to the declared dataclass field type.
+
+    The dataclass ``fields()`` API returns the field's annotation as a
+    string (e.g. ``"str"``) under PEP 563. We compare against the string
+    form rather than the resolved type to avoid importing ``typing`` and
+    handling generic origins for our six simple field types.
+
+    Returns ``_SENTINEL`` if coercion is impossible (caller should skip).
+    """
+    type_name = declared_type if isinstance(declared_type, str) else getattr(
+        declared_type, "__name__", str(declared_type)
+    )
+    if type_name == "bool":
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return bool(raw)
+        if isinstance(raw, str):
+            lowered = raw.strip().lower()
+            if lowered in {"true", "1", "yes", "on"}:
+                return True
+            if lowered in {"false", "0", "no", "off"}:
+                return False
+        return _SENTINEL
+    if type_name == "int":
+        if isinstance(raw, bool):
+            # bool is an int subclass, but we want True→1 only when the
+            # field really is int (it's not — schema_version is the only
+            # int field and a bool there would be silly). Reject.
+            return _SENTINEL
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return int(raw.strip())
+            except ValueError:
+                return _SENTINEL
+        return _SENTINEL
+    if type_name == "str":
+        if isinstance(raw, str):
+            return raw
+        # Reject non-strings rather than coerce (e.g. theme=42 should not
+        # become "42" — that yields a non-existent theme name and an
+        # incorrect i18n lookup downstream).
+        return _SENTINEL
+    # Unknown declared type — pass through unchanged.
+    return raw

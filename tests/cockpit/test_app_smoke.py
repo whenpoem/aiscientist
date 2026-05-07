@@ -97,7 +97,95 @@ async def test_language_toggle_localizes_core_tui_labels(workspace):
         assert "假设树" in app.tree_pane.border_title
         assert "节点详情" in app.detail_pane.border_title
         assert "研究座舱" in app.status_bar.current_text
-        assert "切换语言" in app.context_bar.current_text
+        # Context bar carries the shortcut crib in Chinese; the v4.1.0a1
+        # update tightened it to "L 语言 · T 主题 · F 焦点 · ^P 命令面板".
+        assert "语言" in app.context_bar.current_text
+        assert "命令面板" in app.context_bar.current_text
+
+
+@pytest.mark.asyncio
+async def test_toggle_actions_persist_immediately(workspace, tmp_path):
+    """Regression: in v4.1.0a0 the language / refuted / timestamp toggles
+    only persisted on quit via on_unmount. A hard kill lost the choice.
+    v4.1.0a1 makes each toggle persist immediately. This test verifies
+    the settings file is written between toggles, not just at quit."""
+    from cockpit.app import CockpitApp
+    from cockpit.settings import default_config_path, load_settings
+
+    config_path = default_config_path()
+    if config_path.exists():
+        config_path.unlink()
+
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.press("L")  # toggle to zh
+        # File should exist with lang=zh BEFORE we quit.
+        assert config_path.exists(), "settings file not written on language toggle"
+        loaded = load_settings(config_path)
+        assert loaded.lang == "zh"
+
+        await pilot.press("s")  # toggle show_refuted
+        loaded = load_settings(config_path)
+        assert loaded.show_refuted is True
+
+        await pilot.press("t")  # toggle relative_timestamps
+        loaded = load_settings(config_path)
+        assert loaded.relative_timestamps is True
+
+
+@pytest.mark.asyncio
+async def test_focused_pane_restored_on_relaunch(workspace):
+    """When a previous session ended with focus on the events pane, the
+    next launch should start with events focused — not always tree.
+    Regression for v4.1.0a0 hardcoded `_set_focus("tree")` in on_mount."""
+    from cockpit.app import CockpitApp
+    from cockpit.settings import default_config_path, load_settings
+
+    config_path = default_config_path()
+    if config_path.exists():
+        config_path.unlink()
+
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+
+    # First session: focus events, then exit.
+    app1 = CockpitApp()
+    async with app1.run_test(size=(160, 40)) as pilot:
+        await pilot.press("3")
+        assert app1.focused_pane == "events"
+    saved = load_settings(config_path)
+    assert saved.focused_pane == "events"
+
+    # Second session: should boot with events focused.
+    app2 = CockpitApp()
+    async with app2.run_test(size=(160, 40)):
+        assert app2.focused_pane == "events", (
+            f"focused_pane not restored from settings (got {app2.focused_pane!r})"
+        )
+
+
+@pytest.mark.asyncio
+async def test_focus_toggle_restores_prior_layout_preset(workspace):
+    """F-then-F should return to the user's prior preset, not always wide.
+    Regression for the v4.1.0a0 toggle that hardcoded LAYOUT_WIDE on exit."""
+    from cockpit.app import CockpitApp
+
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)) as pilot:
+        # Pretend the user is on narrow (we set it directly to dodge the
+        # auto-resolve at this terminal size, which would clamp narrow→wide).
+        app._settings.layout_preset = "narrow"
+
+        await pilot.press("F")  # enter focus
+        assert app._settings.layout_preset == "focus"
+
+        await pilot.press("F")  # exit focus
+        assert app._settings.layout_preset == "narrow", (
+            f"focus exit clobbered prior preset (got {app._settings.layout_preset!r})"
+        )
 
 
 @pytest.mark.asyncio

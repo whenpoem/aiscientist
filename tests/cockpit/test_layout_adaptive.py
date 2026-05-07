@@ -143,3 +143,70 @@ async def test_focus_mode_swaps_active_pane_with_focus_change(workspace):
         assert app.focused_pane == "events"
         assert "layout-active" in app.events_pane.classes
         assert "layout-active" not in app.tree_pane.classes
+
+
+# -- visual / cell-position regression -----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_wide_layout_places_each_pane_in_expected_quadrant(workspace):
+    """Snapshot the wide layout's grid cells: Tree spans column 1, Events
+    spans column 3 (full height), Detail sits top-middle, Tabs sits
+    bottom-middle. Catches the v4.1.0a0 bug where compose order made
+    column-3-row-2 land empty.
+
+    We assert by comparing each pane's region.x against thirds of the
+    body-grid width and region.y against the midpoint, so the test stays
+    robust to small fr-ratio tweaks in TCSS."""
+    from textual.containers import Container
+
+    from cockpit.app import CockpitApp
+
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)):
+        body = app.query_one("#body-grid", Container)
+        bx, by, bw, bh = body.region
+        # TCSS: grid-columns: 1fr 2fr 2fr (5fr total). Compute column
+        # boundaries from the actual ratio so the test survives small
+        # tweaks (e.g. to 1fr 2fr 1.5fr) without rewriting.
+        col1_end = bx + bw * (1 / 5)
+        col2_end = bx + bw * (3 / 5)
+        midline = by + bh / 2
+
+        tree = app.tree_pane.region
+        detail = app.detail_pane.region
+        events = app.events_pane.region
+        tabs = app.tabs_pane.region
+
+        # Tree: column 1, full height.
+        assert tree.x < col1_end, (
+            f"Tree.x={tree.x} not in column 1 (< {col1_end})"
+        )
+        assert tree.height >= bh - 4, f"Tree.height={tree.height} should ~= bh={bh}"
+
+        # Events: column 3 (right of col2 boundary), full height.
+        assert events.x >= col2_end - 2, (
+            f"Events.x={events.x} not in column 3 (>= {col2_end - 2})"
+        )
+        assert events.height >= bh - 4, (
+            f"Events.height={events.height} should ~= bh={bh}"
+        )
+
+        # Detail: middle column (between col1 and col2 boundaries),
+        # upper half.
+        assert col1_end - 2 <= detail.x < col2_end + 2, (
+            f"Detail.x={detail.x} not in column 2 ({col1_end} .. {col2_end})"
+        )
+        assert detail.y < midline, f"Detail.y={detail.y} not in upper half"
+
+        # Tabs: middle column, lower half. This is the cell that was blank
+        # before the compose-order fix in v4.1.0a0.
+        assert col1_end - 2 <= tabs.x < col2_end + 2, (
+            f"Tabs.x={tabs.x} not in column 2 (was blank before fix)"
+        )
+        assert tabs.y >= midline - 1, (
+            f"Tabs.y={tabs.y} not in lower half (was blank before fix)"
+        )

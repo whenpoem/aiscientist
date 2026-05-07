@@ -40,14 +40,14 @@ TABLE_IDS = {
     "lean": "lean-table",
 }
 
-# Status icons + token names for the three new tabs. Keep these in sync with
-# the icons documented in src/cockpit/i18n.py and the kind-* tokens registered
-# in src/cockpit/theme/themes.py.
+# Status icons. Keys must stay in sync with the CHECK constraints in
+# src/prove_mcp/schema.sql: diagnostic manifests are 'open' / 'empty' /
+# 'applied'; Lean attempts are 'queued' / 'running' / 'verified' / 'failed'
+# / 'timeout'. Adding a new status here without a schema bump is dead code.
 DIAGNOSTIC_STATUS_ICON = {
     "open": "⏳",
     "applied": "✓",
     "empty": "✓",
-    "stuck": "✗",
 }
 LEAN_STATUS_ICON = {
     "queued": "⏸",

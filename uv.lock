@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "claudescientist"
-version = "4.1.0a0"
+version = "4.1.0a1"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },

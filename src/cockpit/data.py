@@ -538,25 +538,44 @@ def fetch_corpus_problems(limit: int = 200) -> list[dict[str, Any]]:
     try:
         if not _table_exists(con, "prv_corpus_problems"):
             return []
-        rows = con.execute(
+        # The keywords table is created by the same prove_mcp migration as
+        # the problems table, so in practice they're always paired. Skip
+        # the join (and the lex/sem counts) if the keywords table is
+        # missing rather than failing the whole fetch — keeps the cockpit
+        # boot-able against partial / hand-rolled databases.
+        if _table_exists(con, "prv_corpus_keywords"):
+            query = """
+                SELECT
+                  p.problem_id,
+                  p.source,
+                  p.statement,
+                  p.reference_proof,
+                  p.domain_tags,
+                  p.ingested_at,
+                  SUM(CASE WHEN k.kind = 'lexical' THEN 1 ELSE 0 END) AS n_lexical,
+                  SUM(CASE WHEN k.kind = 'semantic' THEN 1 ELSE 0 END) AS n_semantic
+                FROM prv_corpus_problems p
+                LEFT JOIN prv_corpus_keywords k ON k.problem_id = p.problem_id
+                GROUP BY p.problem_id
+                ORDER BY p.ingested_at DESC, p.problem_id ASC
+                LIMIT ?
             """
-            SELECT
-              p.problem_id,
-              p.source,
-              p.statement,
-              p.reference_proof,
-              p.domain_tags,
-              p.ingested_at,
-              SUM(CASE WHEN k.kind = 'lexical' THEN 1 ELSE 0 END) AS n_lexical,
-              SUM(CASE WHEN k.kind = 'semantic' THEN 1 ELSE 0 END) AS n_semantic
-            FROM prv_corpus_problems p
-            LEFT JOIN prv_corpus_keywords k ON k.problem_id = p.problem_id
-            GROUP BY p.problem_id
-            ORDER BY p.ingested_at DESC, p.problem_id ASC
-            LIMIT ?
-            """,
-            (max(1, limit),),
-        ).fetchall()
+        else:
+            query = """
+                SELECT
+                  p.problem_id,
+                  p.source,
+                  p.statement,
+                  p.reference_proof,
+                  p.domain_tags,
+                  p.ingested_at,
+                  0 AS n_lexical,
+                  0 AS n_semantic
+                FROM prv_corpus_problems p
+                ORDER BY p.ingested_at DESC, p.problem_id ASC
+                LIMIT ?
+            """
+        rows = con.execute(query, (max(1, limit),)).fetchall()
     finally:
         con.close()
     out: list[dict[str, Any]] = []

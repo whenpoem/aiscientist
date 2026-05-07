@@ -63,9 +63,10 @@ TEXT: dict[str, dict[str, str]] = {
         "refutes": "refutes",
         "support_refute": "{supports} supports / {refutes} refutes",
         "hud": (
-            "{app}  active H {active_hypotheses} / refuted {refuted_nodes} / "
+            "{app}  H {active_hypotheses} / refuted {refuted_nodes} / "
             "claims {pinned_claims} ({unverified_claims} unverified) / "
-            "heldout {heldout} / risks {risks} / last {last_event}  {clock}"
+            "heldout {heldout} / risks {risks} / last {last_event}  "
+            "{theme}·{lang_code}  {clock}"
         ),
         "heldout_none": "none",
         "last_never": "never",
@@ -73,10 +74,22 @@ TEXT: dict[str, dict[str, str]] = {
         "seconds_ago": "{value}s ago",
         "minutes_ago": "{value}m ago",
         "hours_ago": "{value}h ago",
-        "context_tree": "Tree: j/k move · y/n approve/reject · p pin · L language",
-        "context_tabs": "Tabs: f cycle · Enter detail · / filter · L language",
-        "context_events": "Events: t time · Ctrl-L clear · / filter · L language",
-        "context_detail": "Detail: Tab change pane · Esc close detail · L language",
+        "context_tree": (
+            "Tree: j/k move · y/n approve/reject · p pin · "
+            "L lang · T theme · F focus · ^P palette"
+        ),
+        "context_tabs": (
+            "Tabs: f cycle · Enter detail · / filter · "
+            "L lang · T theme · F focus · ^P palette"
+        ),
+        "context_events": (
+            "Events: t time · Ctrl-L clear · / filter · "
+            "L lang · T theme · F focus · ^P palette"
+        ),
+        "context_detail": (
+            "Detail: Tab change pane · Esc close detail · "
+            "L lang · T theme · F focus · ^P palette"
+        ),
         "help_navigation": "Navigation",
         "help_title": "Help",
         "help_close": "Press any key to close.",
@@ -137,7 +150,6 @@ TEXT: dict[str, dict[str, str]] = {
         "corpus_col_domain": "domain",
         "corpus_col_statement": "statement",
         "corpus_col_keywords": "keywords",
-        "corpus_col_hits": "hits",
         "corpus_filter_hint": "Filter corpus by id / domain / keyword",
         "corpus_empty": "No corpus problems yet — run scripts/seed_proof_corpus.py.",
         "diagnostics_title": "Diagnostics",
@@ -150,7 +162,6 @@ TEXT: dict[str, dict[str, str]] = {
         "diagnostics_status_open": "open",
         "diagnostics_status_applied": "applied",
         "diagnostics_status_empty": "clean",
-        "diagnostics_status_stuck": "stuck",
         "diagnostics_empty": "No diagnostic manifests yet.",
         "lean_title": "Lean",
         "lean_col_attempt": "attempt",
@@ -254,9 +265,10 @@ TEXT: dict[str, dict[str, str]] = {
         "refutes": "反驳",
         "support_refute": "{supports} 支持 / {refutes} 反驳",
         "hud": (
-            "{app}  活跃假设 {active_hypotheses} / 已反驳 {refuted_nodes} / "
+            "{app}  活跃 {active_hypotheses} / 已反驳 {refuted_nodes} / "
             "指标 {pinned_claims}（未验证 {unverified_claims}）/ "
-            "留出集 {heldout} / 风险 {risks} / 最近 {last_event}  {clock}"
+            "留出 {heldout} / 风险 {risks} / 最近 {last_event}  "
+            "{theme}·{lang_code}  {clock}"
         ),
         "heldout_none": "无",
         "last_never": "无",
@@ -264,10 +276,22 @@ TEXT: dict[str, dict[str, str]] = {
         "seconds_ago": "{value} 秒前",
         "minutes_ago": "{value} 分钟前",
         "hours_ago": "{value} 小时前",
-        "context_tree": "假设树: j/k 移动 · y/n 批准/拒绝 · p 固定指标 · L 切换语言",
-        "context_tabs": "表格: f 切换 · Enter 详情 · / 过滤 · L 切换语言",
-        "context_events": "事件: t 时间格式 · Ctrl-L 清空显示 · / 过滤 · L 切换语言",
-        "context_detail": "详情: Tab 切换面板 · Esc 关闭详情 · L 切换语言",
+        "context_tree": (
+            "假设树: j/k 移动 · y/n 批准/拒绝 · p 固定指标 · "
+            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+        ),
+        "context_tabs": (
+            "表格: f 切换 · Enter 详情 · / 过滤 · "
+            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+        ),
+        "context_events": (
+            "事件: t 时间格式 · Ctrl-L 清空 · / 过滤 · "
+            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+        ),
+        "context_detail": (
+            "详情: Tab 切换面板 · Esc 关闭详情 · "
+            "L 语言 · T 主题 · F 焦点 · ^P 命令面板"
+        ),
         "help_navigation": "导航",
         "help_title": "帮助",
         "help_close": "按任意键关闭。",
@@ -315,7 +339,6 @@ TEXT: dict[str, dict[str, str]] = {
         "corpus_col_domain": "领域",
         "corpus_col_statement": "命题",
         "corpus_col_keywords": "关键词",
-        "corpus_col_hits": "命中",
         "corpus_filter_hint": "按 ID / 领域 / 关键词过滤语料",
         "corpus_empty": "还没有语料题。运行 scripts/seed_proof_corpus.py 导入。",
         "diagnostics_title": "诊断",
@@ -328,7 +351,6 @@ TEXT: dict[str, dict[str, str]] = {
         "diagnostics_status_open": "待处理",
         "diagnostics_status_applied": "已应用",
         "diagnostics_status_empty": "无缺陷",
-        "diagnostics_status_stuck": "卡住",
         "diagnostics_empty": "暂无诊断 manifest。",
         "lean_title": "Lean",
         "lean_col_attempt": "尝试",
