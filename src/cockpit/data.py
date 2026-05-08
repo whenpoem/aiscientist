@@ -784,6 +784,60 @@ def write_intervention(kind: str, target: str | None, payload: str) -> dict[str,
         con.close()
 
 
+def undo_intervention(intervention_id: int) -> dict[str, object]:
+    """Delete a queued intervention if and only if it has not yet been
+    delivered to the agent.
+
+    The intervention_pump.py hook sets ``delivered_at`` when it consumes
+    rows on UserPromptSubmit. Once delivered, the agent's reasoning may
+    already depend on it, so undo is refused and the caller is expected
+    to surface a "too late" message.
+
+    Returns a dict with:
+      - ``ok`` (bool): True if the row was removed.
+      - ``reason`` (str): one of ``"deleted"``, ``"already_delivered"``,
+        ``"not_found"`` for the caller's UI hint.
+      - ``kind`` / ``target`` (str | None): the row's metadata when found,
+        useful for the success toast.
+    """
+    con = _connect()
+    try:
+        row = con.execute(
+            "SELECT kind, target, delivered_at FROM cockpit_interventions WHERE id = ?",
+            (intervention_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "reason": "not_found", "kind": None, "target": None}
+        if row["delivered_at"] is not None:
+            return {
+                "ok": False,
+                "reason": "already_delivered",
+                "kind": row["kind"],
+                "target": row["target"],
+            }
+        con.execute(
+            "DELETE FROM cockpit_interventions WHERE id = ? AND delivered_at IS NULL",
+            (intervention_id,),
+        )
+        record_event(
+            "intervention_undone",
+            {
+                "intervention_id": intervention_id,
+                "kind": row["kind"],
+                "target": row["target"],
+            },
+        )
+        con.commit()
+        return {
+            "ok": True,
+            "reason": "deleted",
+            "kind": row["kind"],
+            "target": row["target"],
+        }
+    finally:
+        con.close()
+
+
 def refute_node(node_id: str, reason: str) -> dict[str, Any]:
     from memory_mcp import impl as memory_impl
 

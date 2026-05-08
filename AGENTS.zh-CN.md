@@ -89,6 +89,6 @@ Claude 的设置已经接好了下列 MCP 服务器：`memory`、`verify`、`coc
 
 本仓库已经交付了 v3.0 计划（[`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)）。不要在没有亲自验证剩余产品和运维预期的情况下，把它随便改写成 "V1.0 complete" 或 "production-ready"。
 
-**v4.0.0a0（证明主干，alpha）已交付。** `prove_mcp` MCP server、`prove-sop` skill、`prover` agent 定义、`scripts/` 下的冷启动种子脚本，以及 reviewer 的双 checklist 都已 land。Lean 形式化保险层保持 opt-in：`.claude/settings.json` 里的 `_lean` 默认禁用，需要用户按 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md) 手动安装 elan + mathlib + lean-lsp-mcp 后才启用。架构层面的决策见 [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md)；新增能力的入场纪律见 [ADR 0007](docs/adr/0007-tools-skills-hooks-layering.md)；内核/主干切分线见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+**v4.1.0a4（alpha）是当前版本。** v4.1 重新设计了 cockpit TUI（4 套主题、自适应布局、证明主干面板、命令面板、全屏详情视图），并重组了全部文档。证明主干在 v4.0 交付：`prove_mcp` MCP server、`prove-sop` skill、`prover` agent 定义、`scripts/` 下的冷启动种子脚本，以及 reviewer 的双 checklist。Lean 形式化保险层保持 opt-in：`.claude/settings.json` 里的 `_lean` 默认禁用，需要用户按 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md) 手动安装 elan + mathlib + lean-lsp-mcp 后才启用。架构决策见 [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md)；能力入场纪律见 [ADR 0007](docs/adr/0007-tools-skills-hooks-layering.md)；内核/主干切分线见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 完整的当前范围与 MCP 工具清单请见 [`docs/tool-reference.zh-CN.md`](docs/tool-reference.zh-CN.md)。

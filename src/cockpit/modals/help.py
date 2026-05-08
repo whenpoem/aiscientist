@@ -43,5 +43,16 @@ class HelpScreen(ModalScreen[None]):
         with Container(id="help-dialog"):
             yield Static("\n".join(lines))
 
-    def on_key(self, _event) -> None:
-        self.dismiss(None)
+    # Keys that close the help overlay. Anything else is consumed silently
+    # so the user reading the keymap can't accidentally fire a destructive
+    # action (e.g. `y` approving the selected node) just by tapping a key.
+    # `?` is symmetric to the trigger; `enter`/`space` cover muscle memory.
+    _DISMISS_KEYS = frozenset({"escape", "enter", "space", "question_mark", "?"})
+
+    def on_key(self, event) -> None:
+        if event.key in self._DISMISS_KEYS:
+            self.dismiss(None)
+        # Stop propagation either way: if the user pressed a stray key we
+        # don't want it bubbling to the underlying app and triggering an
+        # action while the help overlay is visible.
+        event.stop()

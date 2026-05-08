@@ -6,7 +6,7 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 你丢给 Claude 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
 
-**当前版本**：v4.0.0a0（alpha）——新增了一条[证明主干](docs/adr/0008-two-trunk-domain-architecture.md)，用于统计证明生成，与已有的 ML 实验流程并行运作。两条主干共享同一个内核：假说图、错题本、排名锦标赛、cockpit。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+**当前版本**：v4.1.0a4（alpha）——[证明主干](docs/adr/0008-two-trunk-domain-architecture.md)用于统计证明生成，与 ML 实验流程并行运作，共享同一个内核。Cockpit TUI 经过重新设计，支持 4 套主题、自适应布局和证明主干面板。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ## 长什么样
 

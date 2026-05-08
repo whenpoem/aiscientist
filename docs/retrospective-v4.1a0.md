@@ -1,5 +1,7 @@
 # Retrospective — v4.1.0a0
 
+> 中文版本: [retrospective-v4.1a0.zh-CN.md](retrospective-v4.1a0.zh-CN.md)
+>
 > Plan v3 ship. Cockpit TUI sweeping overhaul: 4 themes (warm-dark default), 3-column adaptive layout + F-key focus mode, 3 new proof-trunk tabs (Corpus / Diagnostics / Lean), Ctrl+P command palette, 6 i18n regressions fixed with a permanent regression-test guard. Tag `v4.1.0a0` at the head of branch `claudescientist`.
 >
 > Tests: **302 green** (was 239 at v4.0.0a1; +63 new, none removed). Ruff clean. Schema unchanged from v4.0.0a1 (memory_mcp v5 / verify_mcp v4 / cockpit v1 / prove_mcp v4) — TUI overhaul touched no DB tables.
@@ -138,4 +140,4 @@ Next natural step is to run a real research-end-to-end (Plan v2's deferred user-
 
 ---
 
-*Retrospective version: 1.0 · 2026-05-07 · base commit: forthcoming · tag: `v4.1.0a0`*
+*Retrospective version: 1.0 · 2026-05-07 · base commit: pending · tag: `v4.1.0a0`*

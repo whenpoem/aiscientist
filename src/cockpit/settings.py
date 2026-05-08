@@ -53,6 +53,17 @@ class CockpitSettings:
     relative_timestamps: bool = False
     show_refuted: bool = False
     reduced_motion: bool = False
+    # v4.1.0a4 additions: per-pane display preferences. event_wrap controls
+    # whether the event RichLog soft-wraps long payloads (True = readable
+    # default, False = legacy single-line). tree_compact strips BT/Elo from
+    # tree labels so node text gets the column width — power users can flip
+    # back with `i`. wide_subpreset is a -1/0/+1 nudge on the wide-layout
+    # tree column ratio: 0 keeps the v4.1.0a0 default (1:2:2), -1 narrows
+    # the tree (1:2.5:2.5) for terminals where node text is short, +1
+    # widens it (1.5:2:2) for projects with long hypothesis statements.
+    event_wrap: bool = True
+    tree_compact: bool = True
+    wide_subpreset: int = 0
 
     @classmethod
     def from_dict(cls, data: dict) -> "CockpitSettings":

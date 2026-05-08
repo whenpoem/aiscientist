@@ -22,6 +22,20 @@ from textual.widgets import DataTable
 
 from cockpit.i18n import t
 
+
+def _truncate(value: str, max_width: int) -> str:
+    """Truncate to ``max_width`` and append a typographic ellipsis when cut.
+
+    The typographic ``…`` (U+2026) is one cell and renders consistently on
+    every terminal we target; the previous ASCII ``...`` ate three cells
+    and looked like a stuttered word. Drill-in (Enter on the row) is the
+    user-facing recovery for the elided suffix.
+    """
+    if max_width <= 0 or len(value) <= max_width:
+        return value
+    return value[: max(0, max_width - 1)] + "…"
+
+
 TAB_ORDER = (
     "risks",
     "failures",
@@ -326,9 +340,10 @@ class RightTabsPane(Container):
             table.move_cursor(row=0, column=0)
             return
         for row in rows:
-            title = str(row["title"])
-            if len(title) > 48:
-                title = title[:45] + "..."
+            # Bumped from 48→64 now that drill-in is the safety net for
+            # elided text and most modern terminals run wide enough to
+            # absorb the extra characters without crowding sibling columns.
+            title = _truncate(str(row["title"]), 64)
             table.add_row(
                 str(row["paper_id"]),
                 title,
@@ -348,9 +363,9 @@ class RightTabsPane(Container):
             table.move_cursor(row=0, column=0)
             return
         for row in rows:
-            statement = str(row.get("statement", ""))
-            if len(statement) > 56:
-                statement = statement[:53] + "..."
+            # Same logic as the literature table: drill-in carries the full
+            # statement, the table just needs enough to scan the gist.
+            statement = _truncate(str(row.get("statement", "")), 72)
             keywords = (
                 f"L{row.get('n_lexical', 0)} / S{row.get('n_semantic', 0)}"
             )

@@ -17,6 +17,7 @@ from textual.reactive import reactive
 from textual.widgets import Input, Static
 
 from . import data
+from .bars import progress_bar
 from .commands import CockpitCommands, ThemeSwitcherCommands
 from .i18n import normalize_lang, t, toggle_lang
 from .layout import (
@@ -113,32 +114,42 @@ class StatusBar(Static):
         budgets = self._summary.get("heldout_budgets") or []
         if not budgets:
             return t(self.lang, "heldout_none")
-        parts = [
-            f"{row.get('dataset', '-')}: {row.get('budget_used', 0)}/{row.get('budget_total', 0)}"
-            for row in budgets[:2]
-        ]
+        # Compact bar (6 cells) keeps the HUD honest on narrow terminals
+        # while still giving a real fill cue. Two datasets max — anything
+        # beyond that belongs in the risks tab, not the status bar.
+        parts: list[str] = []
+        for row in budgets[:2]:
+            used = int(row.get("budget_used", 0) or 0)
+            total = int(row.get("budget_total", 0) or 0)
+            bar = progress_bar(used, total, width=6)
+            parts.append(f"{row.get('dataset', '-')} {bar} {used}/{total}")
         return ", ".join(parts)
 
     def _format_last_event(self) -> str:
         raw = self._summary.get("latest_event_at")
         if not raw:
-            return t(self.lang, "last_never")
+            # Hollow dot conveys "no signal yet" without alarming the user.
+            return f"○ {t(self.lang, 'last_never')}"
         try:
             parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
         except ValueError:
-            return str(raw)[:8]
+            return f"● {str(raw)[:8]}"
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         delta = datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)
         seconds = max(int(delta.total_seconds()), 0)
+        # Filled dot for fresh events (< 2s) so the user gets a low-effort
+        # "system is alive" cue in their peripheral vision; we drop to a
+        # hollow ring once the trail goes cold.
+        dot = "●" if seconds < 2 else "○"
         if seconds < 5:
-            return t(self.lang, "just_now")
+            return f"{dot} {t(self.lang, 'just_now')}"
         if seconds < 60:
-            return t(self.lang, "seconds_ago", value=seconds)
+            return f"{dot} {t(self.lang, 'seconds_ago', value=seconds)}"
         minutes = seconds // 60
         if minutes < 60:
-            return t(self.lang, "minutes_ago", value=minutes)
-        return t(self.lang, "hours_ago", value=minutes // 60)
+            return f"{dot} {t(self.lang, 'minutes_ago', value=minutes)}"
+        return f"{dot} {t(self.lang, 'hours_ago', value=minutes // 60)}"
 
 
 class ContextBar(Static):
@@ -185,8 +196,13 @@ class CockpitApp(App[None]):
         Binding("2", "focus_detail", "Detail"),
         Binding("3", "focus_events", "Events"),
         Binding("4", "focus_tabs", "Tabs"),
-        Binding("tab", "focus_next_pane", "Next Pane"),
-        Binding("shift+tab", "focus_prev_pane", "Prev Pane"),
+        # priority=True so Tab fires the cockpit-wide pane cycle even
+        # when a DataTable / Input has focus. Without priority, Textual's
+        # default "focus next focusable child" handler swallows the key
+        # inside the tabs pane and the user gets stuck (regression caught
+        # by test_tab_from_tabs_pane_advances_focus_to_tree).
+        Binding("tab", "focus_next_pane", "Next Pane", priority=True),
+        Binding("shift+tab", "focus_prev_pane", "Prev Pane", priority=True),
         Binding("j", "cursor_down", "Down"),
         Binding("k", "cursor_up", "Up"),
         Binding("h", "pane_left", "Left"),
@@ -194,7 +210,11 @@ class CockpitApp(App[None]):
         Binding("g", "jump_top", "Top"),
         Binding("G", "jump_bottom", "Bottom"),
         Binding("f", "cycle_right_tab", "Cycle Tab"),
-        Binding("enter", "drill_selection", "Open"),
+        # priority=True so Tree / DataTable can't swallow Enter. The Tree
+        # widget binds Enter to "select_cursor" by default (and the
+        # DataTable / Input behave similarly); without priority the
+        # cockpit-wide drill never fires from those panes.
+        Binding("enter", "drill_selection", "Open", priority=True),
         Binding("y", "approve_node", "Approve"),
         Binding("n", "reject_node", "Reject"),
         Binding("r", "redirect_node", "Redirect"),
@@ -217,6 +237,21 @@ class CockpitApp(App[None]):
         Binding("F", "toggle_focus", "Focus", priority=True),
         Binding("R", "force_refresh", "Refresh"),
         Binding("ctrl+l", "clear_event_log", "Clear Events"),
+        # v4.1.0a4 display toggles. priority=True so that even when an
+        # Input/DataTable has focus the keystroke still fires (matches the
+        # L/T/F precedent above).
+        Binding("w", "toggle_event_wrap", "Wrap", priority=True),
+        Binding("i", "toggle_tree_compact", "Tree info", priority=True),
+        # `<` / `>` nudge the wide-layout tree column wider/narrower.
+        # Lower-case input convention: shift+comma / shift+period in
+        # Textual's key naming. priority so they fire even when an Input
+        # has focus (e.g. while the user is in filter mode).
+        Binding("less_than_sign", "shrink_tree", "Shrink Tree", priority=True),
+        Binding("greater_than_sign", "expand_tree", "Expand Tree", priority=True),
+        # Roll back the most recent queued intervention if and only if
+        # the agent hasn't consumed it yet (delivered_at IS NULL). After
+        # delivery the cockpit must NOT lie that it can rewind history.
+        Binding("u", "undo_intervention", "Undo", priority=True),
         Binding("escape", "cancel_context", show=False),
         Binding("q", "quit_requested", "Quit", priority=True),
     ]
@@ -262,6 +297,20 @@ class CockpitApp(App[None]):
         self._command_mode: str | None = None
         self._command_target = "tree"
         self._pane_filters = {"tree": "", "events": "", "tabs": ""}
+        # Per-mode draft buffers for the bottom Input. The user can start
+        # typing a `:` command, get distracted, press Esc, and the next `:`
+        # restores their half-typed text. Filter mode is intentionally NOT
+        # buffered here — its draft is the active filter (in _pane_filters)
+        # and is restored from there.
+        self._command_buffer: str = ""
+        # Most recent intervention id for the `u` undo path. Set by
+        # _notify_intervention_queued; cleared on successful undo. Holds
+        # only the id from the *current* session — restarting the cockpit
+        # forfeits undo, which is the correct safety property: a stale id
+        # could collide with a future row.
+        self._last_intervention_id: int | None = None
+        self._last_intervention_kind: str | None = None
+        self._last_intervention_target: str | None = None
         self._detail_override = False
         self._stop_event_worker = False
 
@@ -287,9 +336,9 @@ class CockpitApp(App[None]):
         # to Detail and pushes the read-mostly Tabs to the bottom of the
         # right column — also fine.
         with Container(id="body-grid", classes="layout-wide"):
-            yield HypothesisTreePane()
+            yield HypothesisTreePane(compact=self._settings.tree_compact)
             yield NodeDetailPane()
-            yield EventStreamPane()
+            yield EventStreamPane(wrap=self._settings.event_wrap)
             yield RightTabsPane()
         yield Input(placeholder="command", id="command-line", classes="hidden")
         yield ContextBar(lang=self.lang)
@@ -396,12 +445,18 @@ class CockpitApp(App[None]):
             )
 
     def action_cycle_theme(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("T"):
+            return
         self._apply_theme(next_theme(self._settings.theme), persist=True, notify=True)
 
     # -- layout machinery --------------------------------------------------
 
     def _body_grid(self) -> Container:
         return self.query_one("#body-grid", Container)
+
+    _WIDE_SUBPRESET_CLASSES: tuple[str, ...] = ("tree-narrow", "tree-wide")
 
     def _apply_layout(self, *, persist: bool) -> None:
         """Resolve the saved preset against the current terminal width and
@@ -422,6 +477,17 @@ class CockpitApp(App[None]):
         for cls in all_layout_classes():
             grid.remove_class(cls)
         grid.add_class(target_class)
+        # Wide-layout subpreset: tree-narrow (-1) / default (0) / tree-wide (+1).
+        # Always strip both modifiers first, then add at most one. The
+        # narrow / single layouts ignore the subpreset — it's wide-only.
+        for cls in self._WIDE_SUBPRESET_CLASSES:
+            grid.remove_class(cls)
+        if active == "wide":
+            sub = max(-1, min(1, int(self._settings.wide_subpreset)))
+            if sub == -1:
+                grid.add_class("tree-narrow")
+            elif sub == 1:
+                grid.add_class("tree-wide")
         # Manage layout-active class on panes for single-pane focus mode.
         panes = {
             "tree": self.tree_pane,
@@ -437,7 +503,101 @@ class CockpitApp(App[None]):
         if persist:
             self._persist_settings()
 
+    def action_undo_intervention(self) -> None:
+        """Roll back the most recent queued intervention if the hook has
+        not yet delivered it. Refuse silently with a toast otherwise.
+
+        See ``data.undo_intervention`` for the SQL contract; the cockpit
+        is the only user interface to that function.
+        """
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("u"):
+            return
+        intervention_id = self._last_intervention_id
+        if intervention_id is None:
+            self.notify(t(self.lang, "undo_nothing"), severity="warning")
+            return
+        result = data.undo_intervention(intervention_id)
+        if result.get("ok"):
+            kind = self._last_intervention_kind or "intervention"
+            target = self._last_intervention_target
+            self._last_intervention_id = None
+            self._last_intervention_kind = None
+            self._last_intervention_target = None
+            display = self._short_node_label(target) if target else ""
+            if display:
+                msg = t(self.lang, "undo_done", kind=kind, target=display)
+            else:
+                msg = t(self.lang, "undo_done_no_target", kind=kind)
+            self.notify(msg)
+            self.refresh_state(include_events=True)
+            return
+        reason = str(result.get("reason"))
+        if reason == "already_delivered":
+            self.notify(t(self.lang, "undo_too_late"), severity="warning")
+        else:
+            self.notify(t(self.lang, "undo_nothing"), severity="warning")
+        # Pointer is no longer useful — clear so a follow-up `u` doesn't
+        # produce the same misleading toast.
+        self._last_intervention_id = None
+        self._last_intervention_kind = None
+        self._last_intervention_target = None
+
+    def action_shrink_tree(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("<"):
+            return
+        self._nudge_wide_subpreset(-1)
+
+    def action_expand_tree(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input(">"):
+            return
+        self._nudge_wide_subpreset(+1)
+
+    def _nudge_wide_subpreset(self, delta: int) -> None:
+        """Step the wide-layout tree column wider (+1) or narrower (-1).
+
+        The subpreset only takes effect under the wide layout — narrow /
+        single ignore it (Textual collapses the grid to 2 or 1 columns).
+        Keystrokes outside wide warn the user instead of silently storing
+        a setting they can't see take effect.
+        """
+        if not self.is_mounted:
+            return
+        try:
+            width = self.size.width
+        except Exception:  # pragma: no cover
+            width = 120
+        active = resolve_for_width(self._settings.layout_preset, width)
+        if active != "wide":
+            self.notify(t(self.lang, "wide_only_hint"), severity="warning")
+            return
+        current = max(-1, min(1, int(self._settings.wide_subpreset)))
+        target = max(-1, min(1, current + delta))
+        if target == current:
+            # Already at the end of the range — toast briefly so the user
+            # knows the keystroke registered but had nowhere to go.
+            self.notify(t(self.lang, "tree_width_at_limit"))
+            return
+        self._settings.wide_subpreset = target
+        self._apply_layout(persist=True)
+        label = {-1: "tree_width_narrow", 0: "tree_width_default", 1: "tree_width_wide"}[
+            target
+        ]
+        self.notify(t(self.lang, label))
+
     def action_toggle_focus(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("F"):
+            return
+        self._toggle_focus_impl()
+
+    def _toggle_focus_impl(self) -> None:
         """Toggle single-pane focus mode. Preserves the user's prior layout
         preset so exiting focus mode returns to wide / narrow / whatever
         they had instead of always snapping to wide.
@@ -514,6 +674,24 @@ class CockpitApp(App[None]):
         self._detail_override = False
         self.detail_pane.clear_override()
         self._refresh_detail()
+        # If a DetailScreen is on top of the stack, repaint it so action
+        # keys (y/n/r/c/m) fired from inside the drill-in surface their
+        # state change immediately — without this the user sees a stale
+        # node body and has to bounce out and back in.
+        self._repaint_top_detail_screen()
+
+    def _repaint_top_detail_screen(self) -> None:
+        if len(self.screen_stack) <= 1:
+            return
+        try:
+            from .screens import DetailScreen as _Detail
+
+            top = self.screen_stack[-1]
+            if isinstance(top, _Detail):
+                top.set_language(self.lang)
+                top.refresh_content()
+        except Exception:  # pragma: no cover - defensive
+            pass
 
     def watch_focused_pane(self, _old: str, new: str) -> None:
         panes = {
@@ -559,6 +737,9 @@ class CockpitApp(App[None]):
         target = self._command_target
         self._hide_command_line()
         if mode == "command":
+            # The draft was committed — clear the per-app buffer so the
+            # next `:` opens to an empty input, not a stale command.
+            self._command_buffer = ""
             self._execute_command(value)
             return
         if mode == "filter":
@@ -583,10 +764,29 @@ class CockpitApp(App[None]):
         self._set_focus("tabs")
 
     def action_focus_next_pane(self) -> None:
+        # Priority Tab on the App swallows the keystroke before it reaches
+        # any focused widget — including the inputs inside PinMetricModal
+        # / TextInputModal, which rely on Tab → focus_next() to walk their
+        # fields. When a modal is on the stack we forward the operation
+        # to the modal so its own field cycle still works.
+        if len(self.screen_stack) > 1:
+            top = self.screen_stack[-1]
+            try:
+                top.focus_next()
+            except Exception:  # pragma: no cover - defensive
+                pass
+            return
         index = FOCUS_ORDER.index(self.focused_pane)
         self._set_focus(FOCUS_ORDER[(index + 1) % len(FOCUS_ORDER)])
 
     def action_focus_prev_pane(self) -> None:
+        if len(self.screen_stack) > 1:
+            top = self.screen_stack[-1]
+            try:
+                top.focus_previous()
+            except Exception:  # pragma: no cover - defensive
+                pass
+            return
         index = FOCUS_ORDER.index(self.focused_pane)
         self._set_focus(FOCUS_ORDER[(index - 1) % len(FOCUS_ORDER)])
 
@@ -687,6 +887,10 @@ class CockpitApp(App[None]):
         self._show_command_line("filter", placeholder, target=target)
 
     def action_toggle_language(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("L"):
+            return
         self.lang = toggle_lang(self.lang)
         # Keep settings.lang in lockstep so a hard kill before on_unmount
         # still preserves the choice. _persist_settings() is the single
@@ -699,6 +903,73 @@ class CockpitApp(App[None]):
     def action_toggle_timestamp_mode(self) -> None:
         self.relative_timestamps = not self.relative_timestamps
         self.events_pane.set_relative_timestamps(self.relative_timestamps)
+        self._persist_settings()
+
+    def _yield_priority_letter_to_input(self, literal: str) -> bool:
+        """Forward a priority-bound literal keystroke to a focused Input.
+
+        Priority bindings on the App fire before the focused widget gets
+        the key, so without this helper the user typing 'L' / 'T' / 'F'
+        / 'w' / 'i' / 'u' / '<' / '>' inside a modal Input would get the
+        toggle action instead of the literal character. We detect Input
+        focus, insert the character at the cursor, and tell the caller to skip its
+        normal action body.
+
+        Returns True when the keystroke was forwarded (caller should
+        return immediately); False when no Input is focused (caller
+        should run its normal action).
+        """
+        focused = self.focused
+        if isinstance(focused, Input):
+            try:
+                focused.insert_text_at_cursor(literal)
+            except Exception:  # pragma: no cover - defensive
+                pass
+            return True
+        return False
+
+    def _priority_action_blocked_by_help(self) -> bool:
+        """Keep Help as a real shield for App-level priority bindings."""
+        if len(self.screen_stack) <= 1:
+            return False
+        try:
+            return isinstance(self.screen_stack[-1], HelpScreen)
+        except Exception:  # pragma: no cover - defensive
+            return False
+
+    def action_toggle_event_wrap(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("w"):
+            return
+        new_state = not self._settings.event_wrap
+        self._settings.event_wrap = new_state
+        self.events_pane.set_wrap(new_state)
+        self.notify(
+            t(self.lang, "event_wrap_on" if new_state else "event_wrap_off")
+        )
+        self._persist_settings()
+
+    def action_toggle_tree_compact(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("i"):
+            return
+        new_state = not self._settings.tree_compact
+        self._settings.tree_compact = new_state
+        self.tree_pane.set_compact(new_state)
+        # Reload labels so the BT/Elo suffix appears or disappears
+        # immediately. We pass the cached graph + current filter through
+        # the canonical entry point so node selection is preserved.
+        self.selected_node_id = self.tree_pane.load_graph(
+            self.graph,
+            show_refuted=self.show_refuted,
+            filter_text=self._pane_filters["tree"],
+            selected_node_id=self.selected_node_id,
+        )
+        self.notify(
+            t(self.lang, "tree_compact_on" if new_state else "tree_compact_off")
+        )
         self._persist_settings()
 
     def action_toggle_refuted(self) -> None:
@@ -728,6 +999,20 @@ class CockpitApp(App[None]):
             self._refresh_detail()
 
     def action_quit_requested(self) -> None:
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("q"):
+            return
+        # When a Screen is pushed (DetailScreen, modals), `q` should pop
+        # back to the main screen — exiting the entire app from inside a
+        # drill-in is jarring and easy to trigger by accident. Modals
+        # already register their own escape paths (PinMetricModal / Help
+        # use Esc), so this fallback only kicks in for screens that don't
+        # bind q themselves. The main-screen invariant — q exits — is
+        # preserved by checking screen_stack length.
+        if len(self.screen_stack) > 1:
+            self.pop_screen()
+            return
         self.exit()
 
     def action_approve_node(self) -> None:
@@ -786,15 +1071,177 @@ class CockpitApp(App[None]):
             callback=self._handle_halt,
         )
 
-    def action_drill_selection(self) -> None:
-        if self.focused_pane != "tabs":
+    async def action_drill_selection(self) -> None:
+        """Push a full-window DetailScreen for the row under focus.
+
+        Branches by focused pane so the same Enter keystroke does the
+        right thing wherever the user is reading:
+        - tree   → NodeDetailSource over the visible-id list
+        - tabs   → TabRowDetailSource over the active subtab's filtered rows
+        - events → EventDetailSource over the most recent N events
+        - detail → no-op (the user is already in a detail view)
+
+        The DetailScreen keeps the App's ``selected_node_id`` in sync
+        when the source is node-backed, so action keys (y/n/r/c/m/p/H)
+        keep working without extra wiring.
+
+        Because the Enter binding carries ``priority=True`` (so DataTable
+        / Tree don't swallow it on the main screen), this action is also
+        responsible for forwarding Enter to the currently-active context
+        when drill-in doesn't apply: a modal, the command-line input, or
+        a separate Screen (e.g. HelpScreen, DetailScreen itself). Without
+        the forwarding, those contexts never see Enter.
+        """
+        # Forward to the topmost Screen / modal so its own Enter handler
+        # (e.g. HelpScreen dismiss on enter, PinMetricModal field cycle)
+        # still runs.
+        if len(self.screen_stack) > 1:
+            top = self.screen_stack[-1]
+            # HelpScreen: dismiss on enter (its on_key whitelist).
+            try:
+                from .modals.help import HelpScreen as _Help
+
+                if isinstance(top, _Help):
+                    top.dismiss(None)
+                    return
+            except Exception:  # pragma: no cover
+                pass
+            # Inputs inside the modal — submit to fire on_input_submitted.
+            try:
+                focused = top.focused  # type: ignore[attr-defined]
+            except Exception:  # pragma: no cover
+                focused = None
+            if focused is not None and hasattr(focused, "action_submit"):
+                try:
+                    result = focused.action_submit()
+                    # Input.action_submit is a coroutine in modern Textual;
+                    # await when the call returns one, else assume sync.
+                    import inspect as _inspect
+
+                    if _inspect.isawaitable(result):
+                        await result
+                except Exception:  # pragma: no cover
+                    pass
             return
+        # Command-line input: submit so on_input_submitted fires the
+        # command / filter pipeline. Without this the priority Enter
+        # would silently drop the user's command.
+        if self.is_mounted and not self.command_line.has_class("hidden"):
+            try:
+                result = self.command_line.action_submit()
+                import inspect as _inspect
+
+                if _inspect.isawaitable(result):
+                    await result
+            except Exception:  # pragma: no cover
+                pass
+            return
+        # Infer which pane to drill from based on the actually-focused
+        # widget, not the ``focused_pane`` reactive. Mouse clicks move the
+        # OS focus but don't go through ``_set_focus()``, so the reactive
+        # can be stale (e.g. user pressed `3` earlier, then clicked the
+        # tree with the mouse — ``focused_pane`` still says "events").
+        # Using actual focus lets Enter Just Work regardless of input
+        # device. Falls back to the reactive when no widget matches.
+        target = self._resolve_drill_pane()
+        if target == "tree":
+            self._open_detail_for_tree()
+        elif target == "tabs":
+            self._open_detail_for_tabs()
+        elif target == "events":
+            self._open_detail_for_events()
+        # detail pane drill-in is intentionally a no-op — there is
+        # nothing deeper to drill into from a detail view.
+
+    def _resolve_drill_pane(self) -> str:
+        """Walk the focus chain back to a known pane, or fall back to the
+        reactive. Returns one of "tree" / "tabs" / "events" / "detail".
+        """
+        try:
+            focused = self.focused
+        except Exception:  # pragma: no cover - defensive
+            focused = None
+        widget = focused
+        # Cap the walk so a corrupt parent chain can't loop forever.
+        for _ in range(32):
+            if widget is None:
+                break
+            try:
+                if widget is self.tree_pane:
+                    return "tree"
+                if widget is self.detail_pane:
+                    return "detail"
+                if widget is self.events_pane:
+                    return "events"
+                if widget is self.tabs_pane:
+                    return "tabs"
+            except Exception:  # pragma: no cover
+                break
+            widget = getattr(widget, "parent", None)
+        return self.focused_pane
+
+    def _open_detail_for_tree(self) -> None:
+        node_id = self.tree_pane.current_node_id() or self.selected_node_id
+        if node_id is None:
+            self.notify(t(self.lang, "no_node"), severity="warning")
+            return
+        # Guard against a stale cursor pointing at a node that's been
+        # evicted from the graph between selection and Enter (rare in
+        # single-user use, but possible if the agent refutes / archives
+        # while the user is reading). Without this check the DetailScreen
+        # would render an empty body and look like the hypothesis vanished.
+        if self.graph.node(node_id) is None:
+            self.notify(t(self.lang, "no_node"), severity="warning")
+            return
+        from .screens import DetailScreen, NodeDetailSource
+
+        visible = self.tree_pane.visible_node_ids()
+        if not visible:
+            return
+        # Pass a graph getter (not a snapshot) so action keys mutating
+        # the graph from inside the DetailScreen are visible on the next
+        # repaint without manual re-push. See _refresh_top_screen().
+        source = NodeDetailSource(
+            lambda: self.graph, visible, node_id, self.lang
+        )
+        self.push_screen(DetailScreen(source, lang=self.lang))
+
+    def _open_detail_for_tabs(self) -> None:
         row = self.tabs_pane.current_row()
         if row is None:
+            # Active subtab has no real rows (the table is showing the
+            # localized "no <kind> yet" placeholder). Stay silent — the
+            # placeholder text in the table is already the user-visible
+            # answer; an additional toast just stacks up and clutters
+            # the screen during exploration.
             return
-        title, body = self._row_detail(row)
-        self._detail_override = True
-        self.detail_pane.show_override(title, body)
+        from .screens import DetailScreen, TabRowDetailSource
+
+        # Mirror the rows that tabs_pane shows after filtering — the
+        # source must walk only what's visible, not the full backing list.
+        active = self.tabs_pane.active or "risks"
+        rows = self.tabs_pane._filtered_rows.get(active, [])
+        try:
+            current_idx = rows.index(row)
+        except ValueError:
+            current_idx = 0
+        source = TabRowDetailSource(
+            rows, current_idx, self._row_detail, self.lang
+        )
+        self.push_screen(DetailScreen(source, lang=self.lang))
+
+    def _open_detail_for_events(self) -> None:
+        from .screens import DetailScreen, EventDetailSource
+
+        # Use the most recent events from the events pane's in-memory
+        # rows so the source stays consistent with what the user just saw.
+        rows = list(reversed(self.events_pane._rows))  # newest first
+        if not rows:
+            # Same reason as the tabs branch — the events pane already
+            # renders "no events yet" inline; an extra toast is noise.
+            return
+        source = EventDetailSource(rows, 0, self.lang)
+        self.push_screen(DetailScreen(source, lang=self.lang))
 
     @work(exclusive=True)
     async def events_worker(self) -> None:
@@ -836,12 +1283,19 @@ class CockpitApp(App[None]):
         self.events_pane.set_language(self.lang)
         self.tabs_pane.set_language(self.lang)
         self.context_bar.set_pane(self.focused_pane)
+        self._repaint_top_detail_screen()
 
     def _show_command_line(self, mode: str, placeholder: str, *, target: str = "tree") -> None:
         self._command_mode = mode
         self._command_target = target
         self.command_line.placeholder = placeholder
-        self.command_line.value = self._pane_filters.get(target, "") if mode == "filter" else ""
+        # Filter mode draws its draft from the active filter; command mode
+        # restores the per-app draft buffer so a half-typed command isn't
+        # lost when the user dismisses with Esc and reopens with `:`.
+        if mode == "filter":
+            self.command_line.value = self._pane_filters.get(target, "")
+        else:
+            self.command_line.value = self._command_buffer
         self.command_line.remove_class("hidden")
         self.command_line.focus()
         self.command_line.action_end()
@@ -849,6 +1303,11 @@ class CockpitApp(App[None]):
     def _hide_command_line(self, *, clear_filter: bool = False) -> None:
         mode = self._command_mode
         target = self._command_target
+        # Stash the current command-mode draft so the next `:` restores it.
+        # Filter mode doesn't need stashing — its source of truth is
+        # _pane_filters, which the input has been writing through already.
+        if mode == "command":
+            self._command_buffer = self.command_line.value
         self.command_line.value = ""
         self.command_line.add_class("hidden")
         self._command_mode = None
@@ -860,8 +1319,57 @@ class CockpitApp(App[None]):
         node_id = self._require_selected_node()
         if node_id is None:
             return
-        data.write_intervention(kind, node_id, "")
+        result = data.write_intervention(kind, node_id, "")
+        self._track_intervention(result, kind, node_id)
         self.refresh_state(include_events=True)
+
+    def _track_intervention(
+        self,
+        result: dict | None,
+        kind: str,
+        target: str | None,
+    ) -> None:
+        """Record the latest intervention for the `u` undo path AND toast.
+
+        ``result`` is the dict returned by ``data.write_intervention`` —
+        we read its ``intervention_id`` to seed the undo. For non-queued
+        actions (refute/pin) callers pass ``None`` so the undo pointer is
+        cleared (those mutations aren't reversible from the cockpit).
+        """
+        if result and "intervention_id" in result:
+            self._last_intervention_id = int(result["intervention_id"])
+            self._last_intervention_kind = kind
+            self._last_intervention_target = target
+        else:
+            # Non-undoable action — clear the pointer so the user doesn't
+            # press `u` thinking it'll roll back e.g. a refute.
+            self._last_intervention_id = None
+            self._last_intervention_kind = None
+            self._last_intervention_target = None
+        self._notify_intervention_queued(kind, target)
+
+    def _notify_intervention_queued(self, kind: str, target: str | None) -> None:
+        """Confirm enqueue to the user. The hook (intervention_pump.py)
+        delivers on the next UserPromptSubmit — the cockpit can only
+        confirm enqueue, never delivery, so the toast wording stays honest.
+        """
+        if target:
+            display = self._short_node_label(target)
+            msg = t(self.lang, "intervention_queued", kind=kind, target=display)
+        else:
+            msg = t(self.lang, "intervention_queued_no_target", kind=kind)
+        # Append the undo hint when an undo pointer is live.
+        if self._last_intervention_id is not None:
+            msg = msg + " · " + t(self.lang, "intervention_undo_hint")
+        self.notify(msg)
+
+    @staticmethod
+    def _short_node_label(target: str) -> str:
+        """Format ``H_a3f1c2`` → ``H_a3f1`` for compact toast text."""
+        if "_" not in target:
+            return target[:10]
+        prefix, suffix = target.split("_", 1)
+        return f"{prefix}_{suffix[:4]}"
 
     def _require_selected_node(self) -> str | None:
         node_id = self.selected_node_id or self.tree_pane.current_node_id()
@@ -1034,12 +1542,15 @@ class CockpitApp(App[None]):
         elif op in {"reject", "approve"}:
             target = args[0] if args else self.selected_node_id
             payload = " ".join(args[1:]) if len(args) > 1 else ""
-            data.write_intervention(op, target, payload)
+            result = data.write_intervention(op, target, payload)
+            self._track_intervention(result, op, target)
         elif op in {"halt", "redirect", "constrain"}:
             if op == "halt":
-                data.write_intervention(op, None, " ".join(args))
+                result = data.write_intervention(op, None, " ".join(args))
+                self._track_intervention(result, op, None)
             else:
-                data.write_intervention(op, self.selected_node_id, " ".join(args))
+                result = data.write_intervention(op, self.selected_node_id, " ".join(args))
+                self._track_intervention(result, op, self.selected_node_id)
         elif op == "pin" and len(args) >= 3:
             data.pin_metric_local(
                 claim=args[1],
@@ -1048,16 +1559,70 @@ class CockpitApp(App[None]):
                 source_command="cockpit",
                 note="pinned from command mode",
             )
+        elif op == "goto" and args:
+            self._goto_node(args[0])
+            return  # _goto_node handles its own refresh; skip the global one
         self.refresh_state(include_events=True)
+
+    def _goto_node(self, target: str) -> None:
+        """Jump tree focus to a node by id or unique prefix.
+
+        Strategy:
+          1. Exact match wins immediately.
+          2. Otherwise treat ``target`` as a prefix; if exactly one node id
+             starts with it, jump. Multiple matches → warning toast listing
+             the first few candidates.
+          3. Zero matches → warning toast.
+
+        The match runs against the in-memory ``self.graph`` so we never
+        block the UI on a SQL round-trip — the snapshot is refreshed on
+        each tick anyway.
+        """
+        if not target:
+            return
+        nodes = self.graph.nodes
+        if target in nodes:
+            match = target
+        else:
+            candidates = [nid for nid in nodes if nid.startswith(target)]
+            if len(candidates) == 1:
+                match = candidates[0]
+            elif len(candidates) > 1:
+                preview = ", ".join(candidates[:3])
+                more = "" if len(candidates) <= 3 else f" (+{len(candidates) - 3})"
+                self.notify(
+                    t(
+                        self.lang,
+                        "goto_ambiguous",
+                        target=target,
+                        preview=preview + more,
+                    ),
+                    severity="warning",
+                )
+                return
+            else:
+                self.notify(
+                    t(self.lang, "goto_not_found", target=target),
+                    severity="warning",
+                )
+                return
+        self._set_focus("tree")
+        self.tree_pane.select_node_id(match)
+        self.selected_node_id = match
+        self._refresh_detail()
 
     def _handle_text_action(self, kind: str, node_id: str, payload: str | None) -> None:
         if payload:
-            data.write_intervention(kind, node_id, payload)
+            result = data.write_intervention(kind, node_id, payload)
+            self._track_intervention(result, kind, node_id)
             self.refresh_state(include_events=True)
 
     def _handle_mark_refuted(self, node_id: str, confirmed: bool) -> None:
         if confirmed:
             data.refute_node(node_id, "cockpit refuted")
+            # mark_refuted mutates the graph directly (not via the
+            # interventions table) so undo doesn't apply — pass None.
+            self._track_intervention(None, "refute", node_id)
             self.refresh_state(include_events=True)
 
     def _handle_pin_metric(self, payload: dict[str, str] | None) -> None:
@@ -1070,11 +1635,15 @@ class CockpitApp(App[None]):
             source_command="cockpit",
             note="pinned from cockpit",
         )
+        # Pinning writes to ver_metric_pins, not cockpit_interventions —
+        # not undoable from the cockpit.
+        self._track_intervention(None, "pin", payload["metric"])
         self.refresh_state(include_events=True)
 
     def _handle_halt(self, confirmed: bool) -> None:
         if confirmed:
-            data.write_intervention("halt", None, "halt requested from cockpit")
+            result = data.write_intervention("halt", None, "halt requested from cockpit")
+            self._track_intervention(result, "halt", None)
             self.refresh_state(include_events=True)
 
     def _refresh_graph(self) -> None:
@@ -1155,7 +1724,17 @@ class CockpitApp(App[None]):
         )
 
     def _refresh_counts(self) -> None:
-        self.status_bar.set_summary(data.fetch_dashboard())
+        summary = data.fetch_dashboard()
+        self.status_bar.set_summary(summary)
+        # Tree border title shows live counts so users get scale info
+        # without scanning the HUD. Filter mode takes precedence inside
+        # tree_pane.set_counts (see its docstring).
+        self.tree_pane.set_counts(
+            {
+                "active": int(summary.get("active_hypotheses", 0)),
+                "refuted": int(summary.get("refuted_nodes", 0)),
+            }
+        )
 
     def _refresh_events(self) -> None:
         rows = data.fetch_new_events(self.last_event_id)

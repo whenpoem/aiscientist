@@ -8,14 +8,14 @@ from rich.text import Text
 from textual.widgets import Tree
 
 from cockpit.data import GraphNode, GraphSnapshot
-from cockpit.i18n import t
+from cockpit.i18n import REFUTED_ICON, kind_icon, t
 from cockpit.theme import color, kind_color
 
 
 class HypothesisTreePane(Tree[str]):
     """Navigation tree for hypotheses, evidence, and related nodes."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, compact: bool = True) -> None:
         super().__init__("research")
         self.id = "tree-pane"
         self.classes = "pane"
@@ -25,6 +25,13 @@ class HypothesisTreePane(Tree[str]):
         self.auto_expand = False
         self.node_lookup: dict[str, object] = {}
         self._visible_ids: list[str] = []
+        # When True, _label_for omits BT/Elo suffix so node text owns the
+        # column. The detail pane still shows the full stats so nothing is
+        # hidden — it's a relocation, not a removal.
+        self._compact = compact
+        # Latest counts for border title rendering. Updated via
+        # set_counts(); falls back to None until first refresh.
+        self._counts: dict[str, int] | None = None
 
     def set_language(self, lang: str) -> None:
         self.lang = lang
@@ -68,12 +75,54 @@ class HypothesisTreePane(Tree[str]):
         if cursor is not None:
             cursor.collapse()
 
+    def set_compact(self, compact: bool) -> None:
+        """Toggle BT/Elo suffix in tree labels. Triggers a full reload so
+        existing rows redraw with the new style; relies on the caller to
+        pass the current GraphSnapshot via load_graph afterwards."""
+        self._compact = bool(compact)
+
+    def set_counts(self, counts: dict[str, int] | None) -> None:
+        """Stash the latest summary counts AND repaint the border title.
+
+        ``counts`` keys map to i18n format args of ``tree_count_suffix``
+        (active / refuted). Called from app._refresh_counts after the
+        dashboard summary lands, so the title stays in lockstep with the
+        status bar even if _refresh_graph already redrew the title with
+        stale counts earlier in the same refresh cycle.
+        """
+        self._counts = dict(counts) if counts else None
+        # Preserve the active filter — _pane_filters["tree"] is the source
+        # of truth in the App; the tree pane only knows what was last
+        # passed through set_title, which we don't want to reset to "".
+        # An empty arg here means "use cached state"; the App passes the
+        # current filter explicitly when it calls set_title from load_graph.
+        if self.is_mounted:
+            current = self.border_title or ""
+            # Re-derive filter from the existing border_title if present
+            # (the title format is "<name> (filter: ...)"). This avoids
+            # threading a filter argument through set_counts callers.
+            from cockpit.i18n import t as _t
+            filter_marker = _t(self.lang, "filter_suffix", value="")
+            # filter_marker is e.g. "filter: " — if the title contains it,
+            # the user is filtering and we leave the title alone.
+            if filter_marker.strip(":") in current:
+                return
+            self.set_title("")
+
     def set_title(self, filter_text: str = "") -> None:
-        suffix = (
-            f" ({t(self.lang, 'filter_suffix', value=filter_text)})"
-            if filter_text
-            else ""
-        )
+        # Filter takes precedence — the user actively narrowed the view, so
+        # showing counts AND a filter blurb would crowd the border title.
+        if filter_text:
+            suffix = f" ({t(self.lang, 'filter_suffix', value=filter_text)})"
+        elif self._counts:
+            suffix = " · " + t(
+                self.lang,
+                "tree_count_suffix",
+                active=self._counts.get("active", 0),
+                refuted=self._counts.get("refuted", 0),
+            )
+        else:
+            suffix = ""
         self.border_title = f"{t(self.lang, 'tree_title')}{suffix}"
 
     def load_graph(
@@ -167,11 +216,15 @@ class HypothesisTreePane(Tree[str]):
         title.append(self._short_id(node.node_id), style=self._style_for(node))
         title.append(" ")
         title.append(node.text)
-        if node.kind == "hypothesis":
-            title.append(self._bt_suffix(node), style="dim")
-            title.append(f"  elo {node.elo_score:.0f}", style="dim")
-        elif node.kind == "proof_skeleton":
-            title.append(self._bt_suffix(node), style="dim")
+        # In compact mode (default) the BT/Elo numerics live in the detail
+        # pane, freeing column width for node text. The `i` key flips this
+        # back for power-user scanning.
+        if not self._compact:
+            if node.kind == "hypothesis":
+                title.append(self._bt_suffix(node), style="dim")
+                title.append(f"  elo {node.elo_score:.0f}", style="dim")
+            elif node.kind == "proof_skeleton":
+                title.append(self._bt_suffix(node), style="dim")
         if node.bt_status == "paused":
             title.append("  [paused]", style=color("warning"))
         if node.state == "refuted":
@@ -199,19 +252,11 @@ class HypothesisTreePane(Tree[str]):
 
     @staticmethod
     def _prefix_for(node: GraphNode) -> str:
+        # Refuted overrides kind so a struck-through line is unmistakable
+        # even if the user rebinds kind glyphs in a future custom theme.
         if node.state == "refuted":
-            return "X"
-        return {
-            "question": "Q",
-            "hypothesis": "H",
-            "experiment": "E",
-            "evidence": "EV",
-            "conclusion": "C",
-            # Proof trunk kinds (architecture.md §13)
-            "proposition": "T",
-            "proof_skeleton": "PS",
-            "proof_snippet": "ps",
-        }.get(node.kind, "-")
+            return REFUTED_ICON
+        return kind_icon(node.kind)
 
     @staticmethod
     def _style_for(node: GraphNode) -> str:

@@ -15,7 +15,7 @@ def test_cockpit_tui_once_snapshot(workspace, capsys):
     captured = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "research-cockpit" in captured
+    assert "research state" in captured
     assert "Hypothesis Tree" in captured
     assert hypothesis["node_id"] in captured
     assert hypothesis["node_id"] in render_snapshot()
@@ -29,7 +29,7 @@ def test_cockpit_tui_once_snapshot_zh(workspace, capsys):
     captured = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "研究座舱" in captured
+    assert "研究状态" in captured
     assert "假设树" in captured
     assert hypothesis["node_id"] in captured
 

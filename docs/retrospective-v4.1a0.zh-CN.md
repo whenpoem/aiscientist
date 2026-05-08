@@ -1,5 +1,7 @@
 # 复盘 — v4.1.0a0
 
+> English version: [retrospective-v4.1a0.md](retrospective-v4.1a0.md)
+>
 > Plan v3 落地。Cockpit TUI 大刀阔斧升级：4 套主题（默认 warm-dark），三列自适应布局 + F 键焦点模式，3 个证明栈新页签（语料 / 诊断 / Lean），Ctrl+P 命令面板，6 处 i18n 回归修复 + 永久回归测试守卫。Tag `v4.1.0a0` 位于 `claudescientist` 分支头。
 >
 > 测试：**302 通过**（v4.0.0a1 时为 239；新增 63 项，未删除）。Ruff clean。Schema 与 v4.0.0a1 一致（memory_mcp v5 / verify_mcp v4 / cockpit v1 / prove_mcp v4）—— TUI 升级未触及任何 DB 表。
@@ -70,7 +72,7 @@
 
 ### 为什么默认 `claude-warm-dark`
 
-用户明确要求"与 Claude Code 搭配和谐"。Anthropic 品牌暖橙 (#d97757) 是显然的对齐方向。我们把它设为默认，但同时把 `claude-cool-dark`（之前的 GitHub-dark 配色）保留为一键切换的备选——老终端或习惯旧配色的用户不被强迫重学。T 键循环切换是免费的。
+用户明确要求"与 Claude Code 搭配和谐"。Anthropic 品牌暖橙 (#d97757) 是最自然的衔接色。我们把它设为默认，但同时把 `claude-cool-dark`（之前的 GitHub-dark 配色）保留为一键切换的备选——老终端或习惯旧配色的用户不被强迫重学。T 键循环切换是免费的。
 
 ### 为什么三列宽屏布局而不是 2×2
 
@@ -114,14 +116,14 @@ Textual 在 `App.__init__` 里运行 `register_theme()` **之前**就解析 `CSS
 
 ## 反思
 
-### 做得好的
+### 做得好
 
 1. **分阶段（G1→G4）每段都绿后再走下一段**。主题系统先以 25 个新测试落地，再动布局——没有交叉调试的痛苦。G2 → G3 → G4 同理。
 2. **Token 解析器走模块级 dict 而不是 App introspection**。最早试 `App.get_running_app()` 风格的查找；第一个失败测试后切到 `update_theme_vars()` 回调。更简单、更可测、App 挂载前也能用。
 3. **硬性的 hardcoded-string 回归测试**。20 分钟写完，将来省下小时级的"咦这个标签为什么不翻译"。v4.0a0 复盘审计找出的 6 处修复永久锁定。
 4. **改 compose 顺序作为布局原语**。不用显式的 `column:` / `row:` 放置（Textual 的 grid 是顺序驱动而非坐标驱动），把 compose 从 Tree-Detail-Events-Tabs 改成 Tree-Detail-Tabs-Events，三种 layout 的 auto-flow 一次性都对了。CSS 更少、行为更显然。
 
-### 做得不好的
+### 做得不好
 
 1. **第一次 TCSS 重写试图用自定义 `$border-active` / `$kind-hypothesis` 变量**。失败因为 Textual 在 `register_theme()` 跑之前就解析了 TCSS。回退后切分：结构 CSS 用标准 `$variables`；语义色走 `tokens.color()` 在 Rich Text 渲染时取。耗时约 30 分钟。
 2. **第一次 provider 测试试图 `Provider(app, screen)`**。新 Textual 加了 `match_style` kwarg 要求。把 `_entries` 抽成自由函数 `cockpit_action_entries(lang)`，单测不需要完整的 Provider 生命周期。本来就更干净——函数是单一来源、Provider 是薄包装。

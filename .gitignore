@@ -11,3 +11,8 @@ wheels/
 .pytest_cache/
 node_modules/
 .venv/
+
+# pytest scratch dirs (some tests pin --basetemp; ignore the locked
+# remnants that occasionally survive a hard interrupt on Windows).
+.pytest-basetemp/
+tmp-pytest-local/

@@ -96,7 +96,7 @@ async def test_language_toggle_localizes_core_tui_labels(workspace):
         assert app.lang == "zh"
         assert "假设树" in app.tree_pane.border_title
         assert "节点详情" in app.detail_pane.border_title
-        assert "研究座舱" in app.status_bar.current_text
+        assert "研究状态" in app.status_bar.current_text
         # Context bar carries the shortcut crib in Chinese; the v4.1.0a1
         # update tightened it to "L 语言 · T 主题 · F 焦点 · ^P 命令面板".
         assert "语言" in app.context_bar.current_text
@@ -288,7 +288,7 @@ async def test_compact_hud_for_80_col_terminal(workspace):
 
     app = CockpitApp(lang="zh")
     async with app.run_test(size=(80, 24)):
-        assert "研究座舱" in app.status_bar.current_text
+        assert "研究状态" in app.status_bar.current_text
         assert "未验证" not in app.status_bar.current_text
         assert "留出" not in app.status_bar.current_text
 

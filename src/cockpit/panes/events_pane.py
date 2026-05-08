@@ -15,8 +15,12 @@ from cockpit.theme import style as theme_style
 class EventStreamPane(RichLog):
     """Streaming event log with filter and relative-time toggle support."""
 
-    def __init__(self) -> None:
-        super().__init__(max_lines=2000, wrap=False, highlight=False)
+    def __init__(self, *, wrap: bool = True) -> None:
+        # wrap defaults to True so long event payloads stay visible instead
+        # of being silently chopped at the right edge. Power users who
+        # prefer the legacy single-line dense view can toggle with `w`,
+        # which is persisted via CockpitSettings.event_wrap.
+        super().__init__(max_lines=2000, wrap=wrap, highlight=False)
         self.id = "events-pane"
         self.classes = "pane"
         self.lang = "en"
@@ -24,6 +28,23 @@ class EventStreamPane(RichLog):
         self._rows: list[dict] = []
         self._filter_text = ""
         self._relative_timestamps = False
+        self._wrap = wrap
+
+    def set_wrap(self, enabled: bool) -> None:
+        """Toggle soft-wrap. Re-renders so existing rows reflow immediately."""
+        if enabled == self._wrap:
+            return
+        self._wrap = enabled
+        # RichLog exposes its wrap behaviour via the underlying attribute;
+        # changing it requires a full re-render to reflow already-written
+        # lines (RichLog stores them as Strip objects that bake the wrap
+        # decision at write time).
+        self.wrap = enabled
+        self._rerender()
+
+    @property
+    def wrap_enabled(self) -> bool:
+        return self._wrap
 
     def set_language(self, lang: str) -> None:
         self.lang = lang

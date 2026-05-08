@@ -51,6 +51,28 @@ Screen {
     grid-rows: 1fr 1fr;
 }
 
+/* User-tunable tree column width for the wide preset.
+ *
+ * The default class above (1:2:2) leaves Tree with ~20% of width — fine
+ * for short hypothesis statements but cramped when nodes carry long
+ * descriptive text. `<` adds .tree-narrow (Tree shrinks further so Detail
+ * + Events grow); `>` adds .tree-wide (Tree gets a bigger share). Each
+ * keystroke is one step; the active step persists via wide_subpreset in
+ * cockpit.toml. Settings are mutually exclusive — _apply_layout adds
+ * exactly one modifier (or none for subpreset 0). */
+
+/* tree-narrow: tighter Tree (~14% of width) so Detail + Events get more
+ * for users on short-statement projects.
+ * tree-wide: Tree gets a third for projects with long hypothesis text. */
+
+#body-grid.layout-wide.tree-narrow {
+    grid-columns: 1fr 3fr 3fr;
+}
+
+#body-grid.layout-wide.tree-wide {
+    grid-columns: 2fr 2fr 2fr;
+}
+
 #body-grid.layout-wide #tree-pane {
     row-span: 2;
 }

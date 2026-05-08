@@ -14,8 +14,9 @@ from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from cockpit.data import GraphSnapshot
-from cockpit.i18n import kind_label, state_label, t
+from cockpit.data import GraphNode, GraphSnapshot
+from cockpit.details import node_detail_text
+from cockpit.i18n import t
 from cockpit.theme import style as theme_style
 
 
@@ -73,72 +74,30 @@ class NodeDetailPane(VerticalScroll):
         self._override = None
 
     def update_for_node(self, graph: GraphSnapshot, node_id: str | None) -> None:
+        """Render the active node into the pane.
+
+        Delegates to ``cockpit.details.node_detail_text`` so the main
+        detail pane and the full-screen DetailScreen draw from the same
+        builder. The pane composes the title (bold, primary color) on
+        top of the body for visual hierarchy — the full-screen view does
+        the same in its breadcrumb instead.
+        """
         if self._override is not None:
             return
-        node = graph.node(node_id)
-        if node is None:
+        if node_id is None or graph.node(node_id) is None:
             self.show_hint()
             return
-        parents = ", ".join(self._short_id(item) for item in graph.parents_of(node.node_id)) or "-"
-        children = ", ".join(
-            self._short_id(item) for item in graph.children_of(node.node_id)
-        ) or "-"
-        cross_edges = graph.cross_edges_of(node.node_id)
-        evidence_support = sum(1 for edge in cross_edges if edge["relation"] == "supports")
-        evidence_refute = sum(1 for edge in cross_edges if edge["relation"] == "refutes")
-        next_action = self._next_action(node.kind, node.state)
-
-        lines = [
-            f"{self._short_id(node.node_id)}  {kind_label(self.lang, node.kind)}",
-            (
-                f"{t(self.lang, 'status')}: {state_label(self.lang, node.state)}  "
-                f"{t(self.lang, 'elo')}: {node.elo_score:.1f}"
-            ),
-            t(
-                self.lang,
-                "support_refute",
-                supports=evidence_support,
-                refutes=evidence_refute,
-            ),
-            f"{t(self.lang, 'next_action')}: {next_action}",
-            "",
-            f"{t(self.lang, 'node_text')}:",
-            node.text,
-            "",
-            f"{t(self.lang, 'parents')}: {parents}",
-            f"{t(self.lang, 'children')}: {children}",
-        ]
-        if cross_edges:
-            lines.append(f"{t(self.lang, 'cross_edges')}:")
-            for edge in cross_edges:
-                other_id = edge["dst"] if edge["src"] == node.node_id else edge["src"]
-                lines.append(f"  -> {self._short_id(other_id)} ({edge['relation']})")
-        else:
-            lines.append(f"{t(self.lang, 'cross_edges')}: -")
-        lines.extend(
-            [
-                f"{t(self.lang, 'created')}: {node.created_at}",
-                f"{t(self.lang, 'created_by')}: {node.created_by}",
-            ]
-        )
-        text = Text(lines[0], style=theme_style("primary", bold=True))
-        for line in lines[1:]:
-            text.append("\n")
-            text.append(line)
+        title, body = node_detail_text(graph, node_id, self.lang)
+        text = Text(title, style=theme_style("primary", bold=True))
+        text.append("\n")
+        text.append(body)
         self.update(text)
 
-    def _next_action(self, kind: str, state: str) -> str:
-        if state == "refuted":
-            return t(self.lang, "next_refuted")
-        if kind == "evidence":
-            return t(self.lang, "next_evidence")
-        if kind == "hypothesis":
-            return t(self.lang, "next_hypothesis")
-        return "-"
+    # Kept for backwards compatibility with the v4.1.0a4 visual-polish
+    # tests that still call this directly. The underlying logic is now
+    # in cockpit.details, but unit tests construct GraphNode in isolation
+    # and want a synchronous bool/string for assertions.
+    def _bt_line(self, node: GraphNode) -> str | None:
+        from cockpit.details import _bt_line as _impl
 
-    @staticmethod
-    def _short_id(node_id: str) -> str:
-        if "_" not in node_id:
-            return node_id[:10]
-        prefix, suffix = node_id.split("_", 1)
-        return f"{prefix}_{suffix[:4]}"
+        return _impl(node)

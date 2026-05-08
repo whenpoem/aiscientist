@@ -7,7 +7,7 @@ DEFAULT_LANG = "en"
 
 TEXT: dict[str, dict[str, str]] = {
     "en": {
-        "app_name": "research-cockpit",
+        "app_name": "research state",
         "tree_title": "1 Hypothesis Tree",
         "detail_title": "2 Node Detail",
         "events_title": "3 Event Stream",
@@ -16,7 +16,7 @@ TEXT: dict[str, dict[str, str]] = {
         "filter_suffix": "filter: {value}",
         "no_hypotheses": "No hypotheses yet. Trigger a research session in Claude Code.",
         "select_hint": "Select a hypothesis with j/k or click.",
-        "no_events": "No cockpit events yet.",
+        "no_events": "No events yet.",
         "risks": "Risks",
         "failures": "Failures",
         "claims": "Claims",
@@ -135,6 +135,40 @@ TEXT: dict[str, dict[str, str]] = {
         "halt_prompt": "Queue a halt intervention?",
         "no_node": "No node selected.",
         "language_notice": "Language: English",
+        # v4.1.0a4: feedback toasts so the user knows a key registered.
+        # 'queued' is intentional — the intervention_pump hook delivers on
+        # the next UserPromptSubmit; the cockpit only confirms enqueue.
+        "intervention_queued": "{kind} queued for {target}",
+        "intervention_queued_no_target": "{kind} queued",
+        "event_wrap_on": "Event wrap: on",
+        "event_wrap_off": "Event wrap: off",
+        "tree_compact_on": "Tree labels: compact",
+        "tree_compact_off": "Tree labels: detailed",
+        "tree_count_suffix": "{active} active / {refuted} refuted",
+        "goto_not_found": "No node matches {target!r}.",
+        "goto_ambiguous": "{target!r} matches multiple nodes: {preview}.",
+        "wide_only_hint": "Tree-width nudges only apply under the wide layout.",
+        "tree_width_at_limit": "Tree column already at the limit.",
+        "tree_width_narrow": "Tree column: narrow",
+        "tree_width_default": "Tree column: default",
+        "tree_width_wide": "Tree column: wide",
+        "intervention_undo_hint": "press u to undo",
+        "undo_done": "Undone {kind} on {target}",
+        "undo_done_no_target": "Undone {kind}",
+        "undo_too_late": "Already delivered to the agent — cannot undo.",
+        "undo_nothing": "Nothing to undo.",
+        # DetailScreen (full-screen drill-in) chrome and breadcrumbs.
+        "event_drill_title": "Event · {kind}",
+        "event_payload": "payload",
+        "detail_screen_hint": (
+            "h / l prev / next · j / k scroll · Esc back · ⇧L lang · ⇧T theme"
+        ),
+        "detail_screen_breadcrumb": "{source} › {title}",
+        "detail_source_tree": "Tree",
+        "detail_source_events": "Events",
+        "detail_source_tabs": "Tabs",
+        "detail_screen_at_first": "At the first item.",
+        "detail_screen_at_last": "At the last item.",
         # Detail-pane labels for drill-in views (G3 i18n regression fix).
         "failure_root_cause": "Root cause",
         "failure_resolution": "Resolution",
@@ -214,7 +248,7 @@ TEXT: dict[str, dict[str, str]] = {
         ),
     },
     "zh": {
-        "app_name": "研究座舱",
+        "app_name": "研究状态",
         "tree_title": "1 假设树",
         "detail_title": "2 节点详情",
         "events_title": "3 事件流",
@@ -223,7 +257,7 @@ TEXT: dict[str, dict[str, str]] = {
         "filter_suffix": "过滤: {value}",
         "no_hypotheses": "还没有假设。请先在 Claude Code 中启动研究任务。",
         "select_hint": "用 j/k 或鼠标选择一个假设。",
-        "no_events": "还没有 cockpit 事件。",
+        "no_events": "暂无事件。",
         "risks": "风险",
         "failures": "失败",
         "claims": "指标",
@@ -389,6 +423,39 @@ TEXT: dict[str, dict[str, str]] = {
         "halt_prompt": "加入暂停 intervention？",
         "no_node": "没有选中的节点。",
         "language_notice": "语言：中文",
+        # v4.1.0a4: 操作反馈 toast。"已入队"是有意为之——
+        # intervention_pump hook 会在下一次 UserPromptSubmit 才消费。
+        "intervention_queued": "{kind} 已入队（{target}）",
+        "intervention_queued_no_target": "{kind} 已入队",
+        "event_wrap_on": "事件软换行：开",
+        "event_wrap_off": "事件软换行：关",
+        "tree_compact_on": "树标签：紧凑",
+        "tree_compact_off": "树标签：详细",
+        "tree_count_suffix": "活跃 {active} / 已反驳 {refuted}",
+        "goto_not_found": "找不到匹配 {target!r} 的节点。",
+        "goto_ambiguous": "{target!r} 匹配多个节点：{preview}。",
+        "wide_only_hint": "树列宽调节仅在宽布局下生效。",
+        "tree_width_at_limit": "树列宽已到极限。",
+        "tree_width_narrow": "树列宽：窄",
+        "tree_width_default": "树列宽：默认",
+        "tree_width_wide": "树列宽：宽",
+        "intervention_undo_hint": "按 u 撤销",
+        "undo_done": "已撤销 {kind}（{target}）",
+        "undo_done_no_target": "已撤销 {kind}",
+        "undo_too_late": "已被 agent 接收，无法撤销。",
+        "undo_nothing": "无可撤销操作。",
+        # 全屏详情视图（DetailScreen）相关文案
+        "event_drill_title": "事件 · {kind}",
+        "event_payload": "载荷",
+        "detail_screen_hint": (
+            "h / l 前后 · j / k 滚动 · Esc 返回 · ⇧L 语言 · ⇧T 主题"
+        ),
+        "detail_screen_breadcrumb": "{source} › {title}",
+        "detail_source_tree": "假设树",
+        "detail_source_events": "事件",
+        "detail_source_tabs": "表格",
+        "detail_screen_at_first": "已是第一条。",
+        "detail_screen_at_last": "已是最后一条。",
         "risk_claim": "指标",
         "risk_seed": "种子",
         "risk_failure": "失败",
@@ -482,18 +549,23 @@ def kind_label(lang: str, kind: str) -> str:
 
 
 # Trunk-aware icons for tree pane rendering (architecture.md §13).
-# Empirical kinds get the gear glyph; proof kinds get the triangle.
+# All glyphs chosen from the Geometric Shapes / Misc Symbols ranges to
+# render as 1 monospaced cell on Windows Terminal / iTerm2 / mintty.
+# `refuted` is special-cased by the renderer (state==refuted overrides
+# kind-based icon) — it is NOT a kind value.
 KIND_ICONS = {
-    "question": "?",
-    "hypothesis": "*",
-    "experiment": "x",
-    "evidence": ".",
-    "conclusion": "!",
-    "proposition": "T",
-    "proof_skeleton": "S",
-    "proof_snippet": "s",
+    "question": "◇",
+    "hypothesis": "▲",
+    "experiment": "▣",
+    "evidence": "•",
+    "conclusion": "★",
+    "proposition": "■",
+    "proof_skeleton": "△",
+    "proof_snippet": "▴",
 }
+
+REFUTED_ICON = "✗"
 
 
 def kind_icon(kind: str) -> str:
-    return KIND_ICONS.get(kind, "-")
+    return KIND_ICONS.get(kind, "·")

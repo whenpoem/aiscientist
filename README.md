@@ -6,7 +6,7 @@ ClaudeScientist plugs into Claude Code and adds what most AI scientist systems l
 
 You give Claude a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
-**Current version**: v4.0.0a0 (alpha) — a [proof trunk](docs/adr/0008-two-trunk-domain-architecture.md) for statistical proof generation now runs alongside the existing ML experiment workflow. Both share one core: hypothesis graph, failure ledger, ranking tournament, and cockpit. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
+**Current version**: v4.1.0a4 (alpha) — a [proof trunk](docs/adr/0008-two-trunk-domain-architecture.md) for statistical proof generation runs alongside the ML experiment workflow, sharing one core. The cockpit TUI has been redesigned with 4 themes, adaptive layout, and proof-trunk panes. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
 
 ## What it looks like
 

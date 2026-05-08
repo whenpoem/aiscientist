@@ -1,4 +1,4 @@
-# Retrospective: ClaudeScientist v4.0.0a0
+# Retrospective — v4.0.0a0
 
 > 中文版本: [retrospective-v4.0a0.zh-CN.md](retrospective-v4.0a0.zh-CN.md)
 >
@@ -7,7 +7,7 @@
 > fixed in this pass and which were filed for later), and concrete
 > follow-up suggestions ordered by impact-vs-effort.
 
-## What landed in v4.0.0a0
+## What landed
 
 Plan v1 (P0–P5, ~10 weeks) and Plan v2 (this pass) together delivered:
 
@@ -159,9 +159,9 @@ to existing functionality**; no new features.
    `--dry-run` mode or auto-skip on first import error. **Effort**: 1
    hour.
 
-## Reflection: what worked, what didn't
+## Reflection
 
-### What worked well
+### What worked
 
 - **The four-interface design held up**. Through Plan v1 + v2 + this
   audit, the cooperation surface between the empirical and proof
@@ -186,7 +186,7 @@ to existing functionality**; no new features.
   to write `run_full_proof_workflow()` was real and was correctly
   resisted.
 
-### What didn't work as well
+### What didn't
 
 - **Whitelist-based heuristics ossify**. The triage whitelist hardcoded
   in v0.1 became progressively wronger as the corpus grew. Discovered
@@ -224,3 +224,7 @@ queries). The audit found 12 things worth fixing; 5 fixed now, 7 filed
 for v4.x with explicit severity and effort estimates.
 
 The remaining work is **iterative refinement, not redesign**.
+
+---
+
+*Retrospective version: 1.0 · 2026-05-07 · tag: `v4.0.0a0`*

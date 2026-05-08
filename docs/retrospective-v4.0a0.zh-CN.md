@@ -1,4 +1,4 @@
-# 复盘：ClaudeScientist v4.0.0a0
+# 复盘 — v4.0.0a0
 
 > English version: [retrospective-v4.0a0.md](retrospective-v4.0a0.md)
 >
@@ -6,7 +6,7 @@
 > 这次到底交付了什么、对系统自动判断逻辑做的全面审计（哪些已修、哪些
 > 留作后续）、以及按"收益÷成本"排序的下一步建议。
 
-## v4.0.0a0 实际交付的东西
+## 落地内容
 
 Plan v1（P0–P5，~10 周）和 Plan v2（这一轮）合起来交付了：
 
@@ -68,7 +68,7 @@ Plan v2 故意把"系统每一处自动决策"过了一遍——白名单/黑名
 | **A** | 中 | `prove_mcp/tools/lean_bridge.py` | Triage 白名单太窄——85 条种子语料里有 ~10 条会被误判为"不在 mathlib 覆盖范围"（Borel-Cantelli、Hoeffding、Rao-Blackwell、sub-Gaussian、KL、Pinsker、Glivenko-Cantelli、Wald/score test、Lehmann-Scheffé）。白名单从 30 个关键词扩到 ~90 个，覆盖全部 8 个语料类别。 |
 | **B** | 低 | 同 | 黑名单过激：`lebesgue integral`、`ergodic`、`measure-preserving` 在 mathlib 里都有完整覆盖却被拒绝。已移除。只保留真正薄弱的领域（Itô、SDE、Banach/Hilbert/Sobolev 抽象、无限维）。 |
 | **C** | 低 | 同 | 子串匹配没加词边界——`ols` 命中 `controls`、`tools`。新增 `_WORD_BOUNDARY_REQUIRED = {ols, mle, rao, ump, blue, ito}` 用 `\b…\b` 正则约束。 |
-| **D** | 表述 | 同 | 被拒绝的命题被打 `difficulty='high'`（误导："high" 暗示"合格但难"）。改成 `'n/a'`。配套 schema_version 4 迁移把 `prv_lean_attempts.triage_difficulty` CHECK 约束放宽。 |
+| **D** | 表述 | 同 | 被拒绝的命题会标上 `difficulty='high'`（有误导性："high" 暗示"合格但难"）。改成 `'n/a'`。配套 schema_version 4 迁移把 `prv_lean_attempts.triage_difficulty` CHECK 约束放宽。 |
 | **M** | 中 | `memory_mcp/tools/bt.py` | `suggest_pause_low_strength` 硬编码 `WHERE n.kind = 'hypothesis'`，证明 BT 锦标赛根本无法被 auto-prune。改成默认遍历 `BT_RANKABLE_KINDS` 全部；同时接受 `kind=` 过滤参数。 |
 
 ### 留作 v4.x（这轮没改）
@@ -147,7 +147,7 @@ Plan v2 故意把"系统每一处自动决策"过了一遍——白名单/黑名
    行噪音。建议加 `--dry-run` 或第一个 import error 时自动 skip。
    **成本**：1 小时。
 
-## 反思：哪些做得好、哪些没那么好
+## 反思
 
 ### 做得好
 
@@ -168,7 +168,7 @@ Plan v2 故意把"系统每一处自动决策"过了一遍——白名单/黑名
   强制顺序。"写一个 `run_full_proof_workflow()` 把它们打包"的
   诱惑确实出现过，被正确抵抗。
 
-### 没那么好
+### 做得不好
 
 - **白名单启发式会僵化**。Triage 白名单 v0.1 时拍脑袋写的，随着语料
   变大越来越错。这次审计才发现 ~12% 种子问题被错杀。给 mathlib
@@ -198,3 +198,7 @@ v4.0.0a0 是个**自洽的 alpha**。架构（两主干、四接口）正确。�
 值得修的；5 处当场修了，7 处带明确严重度和成本估计归档到 v4.x。
 
 剩下的都是**迭代精调，不是重新设计**。
+
+---
+
+*复盘版本：1.0 · 2026-05-07 · tag：`v4.0.0a0`*
