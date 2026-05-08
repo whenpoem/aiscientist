@@ -12,6 +12,7 @@ from .detail import (
     NodeDetailSource,
     TabRowDetailSource,
 )
+from .splash import SplashScreen
 
 __all__ = [
     "DetailScreen",
@@ -19,4 +20,5 @@ __all__ = [
     "NodeDetailSource",
     "EventDetailSource",
     "TabRowDetailSource",
+    "SplashScreen",
 ]

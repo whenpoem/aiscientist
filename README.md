@@ -6,7 +6,7 @@ ClaudeScientist plugs into Claude Code and adds what most AI scientist systems l
 
 You give Claude a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
-**Current version**: v4.1.0a4 (alpha) — a [proof trunk](docs/adr/0008-two-trunk-domain-architecture.md) for statistical proof generation runs alongside the ML experiment workflow, sharing one core. The cockpit TUI has been redesigned with 4 themes, adaptive layout, and proof-trunk panes. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
+**Current version**: v4.1.0a5 (alpha) — new in this release: cockpit splash screen and `claudescientist setup` interactive wizard. The [proof trunk](docs/adr/0008-two-trunk-domain-architecture.md) for statistical proof generation runs alongside the ML experiment workflow, sharing one core. The cockpit TUI has 4 themes, adaptive layout, and proof-trunk panes. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
 
 ## What it looks like
 
@@ -52,19 +52,24 @@ The two terminals don't talk to each other directly — they both read and write
 
 ## Quick start
 
-Install:
+Install and run the setup wizard:
 
 ```powershell
-uv sync                  # ML/experiment workflow only
-uv sync --extra proof    # also pulls in sentence-transformers for the proof trunk
+uv sync
+uv run python -m claudescientist.setup
 ```
 
-If you installed the proof extra, seed the corpus once:
+The wizard walks you through embedding backend, proof corpus seeding, held-out directory, Lean toolchain, and auto-prune — all in one pass. Run it again any time; it skips steps that are already done.
+
+<details><summary>Manual setup (without the wizard)</summary>
 
 ```powershell
+uv sync --extra proof    # pulls in sentence-transformers for the proof trunk
 uv run python scripts/seed_proof_corpus.py
 uv run python scripts/seed_proof_failures.py
 ```
+
+</details>
 
 Run — open two terminals from the repo root:
 

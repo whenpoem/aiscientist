@@ -246,6 +246,11 @@ TEXT: dict[str, dict[str, str]] = {
         "event_lean_proof_recorded": (
             "Lean attempt recorded: proposition {proposition_id} status {status}"
         ),
+        # Splash screen (v4.1.0a5). The subtitle pairs with the i18n
+        # ``app_name`` ("research state") to form the visible header. The
+        # hint asks for any keypress to dismiss the splash early.
+        "splash_subtitle": "session ready",
+        "splash_skip_hint": "press any key to continue",
     },
     "zh": {
         "app_name": "研究状态",
@@ -486,6 +491,10 @@ TEXT: dict[str, dict[str, str]] = {
         "event_lean_proof_recorded": (
             "Lean 尝试已记录: 命题 {proposition_id} 状态 {status}"
         ),
+        # Splash 启动屏（v4.1.0a5）。副标题与 ``app_name``（"研究状态"）
+        # 一起组成可见的顶部信息；提示行告诉用户按任意键可跳过。
+        "splash_subtitle": "会话就绪",
+        "splash_skip_hint": "按任意键继续",
     },
 }
 

@@ -6,7 +6,7 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 你丢给 Claude 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
 
-**当前版本**：v4.1.0a4（alpha）——[证明主干](docs/adr/0008-two-trunk-domain-architecture.md)用于统计证明生成，与 ML 实验流程并行运作，共享同一个内核。Cockpit TUI 经过重新设计，支持 4 套主题、自适应布局和证明主干面板。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+**当前版本**：v4.1.0a5（alpha）——本次新增：cockpit 启动闪屏和 `claudescientist setup` 交互式向导。[证明主干](docs/adr/0008-two-trunk-domain-architecture.md)用于统计证明生成，与 ML 实验流程并行运作，共享同一个内核。Cockpit TUI 支持 4 套主题、自适应布局和证明主干面板。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ## 长什么样
 
@@ -52,19 +52,24 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 ## 快速开始
 
-安装依赖：
+安装并运行设置向导：
 
 ```powershell
-uv sync                  # 只装 ML / 实验流程
-uv sync --extra proof    # 同时装 sentence-transformers，用于证明主干
+uv sync
+uv run python -m claudescientist.setup
 ```
 
-如果装了 proof 扩展，灌一次冷启动语料：
+向导会一步步引导你完成 embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
+
+<details><summary>手动安装（不用向导）</summary>
 
 ```powershell
+uv sync --extra proof    # 同时装 sentence-transformers，用于证明主干
 uv run python scripts/seed_proof_corpus.py
 uv run python scripts/seed_proof_failures.py
 ```
+
+</details>
 
 运行——从仓库根目录打开两个终端：
 

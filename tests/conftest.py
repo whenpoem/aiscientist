@@ -14,6 +14,13 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "RESEARCH_AGENT_COCKPIT_CONFIG", str(tmp_path / "cockpit.toml")
     )
+    # The cockpit splash is on by default for real launches. In the test
+    # suite we force-disable it so existing fixtures that pilot the App
+    # via run_test() don't have to wait for ~1.5s of timers nor wrestle
+    # with screen-stack ordering. Splash-specific tests opt back in by
+    # explicitly setting the env var to "1" or by passing splash=True
+    # to CockpitApp.
+    monkeypatch.setenv("RESEARCH_AGENT_COCKPIT_SPLASH", "0")
     # Tests run under the deterministic mock embedding backend so they need
     # neither sentence-transformers nor an OPENAI_API_KEY. The live MCP server
     # defaults to the 'local' backend (sentence-transformers); install via

@@ -16,3 +16,8 @@ node_modules/
 # remnants that occasionally survive a hard interrupt on Windows).
 .pytest-basetemp/
 tmp-pytest-local/
+
+# Local environment configuration written by `claudescientist setup`.
+# May contain OPENAI_API_KEY and other secrets — never commit.
+.env
+.env.local

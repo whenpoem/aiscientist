@@ -30,7 +30,13 @@ from .layout import (
 )
 from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
 from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
-from .settings import CockpitSettings, load_settings, save_settings
+from .screens.splash import SplashScreen
+from .settings import (
+    CockpitSettings,
+    load_settings,
+    save_settings,
+    should_show_splash,
+)
 from .theme import (
     ALL_THEMES,
     default_theme_name,
@@ -368,6 +374,21 @@ class CockpitApp(App[None]):
         self._set_focus(focus_pane)
         self._apply_layout(persist=False)
         self.events_worker()
+        # Splash is pushed LAST so the main view is fully composed,
+        # themed, and event-pumped behind it. Popping the splash then
+        # reveals an already-warm UI rather than a half-rendered one.
+        # Disabled paths (env var / saved preference / reduced motion
+        # combined with the env var) skip this entirely.
+        if should_show_splash(self._settings):
+            try:
+                self.push_screen(
+                    SplashScreen(
+                        lang=self.lang,
+                        reduced_motion=self._settings.reduced_motion,
+                    )
+                )
+            except Exception:  # pragma: no cover - splash must never block boot
+                pass
 
     def on_resize(self, event: events.Resize) -> None:  # noqa: ARG002
         # Re-evaluate the active layout whenever the terminal resizes. The
@@ -929,11 +950,21 @@ class CockpitApp(App[None]):
         return False
 
     def _priority_action_blocked_by_help(self) -> bool:
-        """Keep Help as a real shield for App-level priority bindings."""
+        """Keep overlays (Help, Splash) as real shields for App-level
+        priority bindings.
+
+        Without this, App.BINDINGS with ``priority=True`` (T/L/F/y/n/...)
+        fire even while the user is on a help or splash screen — meaning
+        ``T`` during the launch animation would silently cycle the theme
+        of the half-mounted main view behind the splash, etc. The name
+        is preserved for backward compatibility (extensive call sites);
+        in practice it gates against both overlays.
+        """
         if len(self.screen_stack) <= 1:
             return False
         try:
-            return isinstance(self.screen_stack[-1], HelpScreen)
+            top = self.screen_stack[-1]
+            return isinstance(top, (HelpScreen, SplashScreen))
         except Exception:  # pragma: no cover - defensive
             return False
 

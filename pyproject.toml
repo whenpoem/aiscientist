@@ -1,6 +1,6 @@
 [project]
 name = "claudescientist"
-version = "4.1.0a4"
+version = "4.1.0a5"
 description = "Research-agent augmentation layer for Claude Code with SQLite memory, verification MCPs, a proof trunk with NL workflow + Lean reinsurance, and a Textual cockpit TUI."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,6 +34,12 @@ dependencies = [
     "fastmcp>=3.2.4",
     "pydantic>=2.13.1",
     "textual>=8.2,<9.0",
+    # questionary drives the interactive `python -m claudescientist.setup`
+    # wizard. ~30KB itself; pulls in prompt-toolkit (~450KB) which is a
+    # widely-shipped dep. Listed as a main requirement (rather than an
+    # extra) so first-run users can hit setup without an extra install
+    # step. Setup's --non-interactive path does NOT touch questionary.
+    "questionary>=2.0",
 ]
 
 [project.optional-dependencies]

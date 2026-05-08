@@ -24,6 +24,30 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 
 _ENV_OVERRIDE = "RESEARCH_AGENT_COCKPIT_CONFIG"
+_SPLASH_ENV = "RESEARCH_AGENT_COCKPIT_SPLASH"
+
+
+def should_show_splash(settings: "CockpitSettings") -> bool:
+    """Decide whether the cockpit should run the startup splash this launch.
+
+    The env var ``RESEARCH_AGENT_COCKPIT_SPLASH`` overrides the persisted
+    setting in either direction (``"0"``/``"false"``/``"no"``/``"off"`` →
+    disabled; ``"1"``/``"true"``/``"yes"``/``"on"`` → enabled). When the
+    var is unset, the saved ``splash_animation`` flag wins.
+
+    Centralising this lets ``conftest.py`` flip splash off for the whole
+    test suite by setting the env var, while real launches stay on.
+    """
+    raw = os.environ.get(_SPLASH_ENV)
+    if raw is not None:
+        lowered = raw.strip().lower()
+        if lowered in {"0", "false", "no", "off", ""}:
+            return False
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        # Unparseable env value: fall back to the saved setting rather than
+        # silently picking a side.
+    return bool(settings.splash_animation)
 
 
 def default_config_path() -> Path:
@@ -64,6 +88,12 @@ class CockpitSettings:
     event_wrap: bool = True
     tree_compact: bool = True
     wide_subpreset: int = 0
+    # v4.1.0a5 addition: opt-out for the startup splash. Default ON because
+    # the splash does double duty as launch theatre AND as a perceptual buffer
+    # for the ~200-800ms it takes to fetch graph + events on cold start. Power
+    # users who want straight-to-main can flip this off via the cockpit
+    # settings file. Tests force-disable through RESEARCH_AGENT_COCKPIT_SPLASH.
+    splash_animation: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "CockpitSettings":
