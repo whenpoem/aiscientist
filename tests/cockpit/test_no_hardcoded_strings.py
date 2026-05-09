@@ -25,11 +25,12 @@ from pathlib import Path
 import pytest
 
 # Files that must route every UI label through ``t(lang, ...)``. The
-# regression budget is intentionally narrow (panes + the app's _row_detail
-# helpers); broader source files (data layer, db setup) freely use English
-# in error messages and log keys.
+# regression budget is intentionally narrow (panes + row-detail helpers);
+# broader source files (data layer, db setup) freely use English in error
+# messages and log keys.
 SCANNED_FILES = (
     "src/cockpit/app.py",
+    "src/cockpit/row_detail.py",
     "src/cockpit/panes/tree_pane.py",
     "src/cockpit/panes/detail_pane.py",
     "src/cockpit/panes/events_pane.py",
@@ -71,7 +72,7 @@ def test_scanned_file_has_no_banned_literal(relative: str):
 def test_app_uses_failure_root_cause_via_i18n():
     """Positive form: the detail-pane drill that previously said "Root
     cause:" should now resolve via the new i18n key."""
-    target = _repo_root() / "src/cockpit/app.py"
+    target = _repo_root() / "src/cockpit/row_detail.py"
     text = target.read_text(encoding="utf-8")
     assert "failure_root_cause" in text
     assert "failure_resolution" in text

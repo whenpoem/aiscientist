@@ -44,6 +44,7 @@ Textual App + key bindings:  app.py
 TUI entry point:             tui.py
 Headless / once-mode render: app.render_snapshot
 Pane widgets:                panes/
+Tab-row detail builders:     row_detail.py
 Modal screens:               modals/
 Theme / CSS:                 theme/cockpit.tcss
 SQLite + bootstrap:          db.py (ensure() + connect())

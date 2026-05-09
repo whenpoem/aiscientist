@@ -1,6 +1,6 @@
 [project]
 name = "claudescientist"
-version = "4.1.0a5"
+version = "4.1.0a6"
 description = "Research-agent augmentation layer for Claude Code with SQLite memory, verification MCPs, a proof trunk with NL workflow + Lean reinsurance, and a Textual cockpit TUI."
 readme = "README.md"
 requires-python = ">=3.11"

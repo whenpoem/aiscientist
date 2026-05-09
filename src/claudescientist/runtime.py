@@ -78,6 +78,31 @@ def connect_sqlite(path: Path | None = None, *, timeout: float = 5.0) -> sqlite3
     return con
 
 
+def connect_existing_sqlite(
+    path: Path | None = None,
+    *,
+    timeout: float = 2.0,
+) -> sqlite3.Connection | None:
+    """Open an existing state DB without creating it.
+
+    Short-lived hooks use this helper so first-run or malformed workspaces
+    still fail open: a missing DB means "nothing to read", not "create an
+    empty runtime DB during a lifecycle hook".
+    """
+    target = path or state_db_path()
+    if not target.exists():
+        return None
+    con = sqlite3.connect(str(target), timeout=timeout, isolation_level=None)
+    con.row_factory = sqlite3.Row
+    try:
+        con.execute("PRAGMA journal_mode=WAL;")
+        con.execute("PRAGMA foreign_keys=ON;")
+    except sqlite3.DatabaseError:
+        con.close()
+        return None
+    return con
+
+
 def ensure_columns(
     con: sqlite3.Connection,
     table_name: str,

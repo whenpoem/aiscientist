@@ -35,7 +35,7 @@ The five layers never call each other directly. They all talk through the SQLite
 1. **Each component owns its own tables.** Prefix conventions: `mem_*`, `ver_*`, `res_*`, `cockpit_*`, plus the shared `ra_migrations` and `meta_*` tables.
 2. **Cross-component signals go through `cockpit_events`.** Only reach into another module's tables for read-only inspection in tests.
 
-Always open your database with `connect_sqlite()` — it sets up WAL mode, foreign keys, and a 5-second busy timeout. Don't open raw `sqlite3` connections.
+Long-running code and MCP tools must open the database with `connect_sqlite()` — it sets up WAL mode, foreign keys, row factories, and a 5-second busy timeout. Short-lived hooks use `connect_existing_sqlite()` instead so a missing or malformed first-run DB fails open without creating a new state file. Don't open raw `sqlite3` connections in runtime code.
 
 ### 3. Held-out data protection
 
@@ -84,7 +84,7 @@ Silent contract changes are the highest-severity bug class in this project.
 The `claudescientist.runtime` module owns the four pieces of cross-module infrastructure that every layer depends on:
 
 - **Path resolution.** `state_db_path()`, `heldout_root()`, and friends are the only legitimate way to locate shared resources. Feature packages must not duplicate path resolution; in particular, held-out roots must come from `runtime.heldout_root()` or from a registered `ver_heldout_budgets.heldout_path` row.
-- **SQLite connection setup.** `connect_sqlite()` enables WAL mode, foreign keys, and a 5-second busy timeout.
+- **SQLite connection setup.** `connect_sqlite()` enables WAL mode, foreign keys, row factories, and a 5-second busy timeout. `connect_existing_sqlite()` is the hook-safe variant: it returns `None` instead of creating the DB when state is missing or malformed.
 - **Schema migration bookkeeping.** The `ra_migrations` table records, per component, the schema version, schema hash, apply status, and any failure text. Structural upgrades that cannot be expressed by `CREATE TABLE IF NOT EXISTS` must use explicit compatibility helpers and ship with tests.
 - **Cockpit event insertion.** `emit_cockpit_event()` is the canonical way to push something to the cockpit. Producers should call it inside the same transaction as the underlying state change.
 
@@ -221,6 +221,8 @@ The two trunks compose through exactly four shared interfaces, no more. Anyone t
 2. **One failure ledger.** `mem_failures.domain` partitions records by domain; `match_signatures` accepts an optional `domain` filter and defaults to cross-domain. An off-by-one signature stored from a script crash can match an off-by-one signature in a proof snippet.
 3. **One tournament.** BT comparison accepts both `hypothesis` and `proof_skeleton` kinds (same-kind only). Cross-kind comparison is forbidden to keep semantics clean.
 4. **One reviewer, two checklists.** `reviewer.md` switches its checklist by manuscript content: empirical numeric claims keep the existing four gates (pin / seed verdict / met preregistration / fresh provenance); theorem claims add an empty diagnostic manifest plus either a Lean verification or an explicit `unverified` flag. The `unverified` flag is a manuscript-level annotation, not a `prv_diagnostic_manifests.status` value.
+
+`prove_mcp.tools.nodes` is the only sanctioned writer from the proof trunk into the shared graph tables (`mem_nodes`, `mem_edges`, and proof-skeleton `mem_bt_ratings` seeds). That narrow exception keeps the one-tree interface real without turning the rest of `prove_mcp` into a memory-table owner.
 
 #### Reading the per-module map labels
 

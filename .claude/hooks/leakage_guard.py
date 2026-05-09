@@ -11,7 +11,12 @@ import sys
 from pathlib import Path
 from typing import Iterator
 
-from claudescientist.runtime import METRIC_RE, heldout_root, state_db_path
+from claudescientist.runtime import (
+    METRIC_RE,
+    connect_existing_sqlite,
+    heldout_root,
+    state_db_path,
+)
 
 DB = state_db_path()
 HELDOUT_PATH_RE = re.compile(
@@ -77,9 +82,9 @@ def _candidate_paths(text: str) -> Iterator[str]:
 
 def _heldout_roots() -> list[Path]:
     roots = [heldout_root()]
-    if DB.exists():
+    con = connect_existing_sqlite(DB)
+    if con is not None:
         try:
-            con = sqlite3.connect(str(DB), timeout=2.0)
             rows = con.execute(
                 """
                 SELECT heldout_path
@@ -149,9 +154,9 @@ def _deny(reason: str) -> None:
 
 
 def _missing_provenance(values: list[str]) -> list[str]:
-    if not DB.exists():
+    con = connect_existing_sqlite(DB)
+    if con is None:
         return values
-    con = sqlite3.connect(str(DB), timeout=2.0)
     try:
         missing: list[str] = []
         for value in values:

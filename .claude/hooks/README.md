@@ -29,6 +29,11 @@ table below is a human summary.
   malformed (typical on first run), the hook must exit cleanly with an
   empty JSON object. The fail-open default is intentional: we never want a
   broken DB to wedge the entire Claude Code session.
+- **Hook-safe DB access.** Hooks that need SQLite must use
+  `claudescientist.runtime.connect_existing_sqlite()`, not raw
+  `sqlite3.connect()`. The helper applies the shared pragmas when a DB
+  exists and returns `None` instead of creating a new state file when it
+  does not.
 - **No business imports at the top of `leakage_guard.py` or
   `provenance_log.py`.** Both consume `METRIC_RE` and
   `extract_metric_tokens` from `claudescientist.runtime`, NOT from

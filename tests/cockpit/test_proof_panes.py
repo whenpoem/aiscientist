@@ -9,7 +9,7 @@ Covers four layers:
    populated rows render with the i18n status labels and icons.
 3. ``CockpitApp._dispatch_events`` — proof-trunk events route to the
    correct per-tab refresh methods (no over-fetching).
-4. ``CockpitApp._row_detail`` — Enter on a corpus / diagnostics / lean
+4. ``cockpit.row_detail.row_detail`` — Enter on a corpus / diagnostics / lean
    row produces a localized detail-pane override.
 
 The fixtures rely on the standard ``workspace`` (RESEARCH_AGENT_STATE_DIR
@@ -251,7 +251,7 @@ async def test_proof_events_dispatch_to_correct_per_tab_refresh(workspace, monke
 
 
 # ---------------------------------------------------------------------------
-# Layer 4: drill-in (_row_detail)
+# Layer 4: drill-in (row_detail)
 # ---------------------------------------------------------------------------
 
 

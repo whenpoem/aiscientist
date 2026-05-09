@@ -88,7 +88,7 @@ class CockpitSettings:
     event_wrap: bool = True
     tree_compact: bool = True
     wide_subpreset: int = 0
-    # v4.1.0a5 addition: opt-out for the startup splash. Default ON because
+    # v4.1.0a6 addition: opt-out for the startup splash. Default ON because
     # the splash does double duty as launch theatre AND as a perceptual buffer
     # for the ~200-800ms it takes to fetch graph + events on cold start. Power
     # users who want straight-to-main can flip this off via the cockpit

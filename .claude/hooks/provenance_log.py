@@ -10,7 +10,11 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-from claudescientist.runtime import extract_metric_tokens, state_db_path
+from claudescientist.runtime import (
+    connect_existing_sqlite,
+    extract_metric_tokens,
+    state_db_path,
+)
 
 DB = state_db_path()
 METRIC_WORDS = (
@@ -71,6 +75,14 @@ VALUE_BEFORE_LABEL_RE = re.compile(
     rf"(?<![A-Za-z0-9])(?P<value>[-+]?\d+(?:\.\d+)?%?)\s+(?P<label>{METRIC_LABEL_FRAGMENT})\b",
     re.IGNORECASE,
 )
+
+
+def _db_available() -> bool:
+    con = connect_existing_sqlite(DB)
+    if con is None:
+        return False
+    con.close()
+    return True
 
 
 def _flatten_output(value: Any) -> str:
@@ -150,7 +162,7 @@ def _extract_labeled_records(text: str) -> list[tuple[str, str]]:
 
 def collect_records(payload: dict[str, Any]) -> list[tuple[str, str, str, str]]:
     tool_name = str(payload.get("tool_name", ""))
-    if tool_name != "Bash" or not DB.exists():
+    if tool_name != "Bash" or not _db_available():
         return []
     tool_input = payload.get("tool_input", {})
     command = str(tool_input.get("command", ""))[:500]
@@ -177,7 +189,10 @@ def main() -> None:
         print("{}")
         return
 
-    con = sqlite3.connect(str(DB), timeout=2.0)
+    con = connect_existing_sqlite(DB)
+    if con is None:
+        print("{}")
+        return
     try:
         for claim, value, session_id, command in records:
             con.execute(

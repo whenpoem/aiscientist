@@ -7,16 +7,15 @@ import json
 import sqlite3
 import sys
 
-from claudescientist.runtime import state_db_path
+from claudescientist.runtime import connect_existing_sqlite, state_db_path
 
 DB = state_db_path()
 
 
 def drain() -> str:
-    if not DB.exists():
+    con = connect_existing_sqlite(DB)
+    if con is None:
         return ""
-    con = sqlite3.connect(str(DB), timeout=2.0)
-    con.row_factory = sqlite3.Row
     try:
         rows = con.execute(
             """

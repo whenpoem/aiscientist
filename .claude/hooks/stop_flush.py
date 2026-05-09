@@ -9,7 +9,11 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-from claudescientist.runtime import runtime_path, state_db_path
+from claudescientist.runtime import (
+    connect_existing_sqlite,
+    runtime_path,
+    state_db_path,
+)
 
 DB = state_db_path()
 STATE = runtime_path("stop_flush_state.json")
@@ -312,10 +316,9 @@ def _build_delta(previous: dict[str, Any], current: dict[str, Any]) -> dict[str,
 
 
 def collect_event_payload(hook_payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    if not DB.exists():
+    con = connect_existing_sqlite(DB)
+    if con is None:
         return None
-    con = sqlite3.connect(str(DB), timeout=2.0)
-    con.row_factory = sqlite3.Row
     try:
         previous = _read_state()
         current = _snapshot(con)
@@ -334,8 +337,11 @@ def collect_event_payload(hook_payload: dict[str, Any] | None = None) -> dict[st
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     event_payload = collect_event_payload(payload)
-    if event_payload is not None and DB.exists():
-        con = sqlite3.connect(str(DB), timeout=2.0)
+    if event_payload is not None:
+        con = connect_existing_sqlite(DB)
+        if con is None:
+            print("{}")
+            return
         try:
             con.execute(
                 "INSERT INTO cockpit_events(kind, payload, created_at) VALUES(?,?,?)",

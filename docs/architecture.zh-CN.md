@@ -35,7 +35,7 @@ ClaudeScientist 由四个运行时层和一个共享状态文件组成。
 1. **每个组件拥有自己的表。** 前缀约定：`mem_*`、`ver_*`、`res_*`、`cockpit_*`，加上共享的 `ra_migrations` 和 `meta_*` 表。
 2. **跨组件信号走 `cockpit_events` 表。** 直接读其他模块的内部表只允许在测试中做只读检查。
 
-打开数据库请一律走 `connect_sqlite()`——它会设好 WAL 模式、外键约束和 5 秒的 busy timeout。不要自己开原始 `sqlite3` 连接。
+长驻代码和 MCP tools 打开数据库请一律走 `connect_sqlite()`——它会设好 WAL 模式、外键约束、row factory 和 5 秒的 busy timeout。短生命周期 hooks 使用 `connect_existing_sqlite()`，这样首次运行 DB 缺失或损坏时会 fail-open，不会在 hook 里新建状态库。运行时代码不要自己开原始 `sqlite3` 连接。
 
 ### 3. Held-out 数据保护
 
@@ -84,7 +84,7 @@ held-out 数据（通常是测试集）受到双重保护。两层保护必须�
 `claudescientist.runtime` 模块拥有所有跨模块基础设施：
 
 - **路径解析。** `state_db_path()`、`heldout_root()` 等函数是定位共享资源的唯一合法途径。功能包不得自己实现路径解析；特别是 held-out 数据根目录必须来自 `runtime.heldout_root()` 或注册过的 `ver_heldout_budgets.heldout_path` 行。
-- **SQLite 连接配置。** `connect_sqlite()` 启用 WAL 模式、外键约束和 5 秒 busy timeout。
+- **SQLite 连接配置。** `connect_sqlite()` 启用 WAL 模式、外键约束、row factory 和 5 秒 busy timeout。`connect_existing_sqlite()` 是 hook 安全变体：状态缺失或损坏时返回 `None`，不创建新 DB。
 - **Schema 迁移记账。** `ra_migrations` 表按组件记录 schema 版本号、schema 哈希、应用状态和失败错误信息。无法用 `CREATE TABLE IF NOT EXISTS` 表达的结构性升级必须使用显式兼容性辅助函数，并附带测试。
 - **Cockpit 事件写入。** `emit_cockpit_event()` 是向 cockpit 推送事件的标准方式。生产者应当在与底层状态变更相同的事务里调用它。
 
@@ -221,6 +221,8 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 2. **同一本错题本。** `mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
 3. **同一张排行榜。** BT 比较同时接受 `hypothesis` 与 `proof_skeleton`（仅同 kind）。跨 kind 比较仍被禁止以避免语义混乱。
 4. **同一个评审，两份清单。** `reviewer.md` 按 manuscript 内容自动切清单——empirical 数字断言保持原有四件套（pin / seed verdict / met preregistration / fresh provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证或显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
+
+`prove_mcp.tools.nodes` 是 proof trunk 唯一允许写入 shared graph tables（`mem_nodes`、`mem_edges`，以及 proof-skeleton 的 `mem_bt_ratings` seed）的入口。这个窄例外让"同一棵树"接口真正可用，但不会让 `prove_mcp` 其它部分变成 memory table owner。
 
 #### 模块地图标签的读法
 

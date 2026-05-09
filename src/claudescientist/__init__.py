@@ -11,6 +11,7 @@ Public surface
 runtime.state_db_path()           Resolve the shared SQLite file path.
 runtime.heldout_root()            Resolve the sequestered-dataset root.
 runtime.connect_sqlite()          WAL-mode connection with row factory.
+runtime.connect_existing_sqlite() Hook-safe existing-DB connection helper.
 runtime.apply_schema_migration()  Per-component schema apply + bookkeeping.
 runtime.emit_cockpit_event()      Append a row to cockpit_events in-tx.
 runtime.METRIC_RE / NUMBER_RE     Project-wide numeric-claim recognition.
@@ -64,4 +65,4 @@ from __future__ import annotations
 
 __all__ = ["__version__"]
 
-__version__ = "0.2.0"
+__version__ = "4.1.0a6"

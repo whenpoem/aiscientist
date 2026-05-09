@@ -10,6 +10,12 @@ core (one tree, one failure ledger, one BT leaderboard, one reviewer);
 this module never reaches into ``ver_*`` directly and writes its own
 ``prv_*`` tables.
 
+One explicit shared-core exception exists: ``tools.nodes`` is the proof
+trunk's sanctioned writer for proof-domain ``mem_nodes`` / ``mem_edges``
+rows and seed ``mem_bt_ratings`` rows. That exception is narrow and
+documented in the module; all other proof-trunk files must treat mem_*
+tables as read-only or go through public memory tools.
+
 Public surface
 --------------
 Tools (exposed via MCP):  see TOOL_NAMES in impl.py
@@ -65,9 +71,11 @@ Shared helpers:           tools/_common.py (event emission, vector codec)
 
 Do NOT
 ------
-- Reach into ``mem_*`` or ``ver_*`` tables directly. Use the documented
-  cross-trunk interfaces; write cross-domain signals through
-  ``cockpit_events`` (emit via runtime.emit_cockpit_event).
+- Reach into ``mem_*`` or ``ver_*`` tables directly. The only write
+  exception is ``tools.nodes`` creating proof-domain graph rows in the
+  shared core. Use the documented cross-trunk interfaces everywhere else;
+  write cross-domain signals through ``cockpit_events`` (emit via
+  runtime.emit_cockpit_event).
 - Add module-level imports of memory_mcp, verify_mcp, or cockpit. The
   prove_mcp package must remain consumable in isolation.
 - Pipeline-ise the toolset. ADR 0007 binds; every public tool is an

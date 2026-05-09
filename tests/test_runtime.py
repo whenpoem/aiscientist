@@ -4,7 +4,11 @@ import warnings
 
 import pytest
 
-from claudescientist.runtime import apply_schema_migration, connect_sqlite
+from claudescientist.runtime import (
+    apply_schema_migration,
+    connect_existing_sqlite,
+    connect_sqlite,
+)
 
 
 def test_apply_schema_migration_warns_when_schema_hash_changes(tmp_path):
@@ -70,3 +74,27 @@ def test_apply_schema_migration_records_failure_status(tmp_path):
     assert row["schema_version"] == 7
     assert row["status"] == "failed"
     assert row["error"]
+
+
+def test_connect_existing_sqlite_does_not_create_missing_db(tmp_path):
+    db_path = tmp_path / "missing" / "state.db"
+
+    con = connect_existing_sqlite(db_path)
+
+    assert con is None
+    assert not db_path.exists()
+
+
+def test_connect_existing_sqlite_uses_runtime_pragmas(tmp_path):
+    db_path = tmp_path / "state.db"
+    created = connect_sqlite(db_path)
+    created.close()
+
+    con = connect_existing_sqlite(db_path)
+    try:
+        assert con is not None
+        assert con.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert con.row_factory is not None
+    finally:
+        if con is not None:
+            con.close()
