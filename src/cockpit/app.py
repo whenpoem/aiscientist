@@ -32,6 +32,7 @@ from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
 from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
 from .row_detail import row_detail
 from .screens.splash import SplashScreen
+from .screens.welcome import WelcomeScreen
 from .settings import (
     CockpitSettings,
     load_settings,
@@ -217,6 +218,12 @@ class CockpitApp(App[None]):
         Binding("g", "jump_top", "Top"),
         Binding("G", "jump_bottom", "Bottom"),
         Binding("f", "cycle_right_tab", "Cycle Tab"),
+        # Capital N jumps to the first tab of the next group
+        # (Cross → Empirical → Proof → Cross). priority=True so a
+        # focused DataTable doesn't swallow it; the priority-letter
+        # forwarder lets the user still type literal "N" inside a
+        # modal Input.
+        Binding("N", "cycle_tab_group", "Next Tab Group", priority=True),
         # priority=True so Tree / DataTable can't swallow Enter. The Tree
         # widget binds Enter to "select_cursor" by default (and the
         # DataTable / Input behave similarly); without priority the
@@ -228,6 +235,10 @@ class CockpitApp(App[None]):
         Binding("c", "constrain_node", "Constrain"),
         Binding("m", "mark_refuted", "Refute"),
         Binding("p", "pin_metric", "Pin"),
+        # `e` opens the export modal for the currently-selected node.
+        # priority=True with the standard Input-yield helper so typing
+        # the literal "e" inside a modal text field still works.
+        Binding("e", "export_report", "Export", priority=True),
         Binding("H", "halt_agent", "Halt"),
         Binding("/", "open_filter", "Filter"),
         Binding(":", "open_command", "Command"),
@@ -247,8 +258,12 @@ class CockpitApp(App[None]):
         # v4.1.0a4 display toggles. priority=True so that even when an
         # Input/DataTable has focus the keystroke still fires (matches the
         # L/T/F precedent above).
-        Binding("w", "toggle_event_wrap", "Wrap", priority=True),
-        Binding("i", "toggle_tree_compact", "Tree info", priority=True),
+        # `w` and `i` are pane-scoped (v4.2.0a1 / A3): see
+        # EventStreamPane.BINDINGS and HypothesisTreePane.BINDINGS.
+        # The App keeps the action handlers (action_toggle_event_wrap /
+        # action_toggle_tree_compact) because the panes delegate back
+        # to them for the persisted-state side effects; only the keystroke
+        # ownership moved.
         # `<` / `>` nudge the wide-layout tree column wider/narrower.
         # Lower-case input convention: shift+comma / shift+period in
         # Textual's key naming. priority so they fire even when an Input
@@ -354,6 +369,17 @@ class CockpitApp(App[None]):
         self._register_themes()
         self._apply_theme(self._settings.theme, persist=False, notify=False)
         self._apply_language()
+        # Wire the detail pane's section-collapse persistence. The pane
+        # owns the visual toggle; the App owns the settings file.
+        try:
+            self.detail_pane.set_section_collapsed_state(
+                dict(self._settings.detail_section_collapsed)
+            )
+            self.detail_pane.set_section_toggle_callback(
+                self._on_detail_section_toggled
+            )
+        except Exception:  # pragma: no cover - defensive
+            pass
         self.refresh_state(include_events=True)
         # Restore focus to the previously active pane. tree / detail /
         # events are plain widgets; calling .focus() synchronously is
@@ -375,6 +401,23 @@ class CockpitApp(App[None]):
         self._set_focus(focus_pane)
         self._apply_layout(persist=False)
         self.events_worker()
+        # Cold-start Welcome (v4.2.0a3 / B2). Pushed after the main UI
+        # is composed but before the splash, so the splash dismisses
+        # onto the Welcome screen rather than the bare cockpit.
+        # ``RESEARCH_AGENT_COCKPIT_WELCOME=0`` mirrors the splash env
+        # var so tests can suppress it without touching settings.
+        if self._should_show_welcome():
+            try:
+                self.push_screen(
+                    WelcomeScreen(
+                        lang=self.lang,
+                        quickstart_path=self._quickstart_doc_path(),
+                        on_done=self._mark_welcome_seen,
+                    )
+                )
+            except Exception:  # pragma: no cover - defensive
+                pass
+
         # Splash is pushed LAST so the main view is fully composed,
         # themed, and event-pumped behind it. Popping the splash then
         # reveals an already-warm UI rather than a half-rendered one.
@@ -640,6 +683,73 @@ class CockpitApp(App[None]):
 
     # -- settings persistence ---------------------------------------------
 
+    def _should_show_welcome(self) -> bool:
+        """True when the cockpit should push the cold-start Welcome screen.
+
+        Skipped when the env var ``RESEARCH_AGENT_COCKPIT_WELCOME=0``
+        is set (tests + power users), when the settings file says the
+        user has already dismissed it once, or when the SQLite
+        ``mem_nodes`` table is non-empty (a warm session).
+        """
+        import os
+        import sqlite3
+
+        if os.environ.get("RESEARCH_AGENT_COCKPIT_WELCOME") == "0":
+            return False
+        if getattr(self._settings, "welcome_shown", False):
+            return False
+        try:
+            from claudescientist.runtime import (
+                connect_existing_sqlite,
+                state_db_path,
+            )
+
+            con = connect_existing_sqlite(state_db_path())
+            if con is None:
+                return True
+            try:
+                row = con.execute(
+                    "SELECT COUNT(*) AS n FROM mem_nodes"
+                ).fetchone()
+                return int(row[0]) == 0
+            except sqlite3.OperationalError:
+                return True
+            finally:
+                con.close()
+        except Exception:  # pragma: no cover - defensive
+            return True
+
+    def _quickstart_doc_path(self):
+        from pathlib import Path
+
+        # Resolve relative to the running cwd. The wizard wrote the
+        # same path into its cheatsheet, so users get a consistent
+        # experience whether they pressed ``?`` here or "Y" at the
+        # end of setup.
+        return (Path.cwd() / "docs" / "workflows" / "first-research-task.md").resolve()
+
+    def _mark_welcome_seen(self) -> None:
+        try:
+            self._settings.welcome_shown = True
+            self._persist_settings()
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+    def _on_detail_section_toggled(self, section_key: str, collapsed: bool) -> None:
+        """Persist the user's collapse/expand action on a detail section.
+
+        Updates ``CockpitSettings.detail_section_collapsed`` in place and
+        flushes to disk. Failures here never bubble up — the visual
+        change has already happened.
+        """
+        try:
+            state = dict(self._settings.detail_section_collapsed or {})
+            state[section_key] = bool(collapsed)
+            self._settings.detail_section_collapsed = state
+            self._persist_settings()
+        except Exception:  # pragma: no cover - defensive
+            pass
+
     def _persist_settings(self) -> None:
         """Write the current settings snapshot to disk. Swallows OSError so
         a hostile filesystem (read-only, missing parent, etc.) cannot crash
@@ -860,6 +970,63 @@ class CockpitApp(App[None]):
         self.tabs_pane.cycle_tab()
         self._refresh_detail()
 
+    async def action_export_report(self) -> None:
+        """Open the ExportModal for the currently-selected node.
+
+        Skipped silently if focus is in an Input — the modal's `e`
+        would otherwise eat literal typing inside a filter field. The
+        modal returns an ExportRequest on submit; we then call into
+        cockpit.export.generate to write the file(s) and notify the
+        user with the paths.
+        """
+        if self._yield_priority_letter_to_input("e"):
+            return
+        node_id = self.selected_node_id
+        if not node_id:
+            self.notify(t(self.lang, "select_hint"))
+            return
+        # Look up the node's kind so the modal only offers report
+        # kinds that make sense.
+        node = self.graph.node(node_id) if self.graph else None
+        if node is None:
+            self.notify(t(self.lang, "select_hint"))
+            return
+        from cockpit.export.pipeline import kinds_for_node_kind
+        from cockpit.modals import ExportModal, ExportRequest
+
+        kinds = kinds_for_node_kind(node.kind)
+
+        async def _on_dismiss(result: ExportRequest | None) -> None:
+            if result is None:
+                return
+            try:
+                from cockpit.export import generate
+
+                paths = generate(
+                    result.kind,
+                    node_id,
+                    formats=result.formats,
+                    generated_by="cockpit.tui",
+                )
+            except (ValueError, OSError) as exc:
+                self.notify(t(self.lang, "export_failure", error=str(exc)))
+                return
+            self.notify(t(self.lang, "export_success", count=len(paths)))
+
+        self.push_screen(
+            ExportModal(node_id, kinds, lang=self.lang), _on_dismiss
+        )
+
+    def action_cycle_tab_group(self) -> None:
+        """Jump to the first tab of the next group (Cross → Empirical → Proof)."""
+        # Same priority-letter forwarding trick as the other capital
+        # bindings: if focus is in an Input widget, the user is typing
+        # literal "N" rather than asking for the group cycle.
+        if self._yield_priority_letter_to_input("N"):
+            return
+        self.tabs_pane.cycle_group()
+        self._refresh_detail()
+
     def action_show_help(self) -> None:
         sections = [
             (
@@ -869,6 +1036,8 @@ class CockpitApp(App[None]):
                     ("h / l", t(self.lang, "collapse_expand")),
                     ("1-4", t(self.lang, "jump_pane")),
                     ("Tab", t(self.lang, "cycle_panes")),
+                    ("f", t(self.lang, "cycle_tab_in_group")),
+                    ("N", t(self.lang, "cycle_tab_group")),
                 ],
             ),
             (
@@ -965,7 +1134,7 @@ class CockpitApp(App[None]):
             return False
         try:
             top = self.screen_stack[-1]
-            return isinstance(top, (HelpScreen, SplashScreen))
+            return isinstance(top, (HelpScreen, SplashScreen, WelcomeScreen))
         except Exception:  # pragma: no cover - defensive
             return False
 
@@ -1247,11 +1416,19 @@ class CockpitApp(App[None]):
             # answer; an additional toast just stacks up and clutters
             # the screen during exploration.
             return
+        # Reports tab gets special-cased: Enter opens the underlying
+        # file in the user's default app (the cockpit doesn't embed
+        # a markdown / HTML renderer — see ADR 0009). Falling through
+        # to the regular drill-in source would only show the metadata
+        # we already render in the table.
+        active = self.tabs_pane.active or "risks"
+        if active == "reports":
+            self._open_report_file(row)
+            return
         from .screens import DetailScreen, TabRowDetailSource
 
         # Mirror the rows that tabs_pane shows after filtering — the
         # source must walk only what's visible, not the full backing list.
-        active = self.tabs_pane.active or "risks"
         rows = self.tabs_pane._filtered_rows.get(active, [])
         try:
             current_idx = rows.index(row)
@@ -1261,6 +1438,27 @@ class CockpitApp(App[None]):
             rows, current_idx, self._row_detail, self.lang
         )
         self.push_screen(DetailScreen(source, lang=self.lang))
+
+    def _open_report_file(self, row: dict) -> None:
+        """Open a report row's underlying file in the user's default app.
+
+        Honors the ``missing`` flag — if the row points at a file that
+        no longer exists on disk (the user manually deleted it), the
+        cockpit notifies instead of trying to launch a no-op.
+        """
+        from pathlib import Path
+
+        from claudescientist._setup_io import open_file_with_default_app
+
+        path_str = row.get("file_path")
+        if not path_str or row.get("missing"):
+            self.notify(t(self.lang, "reports_missing_flag"))
+            return
+        opened = open_file_with_default_app(Path(path_str))
+        if not opened:
+            self.notify(
+                t(self.lang, "export_failure", error=f"could not open {path_str}")
+            )
 
     def _open_detail_for_events(self) -> None:
         from .screens import DetailScreen, EventDetailSource
@@ -1566,6 +1764,7 @@ class CockpitApp(App[None]):
             failures=failures,
             claims=claims,
             literature=data.fetch_literature(),
+            reports=data.fetch_reports(),
             corpus=data.fetch_corpus_problems(),
             diagnostics=data.fetch_diagnostic_manifests(),
             lean=data.fetch_lean_attempts(),
@@ -1594,6 +1793,9 @@ class CockpitApp(App[None]):
     def _refresh_lean(self) -> None:
         self._set_tab_rows(lean=data.fetch_lean_attempts())
 
+    def _refresh_reports(self) -> None:
+        self._set_tab_rows(reports=data.fetch_reports())
+
     def _set_tab_rows(
         self,
         *,
@@ -1604,6 +1806,7 @@ class CockpitApp(App[None]):
         corpus: list[dict] | None = None,
         diagnostics: list[dict] | None = None,
         lean: list[dict] | None = None,
+        reports: list[dict] | None = None,
     ) -> None:
         self.tabs_pane.set_filter_text(self._pane_filters["tabs"])
         self.tabs_pane.set_rows(
@@ -1616,6 +1819,7 @@ class CockpitApp(App[None]):
                 diagnostics if diagnostics is not None else self.tabs_pane.diagnostics_rows
             ),
             lean=lean if lean is not None else self.tabs_pane.lean_rows,
+            reports=reports if reports is not None else self.tabs_pane.reports_rows,
         )
 
     def _refresh_counts(self) -> None:
@@ -1670,6 +1874,8 @@ class CockpitApp(App[None]):
             "lean_proof_recorded",
         } & kinds:
             self._refresh_lean()
+        if "report_generated" in kinds:
+            self._refresh_reports()
         self._refresh_counts()
         self._refresh_detail()
 

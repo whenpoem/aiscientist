@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS prv_corpus_keywords (
   embedding BLOB NOT NULL,
   embed_backend TEXT NOT NULL,
   embed_dim INTEGER NOT NULL,
+  -- Added in schema_version=5 (v4.2.0a0 / ADR 0010): the specific model
+  -- identifier that produced the vector, so multiple models under the
+  -- same backend (e.g. several OpenAI-compatible providers) stay
+  -- distinguishable and retrieval can refuse mismatches at the
+  -- (backend, model, dim) triple. Default 'unknown' on legacy rows
+  -- so a v4.1 corpus migrates cleanly; the retrieval tool surfaces a
+  -- clear hint when it encounters such rows.
+  embedding_model TEXT NOT NULL DEFAULT 'unknown',
   PRIMARY KEY (problem_id, keyword, kind)
 );
 
@@ -32,6 +40,14 @@ CREATE INDEX IF NOT EXISTS idx_prv_corpus_keywords_kw
 
 CREATE INDEX IF NOT EXISTS idx_prv_corpus_keywords_backend
   ON prv_corpus_keywords(embed_backend, embed_dim);
+
+-- The (backend, model, dim) triple index lives in
+-- db._migrate_add_embedding_model_column rather than here. A legacy
+-- v4 corpus table predates the embedding_model column, so trying to
+-- declare this index inside the executescript pass would fail before
+-- the migration helper has a chance to add the column. The helper
+-- runs after the schema pass and uses CREATE INDEX IF NOT EXISTS, so
+-- fresh databases still get the index — just one step later.
 
 -- P3: snippet-level diagnostic manifest. One row per draft (a
 -- proof_skeleton mem_node holding full draft text). status transitions:

@@ -1,6 +1,6 @@
 """Helpers for the ``python -m claudescientist.setup`` wizard.
 
-Three concerns, kept narrow:
+Four concerns, kept narrow:
 
 1. **Probes** — read-only "is this tool / file / package available?" checks
    that drive step decisions. Probes never raise; they return ``(ok, info)``
@@ -11,6 +11,9 @@ Three concerns, kept narrow:
 3. **subprocess wrappers** — for ``uv sync --extra proof`` and the seed
    scripts. Streams output in real time (so the user sees progress) and
    returns a status code.
+4. **Provider presets and "open with default app"** (v4.2.0a0) — small
+   tables and helpers shared by the embedding-backend step and the
+   end-of-wizard quickstart prompt.
 
 The questionary-based prompts live in ``setup.py`` itself; this module
 is import-safe in CI / non-interactive paths.
@@ -19,11 +22,86 @@ is import-safe in CI / non-interactive paths.
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Provider presets for the OpenAI-compatible embedding backend (ADR 0010).
+#
+# The tested set; users with another OpenAI-compatible provider can pick
+# "Other" in the wizard and supply a base_url + model manually. The
+# wizard never enforces the model name — providers add and retire
+# models faster than this table can chase.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ProviderPreset:
+    """One row in the OpenAI-compatible provider menu."""
+
+    key: str
+    label: str
+    base_url: str | None  # None = SDK default (api.openai.com)
+    default_model: str
+    notes: str
+
+
+PROVIDER_PRESETS: tuple[ProviderPreset, ...] = (
+    ProviderPreset(
+        key="openai",
+        label="OpenAI (api.openai.com)",
+        base_url=None,
+        default_model="text-embedding-3-large",
+        notes="default; 3072-dim",
+    ),
+    ProviderPreset(
+        key="dashscope",
+        label="Aliyun DashScope",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        default_model="text-embedding-v3",
+        notes="1024-dim; China-friendly",
+    ),
+    ProviderPreset(
+        key="jina",
+        label="Jina",
+        base_url="https://api.jina.ai/v1",
+        default_model="jina-embeddings-v3",
+        notes="1024-dim; multilingual",
+    ),
+    ProviderPreset(
+        key="voyage",
+        label="Voyage",
+        base_url="https://api.voyageai.com/v1",
+        default_model="voyage-3",
+        notes="1024-dim; retrieval-tuned",
+    ),
+    ProviderPreset(
+        key="glm",
+        label="GLM (Zhipu)",
+        base_url="https://open.bigmodel.cn/api/paas/v4",
+        default_model="embedding-3",
+        notes="2048-dim; China-friendly",
+    ),
+    ProviderPreset(
+        key="other",
+        label="Other (custom base_url)",
+        base_url="",  # caller asks the user
+        default_model="",
+        notes="bring your own endpoint",
+    ),
+)
+
+
+def provider_preset(key: str) -> ProviderPreset | None:
+    """Look up a preset by its short key; returns None when unknown."""
+    for preset in PROVIDER_PRESETS:
+        if preset.key == key:
+            return preset
+    return None
 
 # ---------------------------------------------------------------------------
 # Probes (read-only environment inspection)
@@ -216,14 +294,72 @@ def run_streaming(
     return proc.returncode
 
 
+def probe_hf_mirror() -> str | None:
+    """Return the value of ``HF_ENDPOINT`` if the user has set one.
+
+    ``HF_ENDPOINT`` is the standard way to point Hugging Face's
+    transformers / sentence-transformers downloaders at a mirror —
+    typically ``https://hf-mirror.com`` for China-resident users. The
+    wizard reads this to decide whether to suggest setting it before
+    pulling Qwen3-Embedding-0.6B (a ~600 MB download from
+    huggingface.co).
+    """
+    value = os.environ.get("HF_ENDPOINT", "").strip()
+    return value or None
+
+
+def open_file_with_default_app(path: Path) -> bool:
+    """Open ``path`` with the user's default registered application.
+
+    Routes to ``os.startfile`` on Windows, ``open`` on macOS, and
+    ``xdg-open`` on Linux. Returns True when the launch call
+    apparently succeeded; False on FileNotFoundError (no handler
+    installed) or OSError (path inaccessible). The wizard uses this to
+    open the first-task walkthrough at the end of setup; the cockpit
+    uses it to open generated report files.
+
+    This helper does not block on the spawned process — markdown
+    viewers and browsers run independently of the terminal session
+    that asked for them.
+    """
+    sysname = platform.system()
+    try:
+        if sysname == "Windows":
+            os.startfile(str(path))  # noqa: S606 - Windows-specific by design
+            return True
+        if sysname == "Darwin":
+            result = subprocess.run(
+                ["open", str(path)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return result.returncode == 0
+        # Linux and anything else POSIX-shaped.
+        result = subprocess.run(
+            ["xdg-open", str(path)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return result.returncode == 0
+    except (OSError, FileNotFoundError):
+        return False
+
+
 __all__ = [
     "ProbeResult",
+    "ProviderPreset",
+    "PROVIDER_PRESETS",
+    "open_file_with_default_app",
     "probe_python",
     "probe_uv",
     "probe_claude",
+    "probe_hf_mirror",
     "probe_lean_toolchain",
     "probe_sentence_transformers",
     "probe_repo_root",
+    "provider_preset",
     "read_env_file",
     "update_env_file",
     "run_streaming",

@@ -178,6 +178,9 @@ def _print_banner() -> None:
     _console.print()
 
 
+_QUICKSTART_DOC = Path("docs/workflows/first-research-task.md")
+
+
 def _print_cheatsheet(state: SetupState) -> None:
     _console.print()
     _console.print(
@@ -199,13 +202,43 @@ def _print_cheatsheet(state: SetupState) -> None:
                 "\n",
                 "  Terminal B: ",
                 ("uv run python -m cockpit.tui", "cyan"),
-                "\n",
+                "\n\n",
+                ("First time? Read: ", "bold"),
+                (str(_QUICKSTART_DOC), "cyan"),
+                ("\n  (15-minute walkthrough of your first session)\n", "dim"),
             ),
             border_style="green",
             box=_BOX_STYLE,
         )
     )
     _console.print()
+
+
+def _maybe_open_quickstart(state: SetupState) -> None:
+    """Offer to open the first-task walkthrough in the user's default app.
+
+    Skipped in --non-interactive mode (the cheatsheet still mentions the
+    path). Skipped when the file is not present (older clones). Failure
+    to open is reported as a tip rather than an error.
+    """
+    if state.non_interactive:
+        return
+    path = (state.repo_root / _QUICKSTART_DOC).resolve()
+    if not path.exists():
+        return
+    try:
+        proceed = _ask_confirm(
+            state, "open the first-task walkthrough now?", default=True
+        )
+    except (KeyboardInterrupt, EOFError):  # pragma: no cover - defensive
+        return
+    if state.aborted or not proceed:
+        return
+    if not io.open_file_with_default_app(path):
+        _console.print(
+            "[yellow]could not launch the default markdown handler; "
+            f"open {path} manually when you're ready.[/yellow]"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +386,8 @@ def step_repo_root(state: SetupState) -> bool:
 
 
 _BACKEND_CHOICES = ("local", "mock", "openai")
+_LOCAL_DEFAULT_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+_LOCAL_LEGACY_MODEL = "all-MiniLM-L6-v2"
 
 
 def step_embed_backend(state: SetupState) -> bool:
@@ -364,9 +399,12 @@ def step_embed_backend(state: SetupState) -> bool:
         backend = _env_flag("CLAUDESCIENTIST_SETUP_BACKEND", "local")
     else:
         _console.print(
-            "  mock: deterministic, no model download — used for tests.\n"
-            "  local: sentence-transformers/all-MiniLM-L6-v2 (~80 MB).\n"
-            "  openai: requires OPENAI_API_KEY — billed per call."
+            "  mock:   deterministic, no model download — used for tests.\n"
+            "  local:  sentence-transformers, default Qwen3-Embedding-0.6B\n"
+            "          (~600 MB multilingual); legacy users can pin "
+            "all-MiniLM-L6-v2.\n"
+            "  openai: any OpenAI-compatible endpoint (OpenAI, DashScope,\n"
+            "          Jina, Voyage, GLM, …). Requires an API key."
         )
         backend = _ask_select(
             state,
@@ -382,53 +420,202 @@ def step_embed_backend(state: SetupState) -> bool:
     state.env_updates["RESEARCH_AGENT_EMBED_BACKEND"] = backend
 
     if backend == "local":
-        st_present = io.probe_sentence_transformers()
-        if st_present:
-            _console.print("  [green]sentence-transformers already installed.[/green]")
-        else:
-            _console.print(
-                "  sentence-transformers is NOT installed in the active venv."
-            )
-            do_install = (
-                _env_flag("CLAUDESCIENTIST_SETUP_INSTALL_PROOF", "1") == "1"
-                if state.non_interactive
-                else _ask_confirm(
-                    state, "run `uv sync --extra proof` now?", default=True
-                )
-            )
-            if state.aborted:
-                return False
-            if do_install and not state.skip_deps:
-                rc = io.run_streaming(
-                    ["uv", "sync", "--extra", "proof"], cwd=state.repo_root
-                )
-                if rc != 0:
-                    _console.print(
-                        f"[red]uv sync failed (exit {rc}); skipping seed step.[/red]"
-                    )
-                    state.env_updates["RESEARCH_AGENT_EMBED_BACKEND"] = "mock"
-                    return True
-            elif state.skip_deps:
-                _console.print(
-                    "[yellow]--skip-deps set; not installing. Run `uv sync "
-                    "--extra proof` manually before using the proof trunk.[/yellow]"
-                )
-
+        return _configure_local_backend(state)
     if backend == "openai":
-        key = (
-            _env_flag("CLAUDESCIENTIST_SETUP_OPENAI_KEY", "")
+        return _configure_openai_backend(state)
+    return True
+
+
+def _configure_local_backend(state: SetupState) -> bool:
+    """Install the optional dep, pick a model, and hint about HF mirror."""
+    st_present = io.probe_sentence_transformers()
+    if st_present:
+        _console.print("  [green]sentence-transformers already installed.[/green]")
+    else:
+        _console.print(
+            "  sentence-transformers is NOT installed in the active venv."
+        )
+        do_install = (
+            _env_flag("CLAUDESCIENTIST_SETUP_INSTALL_PROOF", "1") == "1"
             if state.non_interactive
-            else _ask_text(state, "OPENAI_API_KEY:", secret=True)
+            else _ask_confirm(
+                state, "run `uv sync --extra proof` now?", default=True
+            )
         )
         if state.aborted:
             return False
-        if key:
-            state.env_updates["OPENAI_API_KEY"] = key
-        else:
-            _console.print(
-                "[yellow]no key provided — set OPENAI_API_KEY before launch.[/yellow]"
+        if do_install and not state.skip_deps:
+            rc = io.run_streaming(
+                ["uv", "sync", "--extra", "proof"], cwd=state.repo_root
             )
+            if rc != 0:
+                _console.print(
+                    f"[red]uv sync failed (exit {rc}); skipping seed step.[/red]"
+                )
+                state.env_updates["RESEARCH_AGENT_EMBED_BACKEND"] = "mock"
+                return True
+        elif state.skip_deps:
+            _console.print(
+                "[yellow]--skip-deps set; not installing. Run `uv sync "
+                "--extra proof` manually before using the proof trunk.[/yellow]"
+            )
+
+    # Model choice. Default is Qwen3-Embedding-0.6B (multilingual, ~600 MB).
+    # Existing v4.1 users get asked once; their previous RESEARCH_AGENT_EMBED_MODEL
+    # (if any) carries through as the default.
+    existing_model = io.read_env_file(state.env_path).get(
+        "RESEARCH_AGENT_EMBED_MODEL", ""
+    )
+    if state.non_interactive:
+        chosen_model = (
+            _env_flag("CLAUDESCIENTIST_SETUP_LOCAL_MODEL", existing_model)
+            or _LOCAL_DEFAULT_MODEL
+        )
+    else:
+        _console.print(
+            f"\n  Default model: [cyan]{_LOCAL_DEFAULT_MODEL}[/cyan] "
+            "(~600 MB, multilingual).\n"
+            f"  Legacy option: [cyan]{_LOCAL_LEGACY_MODEL}[/cyan] "
+            "(~80 MB, English-only).\n"
+            "  Anything else accepted by sentence-transformers also works."
+        )
+        prompt_default = existing_model or _LOCAL_DEFAULT_MODEL
+        chosen_model = _ask_text(
+            state, "model name:", default=prompt_default
+        ).strip() or prompt_default
+        if state.aborted:
+            return False
+
+    state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] = chosen_model
+
+    # HF mirror hint when the chosen model lives on Hugging Face and the
+    # user hasn't pointed HF_ENDPOINT at a mirror. We only print a hint;
+    # we never set HF_ENDPOINT for the user, because that would silently
+    # override an existing global override.
+    if _looks_like_hf_model(chosen_model) and io.probe_hf_mirror() is None:
+        _console.print(
+            "\n  [dim]Note:[/dim] this model downloads from huggingface.co on "
+            "first use.\n"
+            "  Users on slow or restricted networks may want to set\n"
+            "    [cyan]HF_ENDPOINT=https://hf-mirror.com[/cyan]\n"
+            "  in their shell rc before the first cockpit launch."
+        )
+
+    if chosen_model != _LOCAL_LEGACY_MODEL:
+        _console.print(
+            "\n  [dim]The model downloads on first ingest call; subsequent "
+            "runs use the cached weights.[/dim]"
+        )
     return True
+
+
+def _configure_openai_backend(state: SetupState) -> bool:
+    """Pick a provider preset, set base_url + model, capture the API key."""
+    existing_env = io.read_env_file(state.env_path)
+    current_url = existing_env.get("RESEARCH_AGENT_EMBED_BASE_URL", "")
+    current_model = existing_env.get("RESEARCH_AGENT_EMBED_MODEL", "")
+
+    if state.non_interactive:
+        preset_key = _env_flag("CLAUDESCIENTIST_SETUP_PROVIDER", "openai").lower()
+    else:
+        _console.print(
+            "\n  Pick the OpenAI-compatible provider. The default 'openai' "
+            "option targets api.openai.com; the others redirect via base_url."
+        )
+        preset_key = _ask_select(
+            state,
+            "provider:",
+            [p.label for p in io.PROVIDER_PRESETS],
+            default=io.PROVIDER_PRESETS[0].label,
+        )
+        if state.aborted:
+            return False
+        # Map label back to key.
+        preset_key = next(
+            (p.key for p in io.PROVIDER_PRESETS if p.label == preset_key),
+            "openai",
+        )
+
+    preset = io.provider_preset(preset_key) or io.PROVIDER_PRESETS[0]
+
+    # Resolve base_url:
+    # - preset with explicit URL → use it
+    # - preset "openai" (base_url=None) → clear any prior override
+    # - preset "other" → ask the user; keep prior value as default
+    if preset.key == "other":
+        if state.non_interactive:
+            chosen_url = _env_flag("CLAUDESCIENTIST_SETUP_BASE_URL", current_url)
+        else:
+            chosen_url = _ask_text(
+                state, "base_url:", default=current_url
+            ).strip()
+            if state.aborted:
+                return False
+        if chosen_url:
+            state.env_updates["RESEARCH_AGENT_EMBED_BASE_URL"] = chosen_url
+    elif preset.base_url:
+        state.env_updates["RESEARCH_AGENT_EMBED_BASE_URL"] = preset.base_url
+    else:
+        # OpenAI default — clear any prior override so the SDK uses its built-in.
+        state.env_updates["RESEARCH_AGENT_EMBED_BASE_URL"] = ""
+
+    # Resolve model name.
+    if preset.key == "other":
+        if state.non_interactive:
+            chosen_model = _env_flag("CLAUDESCIENTIST_SETUP_REMOTE_MODEL", current_model)
+        else:
+            chosen_model = _ask_text(
+                state, "model name:", default=current_model
+            ).strip() or current_model
+            if state.aborted:
+                return False
+    else:
+        if state.non_interactive:
+            chosen_model = _env_flag(
+                "CLAUDESCIENTIST_SETUP_REMOTE_MODEL", preset.default_model
+            )
+        else:
+            chosen_model = _ask_text(
+                state, "model name:", default=preset.default_model
+            ).strip() or preset.default_model
+            if state.aborted:
+                return False
+    if chosen_model:
+        state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] = chosen_model
+
+    # API key. All compatible providers accept a key through OPENAI_API_KEY
+    # — that's the SDK's contract.
+    key = (
+        _env_flag("CLAUDESCIENTIST_SETUP_OPENAI_KEY", "")
+        if state.non_interactive
+        else _ask_text(state, "API key (OPENAI_API_KEY):", secret=True)
+    )
+    if state.aborted:
+        return False
+    if key:
+        state.env_updates["OPENAI_API_KEY"] = key
+    else:
+        _console.print(
+            "[yellow]no key provided — set OPENAI_API_KEY before launch.[/yellow]"
+        )
+
+    if preset.key != "openai":
+        _console.print(
+            f"\n  Provider [cyan]{preset.label}[/cyan] configured "
+            f"({preset.notes}). The vector dimension is discovered on the "
+            "first embedding call."
+        )
+    return True
+
+
+def _looks_like_hf_model(model_name: str) -> bool:
+    """Cheap heuristic: model identifiers that contain a slash usually map
+    to a Hugging Face repo path (e.g. ``Qwen/Qwen3-Embedding-0.6B``,
+    ``BAAI/bge-small-zh-v1.5``). Single-token names like
+    ``all-MiniLM-L6-v2`` are also HF-hosted but ship with sentence-
+    transformers' built-in registry, so the mirror warning is less
+    urgent for them."""
+    return "/" in (model_name or "")
 
 
 # ---------------------------------------------------------------------------
@@ -613,6 +800,7 @@ def run_wizard(state: SetupState) -> int:
     if state.env_updates:
         io.update_env_file(state.env_path, state.env_updates)
     _print_cheatsheet(state)
+    _maybe_open_quickstart(state)
     return 0
 
 

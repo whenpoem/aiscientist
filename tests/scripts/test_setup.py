@@ -236,6 +236,187 @@ def test_step_embed_backend_records_openai_key_when_provided(
     assert state.env_updates["OPENAI_API_KEY"] == "sk-fake-test"
 
 
+# ---------------------------------------------------------------------------
+# v4.2.0a0: provider presets, Qwen default, HF mirror probe, quickstart
+# ---------------------------------------------------------------------------
+
+
+def test_step_embed_backend_local_pins_qwen3_by_default(fake_repo, monkeypatch):
+    """Plain local backend with no model override → Qwen3 default lands
+    in .env updates (ADR 0010 / v4.2.0a0)."""
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BACKEND", "local")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_SEED_CORPUS", "0")
+    monkeypatch.delenv("CLAUDESCIENTIST_SETUP_LOCAL_MODEL", raising=False)
+    state = _make_state(fake_repo)
+    step_embed_backend(state)
+    assert state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] == (
+        "Qwen/Qwen3-Embedding-0.6B"
+    )
+
+
+def test_step_embed_backend_local_honors_user_model_override(fake_repo, monkeypatch):
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BACKEND", "local")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_LOCAL_MODEL", "all-MiniLM-L6-v2")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_SEED_CORPUS", "0")
+    state = _make_state(fake_repo)
+    step_embed_backend(state)
+    assert state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] == "all-MiniLM-L6-v2"
+
+
+def test_step_embed_backend_dashscope_preset(fake_repo, monkeypatch):
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BACKEND", "openai")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_PROVIDER", "dashscope")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_OPENAI_KEY", "sk-fake")
+    state = _make_state(fake_repo)
+    step_embed_backend(state)
+    assert (
+        state.env_updates["RESEARCH_AGENT_EMBED_BASE_URL"]
+        == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
+    assert state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] == "text-embedding-v3"
+    assert state.env_updates["OPENAI_API_KEY"] == "sk-fake"
+
+
+def test_step_embed_backend_openai_preset_clears_base_url(fake_repo, monkeypatch):
+    """Picking the plain 'openai' preset must clear any prior base_url
+    override so the SDK falls back to its built-in default."""
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BACKEND", "openai")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_PROVIDER", "openai")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_OPENAI_KEY", "sk-fake")
+    state = _make_state(fake_repo)
+    step_embed_backend(state)
+    assert state.env_updates["RESEARCH_AGENT_EMBED_BASE_URL"] == ""
+    assert state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] == "text-embedding-3-large"
+
+
+def test_step_embed_backend_other_preset_uses_custom_base_url(fake_repo, monkeypatch):
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BACKEND", "openai")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_PROVIDER", "other")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BASE_URL", "https://my-provider.test/v1")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_REMOTE_MODEL", "custom-embed-1")
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_OPENAI_KEY", "sk-fake")
+    state = _make_state(fake_repo)
+    step_embed_backend(state)
+    assert (
+        state.env_updates["RESEARCH_AGENT_EMBED_BASE_URL"]
+        == "https://my-provider.test/v1"
+    )
+    assert state.env_updates["RESEARCH_AGENT_EMBED_MODEL"] == "custom-embed-1"
+
+
+def test_provider_preset_lookup_known_key():
+    preset = io.provider_preset("dashscope")
+    assert preset is not None
+    assert preset.label.startswith("Aliyun")
+    assert "dashscope" in (preset.base_url or "")
+
+
+def test_provider_preset_lookup_unknown_key_is_none():
+    assert io.provider_preset("nonexistent-provider") is None
+
+
+def test_probe_hf_mirror_returns_value_when_set(monkeypatch):
+    monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
+    assert io.probe_hf_mirror() == "https://hf-mirror.com"
+
+
+def test_probe_hf_mirror_returns_none_when_unset(monkeypatch):
+    monkeypatch.delenv("HF_ENDPOINT", raising=False)
+    assert io.probe_hf_mirror() is None
+
+
+def test_probe_hf_mirror_ignores_blank(monkeypatch):
+    """An exported-but-blank env var should be treated as unset."""
+    monkeypatch.setenv("HF_ENDPOINT", "   ")
+    assert io.probe_hf_mirror() is None
+
+
+def test_open_file_dispatches_to_xdg_open_on_linux(monkeypatch, tmp_path):
+    target = tmp_path / "demo.md"
+    target.write_text("hello")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+
+        class _R:
+            returncode = 0
+
+        return _R()
+
+    monkeypatch.setattr(io.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(io.subprocess, "run", fake_run)
+    assert io.open_file_with_default_app(target) is True
+    assert calls and calls[0][0] == "xdg-open"
+    assert calls[0][1] == str(target)
+
+
+def test_open_file_dispatches_to_open_on_macos(monkeypatch, tmp_path):
+    target = tmp_path / "demo.md"
+    target.write_text("hello")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+
+        class _R:
+            returncode = 0
+
+        return _R()
+
+    monkeypatch.setattr(io.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(io.subprocess, "run", fake_run)
+    assert io.open_file_with_default_app(target) is True
+    assert calls and calls[0][0] == "open"
+
+
+def test_open_file_returns_false_when_handler_missing(monkeypatch, tmp_path):
+    target = tmp_path / "demo.md"
+    target.write_text("hello")
+
+    def fake_run(cmd, **kwargs):
+        raise FileNotFoundError("xdg-open not installed")
+
+    monkeypatch.setattr(io.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(io.subprocess, "run", fake_run)
+    assert io.open_file_with_default_app(target) is False
+
+
+def test_maybe_open_quickstart_noop_in_non_interactive(fake_repo, monkeypatch):
+    """In --non-interactive mode the wizard must not try to launch a
+    GUI handler — there is no user to consent."""
+    from claudescientist import setup as setup_mod
+
+    target_dir = fake_repo / "docs" / "workflows"
+    target_dir.mkdir(parents=True)
+    (target_dir / "first-research-task.md").write_text("walkthrough")
+
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        io,
+        "open_file_with_default_app",
+        lambda path: (calls.append(path), True)[1],
+    )
+    state = _make_state(fake_repo, non_interactive=True)
+    setup_mod._maybe_open_quickstart(state)
+    assert calls == []
+
+
+def test_maybe_open_quickstart_silent_when_doc_missing(fake_repo, monkeypatch):
+    """No first-task doc → no prompt, no error."""
+    from claudescientist import setup as setup_mod
+
+    # Patch _ask_confirm to fail loudly if the wizard reaches it; the
+    # missing-file early-return should beat the prompt.
+    monkeypatch.setattr(
+        setup_mod,
+        "_ask_confirm",
+        lambda *a, **k: pytest.fail("should not prompt when doc is missing"),
+    )
+    state = _make_state(fake_repo, non_interactive=False)
+    setup_mod._maybe_open_quickstart(state)  # must not raise
+
+
 def test_step_heldout_dir_writes_default_home(fake_repo, monkeypatch):
     monkeypatch.delenv("CLAUDESCIENTIST_SETUP_HELDOUT_DIR", raising=False)
     state = _make_state(fake_repo)

@@ -1,4 +1,4 @@
-"""Shared database helpers for prove_mcp (P2).
+"""Shared database helpers for prove_mcp.
 
 Schema version history
 ----------------------
@@ -9,6 +9,11 @@ v4: widen prv_lean_attempts.triage_difficulty CHECK to include 'n/a' so
     rejected propositions are distinguishable from eligible-but-hard ones
     (Plan v2 / Bug D fix). The migration is a SQLite table rebuild because
     CHECK constraints can't be altered in place.
+v5: + prv_corpus_keywords.embedding_model column (v4.2.0a0 / ADR 0010).
+    Lets the corpus distinguish keyword rows produced by different models
+    under the same backend (e.g. several OpenAI-compatible providers, or
+    an upgrade from all-MiniLM-L6-v2 to Qwen3-Embedding-0.6B under the
+    local backend). ALTER TABLE ADD COLUMN is enough — no rebuild needed.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from claudescientist.runtime import (
     apply_schema_migration,
     cache_key,
     connect_sqlite,
+    ensure_columns,
     state_db_path,
 )
 
@@ -31,9 +37,9 @@ _BOOTSTRAPPED: set[str] = set()
 def _migrate_lean_attempts_difficulty_check(con: sqlite3.Connection) -> None:
     """Widen prv_lean_attempts.triage_difficulty CHECK to include 'n/a' (v4).
 
-    SQLite cannot alter a CHECK constraint in place. For v3 -> v4 databases
-    we rebuild the table using the official rebuild pattern. No-op once the
-    constraint already lists 'n/a'.
+    SQLite cannot alter a CHECK constraint in place. For v3 -> v4
+    databases we rebuild the table using the official rebuild pattern.
+    No-op once the constraint already lists 'n/a'.
     """
     row = con.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='prv_lean_attempts'"
@@ -103,6 +109,27 @@ def _migrate_lean_attempts_difficulty_check(con: sqlite3.Connection) -> None:
         con.execute("PRAGMA foreign_keys=ON")
 
 
+def _migrate_add_embedding_model_column(con: sqlite3.Connection) -> None:
+    """Add prv_corpus_keywords.embedding_model on v4 → v5 upgrade.
+
+    SQLite allows ALTER TABLE ADD COLUMN with a default, so this
+    migration stays lightweight: existing rows pick up the default
+    'unknown' value, and ``retrieve_skeletons`` surfaces a clean hint
+    when it encounters those rows under a newly-pinned model. The
+    sibling index makes the (backend, model, dim) filter cheap. No-op
+    once the column already exists.
+    """
+    ensure_columns(
+        con,
+        "prv_corpus_keywords",
+        {"embedding_model": "TEXT NOT NULL DEFAULT 'unknown'"},
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prv_corpus_keywords_model "
+        "ON prv_corpus_keywords(embed_backend, embedding_model, embed_dim)"
+    )
+
+
 def bootstrap() -> None:
     path = state_db_path()
     key = cache_key(path)
@@ -114,9 +141,10 @@ def bootstrap() -> None:
             con,
             "prove_mcp",
             SCHEMA_PATH.read_text(encoding="utf-8"),
-            schema_version=4,
+            schema_version=5,
         )
         _migrate_lean_attempts_difficulty_check(con)
+        _migrate_add_embedding_model_column(con)
     finally:
         con.close()
     _BOOTSTRAPPED.add(key)

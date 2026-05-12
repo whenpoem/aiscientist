@@ -254,11 +254,40 @@ WHERE prereg_id = ? AND version = ?;
 
 **方向 11（证明主干）已交付为 v4.0.0a0 alpha**；剩余事项在该方向"v4.x 待办"块里列出。
 
+## v4.2 实际交付
+
+v4.2.0 分四个 alpha 落地，围绕三个主题：仪表盘信息结构重整、多服务商
+向量检索、报告导出基础设施，外加冷启动引导打磨。已关闭的事项：
+
+- 仪表盘标签页分组 + 可折叠详情分节 + 面板级快捷键作用域（a1）。
+  仪表盘在面对新增内容时，不再靠往现有面板里硬塞来应对。
+- 报告导出为文件（a2 + [ADR 0009](adr/0009-reports-as-files-monitoring-as-tui.zh-CN.md)）。
+  5 种报告（closure / draft / diagnostic / portfolio / cascade） ×
+  2 种格式（markdown / html）。`cockpit_reports` 表建立索引，新增
+  Reports 标签页展示，文件由用户的默认程序打开。
+- reviewer agent 可选接入 `mcp__verify__export_report`——在审稿意见
+  的 `notes` 里附上结题报告路径，不改变已有的硬性规则。
+- 多服务商嵌入（[ADR 0010](adr/0010-multi-provider-embeddings.zh-CN.md)）。
+  `OpenAIEmbedder` 接受任何兼容的 `base_url`。已测试阿里云 DashScope
+  / Jina / Voyage / 智谱 GLM。
+- 默认本地模型升级到 `Qwen/Qwen3-Embedding-0.6B`，支持多语言检索。
+  语料行带 `(backend, model, dim)` 三元组；切换模型后用
+  `scripts/reindex_proof_corpus.py` 重建索引。
+- 冷启动 Welcome 屏（a3），支持中英文，关闭状态持久化。
+- 设置向导新增服务商预设菜单，结束时引导用户打开首任务教程。
+
+回顾文档：[`retrospective-v4.2.zh-CN.md`](retrospective-v4.2.zh-CN.md)。
+
 ## 几个不属于路线图的方向
 
-为了避免误解，这里也列出几个**不**建议追加的方向：
+为了避免误解，这里也列出几个**不**会追加的方向：
 
-- **重新加 Web UI**：v0.2 已经有充分理由删掉它，不要走回头路
+- **重新加 Web UI**：v0.2 删掉它有充分理由，不走回头路。ADR 0009
+  再次确认了这一立场，同时用"报告导出为文件"解决了长文档的展示需求，
+  不需要重新讨论要不要加 web 界面。
+- **`claudescientist start` 启动器**（任何变体）：v4.2 规划期间已永
+  久移出路线图。两个终端手动启动仍然是约定做法；tmux 用户可以自己用
+  `tmux split-window`。
 - **替换 SQLite 为 Postgres**：单文件状态边界是项目的核心优势之一
 - **支持多语言（除中英之外）**：目前没有需求，且 i18n 基础设施已具备，按需扩展即可
 - ~~**接入 Lean 形式化证明**~~：**已被方向 11（v4.0）取代**——proof 主干把 Lean 作为保险层接入，主路径走 NL。原本"成本高、收益狭窄"的判断在单主干假设下是对的；两主干架构改变了成本结构——proof 工作流复用现有基础设施（BT、校准、provenance、replay、cockpit、错题本）的边际成本几乎为零。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)。

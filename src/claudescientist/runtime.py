@@ -92,13 +92,16 @@ def connect_existing_sqlite(
     target = path or state_db_path()
     if not target.exists():
         return None
-    con = sqlite3.connect(str(target), timeout=timeout, isolation_level=None)
-    con.row_factory = sqlite3.Row
     try:
+        con = sqlite3.connect(str(target), timeout=timeout, isolation_level=None)
+        con.row_factory = sqlite3.Row
         con.execute("PRAGMA journal_mode=WAL;")
         con.execute("PRAGMA foreign_keys=ON;")
     except sqlite3.DatabaseError:
-        con.close()
+        try:
+            con.close()
+        except UnboundLocalError:
+            pass
         return None
     return con
 

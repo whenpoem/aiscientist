@@ -85,6 +85,16 @@ def test_connect_existing_sqlite_does_not_create_missing_db(tmp_path):
     assert not db_path.exists()
 
 
+def test_connect_existing_sqlite_returns_none_for_unopenable_existing_path(tmp_path):
+    db_path = tmp_path / "state.db"
+    db_path.mkdir()
+
+    con = connect_existing_sqlite(db_path)
+
+    assert con is None
+    assert db_path.is_dir()
+
+
 def test_connect_existing_sqlite_uses_runtime_pragmas(tmp_path):
     db_path = tmp_path / "state.db"
     created = connect_sqlite(db_path)

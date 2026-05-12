@@ -171,6 +171,18 @@ Footer {
     height: 1fr;
 }
 
+/* Group strip above the table area (v4.2.0a1).
+ *
+ * One fixed-height row carrying three labels (Cross / Empirical /
+ * Proof). The active group renders inverted via Rich markup; this
+ * stylesheet only owns layout — color comes from the theme tokens. */
+#tabs-group-bar {
+    height: 1;
+    padding: 0 1;
+    color: $foreground 70%;
+    background: $panel;
+}
+
 TabPane {
     padding: 0;
 }

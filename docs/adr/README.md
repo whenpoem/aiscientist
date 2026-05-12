@@ -21,6 +21,8 @@ it from both sides.
 | [0006](0006-preregistration-as-writeup-gate.md) | Preregistration correction aliases as the writeup gate | Accepted | v3.0 |
 | [0007](0007-tools-skills-hooks-layering.md) | Tools / Skills / Hooks layering doctrine | Accepted | v4.0 |
 | [0008](0008-two-trunk-domain-architecture.md) | Two-trunk domain architecture (empirical + proof) on a shared core | Accepted | v4.0 |
+| [0009](0009-reports-as-files-monitoring-as-tui.md) | Reports as files, monitoring as TUI | Accepted | v4.2 |
+| [0010](0010-multi-provider-embeddings.md) | Multi-provider embeddings via configurable base_url | Accepted | v4.2 |
 
 ## Writing a new ADR
 

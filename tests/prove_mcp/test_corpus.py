@@ -35,6 +35,10 @@ def test_ingest_writes_problem_and_keyword_rows(workspace):
     assert result["ingested"] == 1
     assert result["replaced"] == 0
     assert result["backend"] == "mock"
+    # ADR 0010: the model identifier is now part of the result so callers
+    # can record which model produced their corpus.
+    assert result["model"].startswith("mock-dim")
+    assert result["dim"] > 0
 
     con = db._connect()
     try:
@@ -160,3 +164,50 @@ def test_list_corpus_rejects_invalid_source_filter(workspace):
     impl = workspace["prove_mcp.impl"]
     with pytest.raises(ValueError):
         impl.list_corpus(source="cosmic")
+
+
+def test_ingest_records_embedding_model_per_row(workspace):
+    """v4.2.0a0 / ADR 0010: every keyword row carries the model identifier
+    that produced its embedding."""
+    impl = workspace["prove_mcp.impl"]
+    db = workspace["prove_mcp.db"]
+
+    impl.ingest_proof_corpus(
+        "manual",
+        [_problem("p1", "stmt", lex=["alpha", "beta"], sem=["gamma combo"])],
+    )
+
+    con = db._connect()
+    try:
+        rows = con.execute(
+            "SELECT keyword, embed_backend, embedding_model, embed_dim "
+            "FROM prv_corpus_keywords WHERE problem_id = 'p1' "
+            "ORDER BY kind, keyword"
+        ).fetchall()
+    finally:
+        con.close()
+
+    assert rows, "ingestion should have written keyword rows"
+    for row in rows:
+        assert row["embed_backend"] == "mock"
+        assert row["embedding_model"].startswith("mock-dim")
+        assert int(row["embed_dim"]) > 0
+
+
+def test_corpus_backend_signatures_groups_by_triple(workspace):
+    impl = workspace["prove_mcp.impl"]
+    impl.ingest_proof_corpus(
+        "manual",
+        [
+            _problem("p1", "stmt", lex=["a"]),
+            _problem("p2", "stmt2", lex=["b", "c"]),
+        ],
+    )
+    sigs = impl.corpus_backend_signatures()
+    assert len(sigs) == 1, (
+        "uniform backend / model / dim across both problems → one triple"
+    )
+    sig = sigs[0]
+    assert sig["embed_backend"] == "mock"
+    assert sig["embedding_model"].startswith("mock-dim")
+    assert sig["row_count"] >= 3  # p1: 1 keyword, p2: 2 keywords

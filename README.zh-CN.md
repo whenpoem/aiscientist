@@ -6,7 +6,7 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 你丢给 Claude 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
 
-**当前版本**：v4.1.0a6（alpha）——本版保留 cockpit 启动闪屏和 `claudescientist setup` 交互式向导，并收紧可维护性契约：同步包版本元数据、统一 hook 安全 SQLite 连接、明确 proof trunk 边界例外，并加强 tool/prompt 漂移检查。[证明主干](docs/adr/0008-two-trunk-domain-architecture.md)用于统计证明生成，与 ML 实验流程并行运作，共享同一个内核。Cockpit TUI 支持 4 套主题、自适应布局和证明主干面板。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+**当前版本**：v4.2.0 —— 这个版本做了三件事：重新整理了仪表盘的信息结构、让向量检索支持多家 API 服务商、新增了报告导出功能。仪表盘的 tab 页分成三组（跨主干 / 实验 / 证明），详情面板改成可折叠分节，快捷键按面板划分作用域。报告导出支持五种类型（结题、草稿、诊断、对比集、级联跟踪），输出 markdown 或 HTML 文件到 `reports/` 目录，cockpit 里用 Reports 标签页统一索引（见 [ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.zh-CN.md)）。向量后端现在可以对接任何 OpenAI 兼容的 API 服务商——阿里云 DashScope、Jina、Voyage、智谱 GLM 均已测通；本地默认模型换成了多语言的 `Qwen/Qwen3-Embedding-0.6B`；语料行记录 `(backend, model, dim)` 三元组，换了模型会提示你重建索引（见 [ADR 0010](docs/adr/0010-multi-provider-embeddings.zh-CN.md)）。设置向导新增了服务商选择菜单；首次打开 cockpit 会看到 Welcome 引导屏。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ## 长什么样
 

@@ -48,7 +48,7 @@ def row_detail(row: dict[str, Any], lang: str) -> tuple[str, str]:
                     f"{t(lang, 'corpus_col_statement')}:",
                     str(row.get("statement", "")),
                     "",
-                    "reference proof:",
+                    f"{t(lang, 'reference_proof')}:",
                     str(row.get("reference_proof", "")) or "-",
                 ]
             ),
@@ -60,7 +60,7 @@ def row_detail(row: dict[str, Any], lang: str) -> tuple[str, str]:
             status_label = status
         entries = row.get("entries") or []
         lines = [
-            f"draft: {row.get('draft_id', '-')}",
+            f"{t(lang, 'draft')}: {row.get('draft_id', '-')}",
             f"{t(lang, 'status')}: {status_label}",
             (
                 f"{t(lang, 'diagnostics_col_snippets')}: "
@@ -99,7 +99,7 @@ def row_detail(row: dict[str, Any], lang: str) -> tuple[str, str]:
             f"{t(lang, 'lean_title')} #{row['attempt_id']}",
             "\n".join(
                 [
-                    f"proposition: {row.get('proposition_id', '-')}",
+                    f"{t(lang, 'proposition')}: {row.get('proposition_id', '-')}",
                     f"{t(lang, 'status')}: {status_label}",
                     f"{t(lang, 'lean_col_duration')}: {duration_text}",
                     (
@@ -109,11 +109,35 @@ def row_detail(row: dict[str, Any], lang: str) -> tuple[str, str]:
                     ),
                     f"{t(lang, 'created')}: {row.get('created_at', '-')}",
                     "",
-                    "lean source:",
+                    f"{t(lang, 'lean_source')}:",
                     lean_source or "-",
                     "",
-                    "stderr:",
+                    f"{t(lang, 'stderr')}:",
                     stderr or "-",
+                ]
+            ),
+        )
+    if "report_id" in row and "file_path" in row:
+        size = int(row.get("bytes") or 0)
+        if size >= 1024 * 1024:
+            size_label = f"{size / 1024 / 1024:.1f} MB"
+        elif size >= 1024:
+            size_label = f"{size / 1024:.1f} KB"
+        else:
+            size_label = f"{size} B"
+        missing_marker = f"  [{t(lang, 'reports_missing_flag')}]" if row.get("missing") else ""
+        return (
+            f"{t(lang, 'reports_title')} #{row['report_id']}{missing_marker}",
+            "\n".join(
+                [
+                    f"{t(lang, 'reports_col_kind')}: {row.get('kind', '-')}",
+                    f"{t(lang, 'reports_col_node')}: {row.get('related_node_id') or '-'}",
+                    f"{t(lang, 'reports_col_format')}: {row.get('format', '-')}",
+                    f"{t(lang, 'reports_col_size')}: {size_label}",
+                    f"{t(lang, 'reports_col_time')}: {row.get('generated_at', '-')}",
+                    "",
+                    f"{t(lang, 'path')}: {row.get('file_path', '-')}",
+                    f"{t(lang, 'generated_by')}: {row.get('generated_by', '-')}",
                 ]
             ),
         )

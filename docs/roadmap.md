@@ -257,14 +257,55 @@ If you start today, I would suggest this order:
 
 **Direction 11 (Proof trunk)** has shipped as v4.0.0a0; remaining items are listed under that direction's "Deferred to v4.x" block above.
 
+## What v4.2 actually delivered
+
+v4.2.0 shipped across four alphas with a focused theme: information
+architecture refit, multi-provider retrieval, reports infrastructure,
+cold-start polish. Items now closed:
+
+- TUI tab grouping + Collapsible detail sections + pane-scoped keys
+  (a1). The TUI no longer absorbs new content shape via density tricks.
+- Reports as files (a2 + [ADR 0009](adr/0009-reports-as-files-monitoring-as-tui.md)).
+  Five report kinds (closure / draft / diagnostic / portfolio / cascade)
+  × two formats (markdown / html). Indexed by `cockpit_reports`,
+  surfaced in the new Reports tab, opened in the user's default app.
+- Reviewer agent optional `mcp__verify__export_report` integration —
+  attach a closure report path in `notes` without changing the hard
+  rules.
+- Multi-provider embeddings ([ADR 0010](adr/0010-multi-provider-embeddings.md)).
+  `OpenAIEmbedder` accepts any compatible `base_url`. DashScope, Jina,
+  Voyage, GLM tested.
+- Default local model upgraded to `Qwen/Qwen3-Embedding-0.6B` for
+  multilingual retrieval. `(backend, model, dim)` triple per corpus
+  row; `scripts/reindex_proof_corpus.py` re-encodes after a switch.
+- Cold-start Welcome screen (a3) with i18n + persisted dismiss flag.
+- Wizard provider preset menu + first-task walkthrough prompt.
+
+Retrospective: [`retrospective-v4.2.md`](retrospective-v4.2.md).
+
 ## A few directions explicitly **not** on the roadmap
 
 To avoid misinterpretation, here are directions I would not pursue:
 
-- **Bring back the Web UI**. v0.2 had good reasons to delete it; do not retrace.
-- **Replace SQLite with Postgres**. The single-file state boundary is one of the project's core advantages.
-- **Support languages beyond English/Chinese**. No demand, and the i18n infrastructure can extend on demand.
-- ~~**Wire in Lean formal proofs**.~~ **Superseded by Direction 11 (v4.0)**: the proof trunk integrates Lean as a reinsurance layer with NL as the primary path. The original objection (high cost, narrow value) was correct in a single-trunk world; the two-trunk architecture changes the calculus by sharing the existing infrastructure (BT, calibration, provenance, replay, cockpit, failure ledger) with the proof workflow at near-zero marginal cost. See [ADR 0008](adr/0008-two-trunk-domain-architecture.md).
+- **Bring back the Web UI**. v0.2 had good reasons to delete it; do
+  not retrace. ADR 0009 reaffirms the no-web-UI stance and adds the
+  "reports as files" channel as the right way to surface dense
+  content without reopening the question.
+- **`claudescientist start` launcher** (any variant). Permanently
+  removed during v4.2 planning. Two-terminal manual startup remains
+  the contract; tmux users get `tmux split-window` on their own.
+- **Replace SQLite with Postgres**. The single-file state boundary is
+  one of the project's core advantages.
+- **Support languages beyond English/Chinese**. No demand, and the
+  i18n infrastructure can extend on demand.
+- ~~**Wire in Lean formal proofs**.~~ **Superseded by Direction 11
+  (v4.0)**: the proof trunk integrates Lean as a reinsurance layer
+  with NL as the primary path. The original objection (high cost,
+  narrow value) was correct in a single-trunk world; the two-trunk
+  architecture changes the calculus by sharing the existing
+  infrastructure (BT, calibration, provenance, replay, cockpit,
+  failure ledger) with the proof workflow at near-zero marginal
+  cost. See [ADR 0008](adr/0008-two-trunk-domain-architecture.md).
 
 ## Closing thought
 

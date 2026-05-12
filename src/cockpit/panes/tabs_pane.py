@@ -1,14 +1,15 @@
 """Right-side tabbed tables for the cockpit TUI.
 
-Tabs (in cycle order):
+Tabs are organized into three groups (v4.2.0a1):
 
-1. ``risks``        — composite risk view (claims + seeds + failures + budgets)
-2. ``failures``     — cross-domain failure ledger (mem_failures)
-3. ``claims``       — pinned metrics (ver_metric_pins + seed verdicts)
-4. ``literature``   — ingested papers (mem_lit_compressed)
-5. ``corpus``       — proof corpus (prv_corpus_problems)            -- v4.1.0a0
-6. ``diagnostics``  — diagnostic manifests (prv_diagnostic_manifests) -- v4.1.0a0
-7. ``lean``         — Lean attempts (prv_lean_attempts)             -- v4.1.0a0
+- ``cross``     — usable from either trunk (risks, claims, literature)
+- ``empirical`` — ML-experiment workflow only (failures)
+- ``proof``     — proof-trunk only (corpus, diagnostics, lean)
+
+The ``f`` key cycles tabs within the active group; ``shift+f`` jumps to
+the first tab of the next group. The grouping makes the ``f`` walk feel
+predictable when the tab count grows past what an "all in one ring"
+cycle can navigate comfortably.
 
 The three proof-trunk tabs render empty-state hints when their tables are
 absent (v3.x DB) or empty (fresh install pre-seed-corpus). All cells go
@@ -18,7 +19,7 @@ through ``cockpit.i18n.t`` so the bilingual contract holds.
 from __future__ import annotations
 
 from textual.containers import Container
-from textual.widgets import DataTable
+from textual.widgets import DataTable, Static
 
 from cockpit.i18n import t
 
@@ -36,24 +37,75 @@ def _truncate(value: str, max_width: int) -> str:
     return value[: max(0, max_width - 1)] + "…"
 
 
-TAB_ORDER = (
-    "risks",
-    "failures",
-    "claims",
-    "literature",
-    "corpus",
-    "diagnostics",
-    "lean",
+# Tab grouping (v4.2.0a1 / A1). The order of TAB_GROUPS defines:
+#   - the visual left-to-right order of group chips
+#   - the order shift+f walks through groups
+#   - the within-group cycle order under plain f
+# TAB_ORDER is the flat sequence used by the rest of the codebase (drill-in
+# routing, _filtered_rows keys); it is kept as the canonical flat list so
+# pre-grouping callers stay unchanged.
+TAB_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("cross", ("risks", "claims", "literature", "reports")),
+    ("empirical", ("failures",)),
+    ("proof", ("corpus", "diagnostics", "lean")),
 )
+TAB_ORDER: tuple[str, ...] = tuple(
+    name for _group, names in TAB_GROUPS for name in names
+)
+TAB_GROUP_OF: dict[str, str] = {
+    name: group for group, names in TAB_GROUPS for name in names
+}
 TABLE_IDS = {
     "risks": "risks-table",
     "failures": "failures-table",
     "claims": "claims-table",
     "literature": "literature-table",
+    "reports": "reports-table",
     "corpus": "corpus-table",
     "diagnostics": "diagnostics-table",
     "lean": "lean-table",
 }
+
+
+def group_of(tab_name: str) -> str:
+    """Return the group key (``cross``/``empirical``/``proof``) for a tab.
+
+    Falls back to the first group's key when the tab name is unknown — that
+    keeps the cockpit from crashing on a stale settings file pointing at a
+    removed tab.
+    """
+    return TAB_GROUP_OF.get(tab_name, TAB_GROUPS[0][0])
+
+
+def tabs_in_group(group_key: str) -> tuple[str, ...]:
+    """Return the tabs in ``group_key`` in their canonical order."""
+    for key, names in TAB_GROUPS:
+        if key == group_key:
+            return names
+    return ()
+
+
+def next_tab_in_group(active: str) -> str:
+    """Advance to the next tab inside the active tab's group, wrapping."""
+    group = group_of(active)
+    names = tabs_in_group(group)
+    if not names:
+        return active
+    if active not in names:
+        return names[0]
+    idx = names.index(active)
+    return names[(idx + 1) % len(names)]
+
+
+def next_group(active: str) -> str:
+    """Return the first tab of the group that follows ``active``'s group."""
+    current = group_of(active)
+    group_keys = [g for g, _ in TAB_GROUPS]
+    if current not in group_keys:
+        return TAB_GROUPS[0][1][0]
+    idx = group_keys.index(current)
+    next_key = group_keys[(idx + 1) % len(group_keys)]
+    return tabs_in_group(next_key)[0]
 
 # Status icons. Keys must stay in sync with the CHECK constraints in
 # src/prove_mcp/schema.sql: diagnostic manifests are 'open' / 'empty' /
@@ -87,6 +139,7 @@ class RightTabsPane(Container):
         self.failures_rows: list[dict] = []
         self.claims_rows: list[dict] = []
         self.literature_rows: list[dict] = []
+        self.reports_rows: list[dict] = []
         self.corpus_rows: list[dict] = []
         self.diagnostics_rows: list[dict] = []
         self.lean_rows: list[dict] = []
@@ -94,6 +147,11 @@ class RightTabsPane(Container):
         self._filter_text = ""
 
     def compose(self):
+        # Group strip sits above the active DataTable. It is a single
+        # Static line whose text gets rebuilt every time the active tab
+        # changes; only the cell-level styling distinguishes the active
+        # group from the others.
+        yield Static("", id="tabs-group-bar", classes="tab-group-bar")
         for name in TAB_ORDER:
             yield DataTable(id=TABLE_IDS[name], cursor_type="row", classes="tab-table")
 
@@ -101,6 +159,7 @@ class RightTabsPane(Container):
         self._configure_tables()
         self._sync_active_table()
         self._refresh_title()
+        self._refresh_group_bar()
 
     def set_language(self, lang: str) -> None:
         self.lang = lang
@@ -108,6 +167,7 @@ class RightTabsPane(Container):
             self._configure_tables()
             self._reload_tables()
         self._refresh_title()
+        self._refresh_group_bar()
 
     def _configure_tables(self) -> None:
         risks = self.query_one(f"#{TABLE_IDS['risks']}", DataTable)
@@ -143,6 +203,15 @@ class RightTabsPane(Container):
             t(self.lang, "year"),
             t(self.lang, "task"),
             t(self.lang, "score"),
+        )
+        reports = self.query_one(f"#{TABLE_IDS['reports']}", DataTable)
+        reports.clear(columns=True)
+        reports.add_columns(
+            t(self.lang, "reports_col_kind"),
+            t(self.lang, "reports_col_node"),
+            t(self.lang, "reports_col_format"),
+            t(self.lang, "reports_col_size"),
+            t(self.lang, "reports_col_time"),
         )
         corpus = self.query_one(f"#{TABLE_IDS['corpus']}", DataTable)
         corpus.clear(columns=True)
@@ -185,25 +254,43 @@ class RightTabsPane(Container):
         corpus: list[dict] | None = None,
         diagnostics: list[dict] | None = None,
         lean: list[dict] | None = None,
+        reports: list[dict] | None = None,
     ) -> None:
         self.risks_rows = list(risks)
         self.failures_rows = list(failures)
         self.claims_rows = list(claims)
         self.literature_rows = list(literature)
-        # Proof-trunk rows are optional in the public set_rows signature so
-        # callers that only know about the empirical four don't have to
-        # change. New code (App._refresh_tabs) always passes all seven.
+        # Optional rows let pre-v4.2 callers keep working without
+        # supplying every tab kind on every refresh; the App always
+        # passes everything.
         self.corpus_rows = list(corpus or [])
         self.diagnostics_rows = list(diagnostics or [])
         self.lean_rows = list(lean or [])
+        self.reports_rows = list(reports or [])
         self._reload_tables()
 
     def cycle_tab(self) -> None:
+        """Advance to the next tab in the active tab's group.
+
+        This is the ``f`` key behavior — the cycle stays inside one
+        semantic group at a time so the user knows whether ``f`` will
+        move them within "Cross" tabs or "Proof" tabs. To jump across
+        groups, the App's ``shift+f`` binding calls ``cycle_group``.
+        """
         current = self.active or TAB_ORDER[0]
-        index = TAB_ORDER.index(current) if current in TAB_ORDER else 0
-        self.active = TAB_ORDER[(index + 1) % len(TAB_ORDER)]
+        self.active = next_tab_in_group(current)
         self._sync_active_table()
         self._refresh_title()
+        self._refresh_group_bar()
+        self.current_table().focus()
+
+    def cycle_group(self) -> None:
+        """Jump to the first tab of the next group (``shift+f`` key)."""
+        current = self.active or TAB_ORDER[0]
+        self.active = next_group(current)
+        self._sync_active_table()
+        self._refresh_title()
+        self._refresh_group_bar()
         self.current_table().focus()
 
     def move_cursor_by(self, delta: int) -> None:
@@ -244,6 +331,7 @@ class RightTabsPane(Container):
             "failures": self.failures_rows,
             "claims": self.claims_rows,
             "literature": self.literature_rows,
+            "reports": self.reports_rows,
             "corpus": self.corpus_rows,
             "diagnostics": self.diagnostics_rows,
             "lean": self.lean_rows,
@@ -255,6 +343,7 @@ class RightTabsPane(Container):
         self._reload_failure_table()
         self._reload_claims_table()
         self._reload_literature_table()
+        self._reload_reports_table()
         self._reload_corpus_table()
         self._reload_diagnostics_table()
         self._reload_lean_table()
@@ -354,6 +443,37 @@ class RightTabsPane(Container):
             )
         table.move_cursor(row=0, column=0)
 
+    def _reload_reports_table(self) -> None:
+        table = self.query_one(f"#{TABLE_IDS['reports']}", DataTable)
+        table.clear(columns=False)
+        rows = self._filtered_rows["reports"]
+        if not rows:
+            table.add_row("-", "-", "-", "-", t(self.lang, "reports_empty"), key="empty")
+            table.move_cursor(row=0, column=0)
+            return
+        for row in rows:
+            size = int(row.get("bytes") or 0)
+            if size >= 1024 * 1024:
+                size_label = f"{size / 1024 / 1024:.1f} MB"
+            elif size >= 1024:
+                size_label = f"{size / 1024:.1f} KB"
+            else:
+                size_label = f"{size} B"
+            node_short = row.get("related_node_id") or "-"
+            missing = bool(row.get("missing"))
+            kind_cell = str(row.get("kind", "-"))
+            if missing:
+                kind_cell = f"{kind_cell} (missing)"
+            table.add_row(
+                kind_cell,
+                str(node_short),
+                str(row.get("format", "-")),
+                size_label,
+                str(row.get("generated_at", "-")),
+                key=f"report-{row['report_id']}",
+            )
+        table.move_cursor(row=0, column=0)
+
     def _reload_corpus_table(self) -> None:
         table = self.query_one(f"#{TABLE_IDS['corpus']}", DataTable)
         table.clear(columns=False)
@@ -449,20 +569,52 @@ class RightTabsPane(Container):
 
     def _refresh_title(self) -> None:
         active_id = self.active or "risks"
-        # Proof-trunk tabs use their own *_title keys; empirical tabs use the
-        # short single-word keys (risks/failures/claims/literature).
+        # Proof-trunk + reports tabs use their own *_title keys; the
+        # empirical four use the short single-word keys (risks /
+        # failures / claims / literature).
         title_key = {
+            "reports": "reports_title",
             "corpus": "corpus_title",
             "diagnostics": "diagnostics_title",
             "lean": "lean_title",
         }.get(active_id, active_id)
         active_label = t(self.lang, title_key)
+        group_label = t(self.lang, f"tab_group_{group_of(active_id)}")
         suffix = (
             f" ({t(self.lang, 'filter_suffix', value=self._filter_text)})"
             if self._filter_text
             else ""
         )
-        self.border_title = t(self.lang, "tabs_title", active=active_label) + suffix
+        # "{group} · {tab}" — the middle dot is U+00B7, consistent with
+        # other cockpit chrome (event-stream timestamps, HUD separators).
+        composed = f"{group_label} · {active_label}"
+        self.border_title = t(self.lang, "tabs_title", active=composed) + suffix
+
+    def _refresh_group_bar(self) -> None:
+        """Repaint the group strip above the table area.
+
+        Each group renders as its localized label; the active group is
+        wrapped in ``[active]…[/active]`` Rich markup so the theme can
+        style it through the existing accent token. We deliberately do
+        not show per-tab dots inside the chip — the border title
+        already shows the active tab, and adding more density here
+        would compete with the table content directly below.
+        """
+        if not self.is_mounted:
+            return
+        try:
+            bar = self.query_one("#tabs-group-bar", Static)
+        except Exception:
+            return
+        active_group = group_of(self.active or "risks")
+        chips: list[str] = []
+        for group_key, _names in TAB_GROUPS:
+            label = t(self.lang, f"tab_group_{group_key}")
+            if group_key == active_group:
+                chips.append(f"[reverse]{label}[/reverse]")
+            else:
+                chips.append(f"[dim]{label}[/dim]")
+        bar.update("  ".join(chips))
 
     def _risk_label(self, key: str) -> str:
         value = t(self.lang, key)

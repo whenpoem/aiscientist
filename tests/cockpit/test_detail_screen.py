@@ -289,7 +289,12 @@ async def test_enter_on_tabs_pane_pushes_detail_screen(workspace):
     app = CockpitApp()
     async with app.run_test() as pilot:
         await pilot.press("4")  # focus tabs
-        await pilot.press("f")  # cycle to failures
+        # As of v4.2.0a1 the `f` key cycles tabs inside the active
+        # group (Cross → Risks → Claims → Literature). The Failures
+        # tab lives in the Empirical group, so we jump groups with
+        # capital-N first, which lands on the Empirical group's first
+        # tab (Failures).
+        await pilot.press("N")
         await pilot.press("enter")
         assert isinstance(app.screen_stack[-1], DetailScreen)
 

@@ -21,6 +21,12 @@ def workspace(tmp_path, monkeypatch):
     # explicitly setting the env var to "1" or by passing splash=True
     # to CockpitApp.
     monkeypatch.setenv("RESEARCH_AGENT_COCKPIT_SPLASH", "0")
+    # Same logic for the v4.2.0a3 cold-start Welcome screen: tests that
+    # pilot an empty-state CockpitApp would otherwise see the Welcome
+    # pop up on top of their stack and intercept their first keystroke.
+    # The Welcome-specific tests opt back in by explicitly setting the
+    # env var to "1" (or deleting it) inside the test body.
+    monkeypatch.setenv("RESEARCH_AGENT_COCKPIT_WELCOME", "0")
     # Tests run under the deterministic mock embedding backend so they need
     # neither sentence-transformers nor an OPENAI_API_KEY. The live MCP server
     # defaults to the 'local' backend (sentence-transformers); install via
@@ -49,6 +55,7 @@ def workspace(tmp_path, monkeypatch):
         "verify_mcp.tools.leakage",
         "verify_mcp.tools.prereg",
         "verify_mcp.tools.provenance",
+        "verify_mcp.tools.reporting",
         "verify_mcp.tools.verification",
         "verify_mcp.impl",
         "prove_mcp.db",

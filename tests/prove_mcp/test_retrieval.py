@@ -142,12 +142,13 @@ def test_retrieve_rejects_backend_mismatch(workspace, monkeypatch):
         [_problem("p1", "stmt", lex=["alpha"], sem=[])],
     )
 
-    # Switch to a fake backend with different name/dim.
+    # Switch to a fake backend with different name/model/dim.
     fake_embedding = workspace["prove_mcp.embedding"]
     real_get = fake_embedding.get_embedder
 
     class _Fake:
         name = "fakelocal"
+        model_name = "fake-model-v1"
         dim = 999
 
         def embed(self, texts):
@@ -158,7 +159,7 @@ def test_retrieve_rejects_backend_mismatch(workspace, monkeypatch):
     retrieval = workspace["prove_mcp.tools.retrieval"]
     monkeypatch.setattr(retrieval, "get_embedder", lambda: _Fake())
 
-    with pytest.raises(RuntimeError, match="backend"):
+    with pytest.raises(RuntimeError, match="reindex_proof_corpus"):
         impl.retrieve_skeletons(
             "anything",
             lexical_keywords=["alpha"],
@@ -169,6 +170,53 @@ def test_retrieve_rejects_backend_mismatch(workspace, monkeypatch):
     # Restore (other tests inherit the original via per-test monkeypatch
     # auto-undo, but assert restoration locally for safety).
     fake_embedding.get_embedder = real_get
+
+
+def test_retrieve_rejects_model_mismatch_same_backend(workspace, monkeypatch):
+    """Same backend, same dim, different model → still a mismatch.
+
+    Two OpenAI-compatible providers can both return 1024-dim vectors
+    under the same `openai` backend but mean entirely different things.
+    ADR 0010 requires the triple (backend, model, dim) to match, not
+    just (backend, dim)."""
+    impl = workspace["prove_mcp.impl"]
+
+    impl.ingest_proof_corpus(
+        "manual",
+        [_problem("p1", "stmt", lex=["alpha"], sem=[])],
+    )
+
+    fake_embedding = workspace["prove_mcp.embedding"]
+
+    # Same `mock` name and the same dim as the seeded rows, but a
+    # different model identifier. Retrieval must still refuse to mix.
+    class _SameBackendDifferentModel:
+        name = "mock"
+        model_name = "mock-tuned-v2"
+
+        @property
+        def dim(self):
+            # Match the dim that MockEmbedder() defaults to.
+            return fake_embedding.MOCK_DIM
+
+        def embed(self, texts):
+            return [[0.0] * fake_embedding.MOCK_DIM for _ in texts]
+
+    monkeypatch.setattr(
+        fake_embedding, "get_embedder", lambda: _SameBackendDifferentModel()
+    )
+    retrieval = workspace["prove_mcp.tools.retrieval"]
+    monkeypatch.setattr(
+        retrieval, "get_embedder", lambda: _SameBackendDifferentModel()
+    )
+
+    with pytest.raises(RuntimeError, match="mock-tuned-v2"):
+        impl.retrieve_skeletons(
+            "anything",
+            lexical_keywords=["alpha"],
+            semantic_keywords=[],
+            k=3,
+        )
 
 
 def test_retrieve_empty_corpus_returns_empty(workspace):

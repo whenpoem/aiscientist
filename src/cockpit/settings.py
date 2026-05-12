@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 SCHEMA_VERSION = 1
@@ -94,6 +94,17 @@ class CockpitSettings:
     # users who want straight-to-main can flip this off via the cockpit
     # settings file. Tests force-disable through RESEARCH_AGENT_COCKPIT_SPLASH.
     splash_animation: bool = True
+    # v4.2.0a1 addition: per-section collapsed state for the detail pane.
+    # Keys match SECTION_KEYS in cockpit.details; values are True when
+    # the user has the section collapsed. Absent keys fall back to the
+    # section's default_open setting on first render.
+    detail_section_collapsed: dict = field(default_factory=dict)
+    # v4.2.0a3 addition: True once the cold-start Welcome screen has
+    # been dismissed at least once. The cockpit only re-shows it when
+    # state.db is empty AND this flag is False, so deleting state.db
+    # to start over also brings Welcome back — matching the user's
+    # mental model of "fresh slate".
+    welcome_shown: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "CockpitSettings":
@@ -173,6 +184,17 @@ def _render_value(value: object) -> str:
     if isinstance(value, str):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
+    if isinstance(value, dict):
+        # Inline TOML table: { key = value, key = value }. We use this
+        # rather than [table] headers so the file stays readable as one
+        # key-per-line and the cockpit's empty-dict default round-trips
+        # to literal `{}` without a stray section divider.
+        parts: list[str] = []
+        for key in sorted(value.keys()):
+            if not isinstance(key, str):
+                continue
+            parts.append(f"{key} = {_render_value(value[key])}")
+        return "{ " + ", ".join(parts) + " }" if parts else "{}"
     raise TypeError(f"Unsupported TOML value type: {type(value)!r}")
 
 
@@ -226,6 +248,17 @@ def _coerce_value(declared_type, raw):
         # Reject non-strings rather than coerce (e.g. theme=42 should not
         # become "42" — that yields a non-existent theme name and an
         # incorrect i18n lookup downstream).
+        return _SENTINEL
+    if type_name == "dict":
+        if isinstance(raw, dict):
+            # Tolerate only flat str→bool dicts (the shape v4.2 actually
+            # writes). Anything else gets dropped on the floor; the
+            # cockpit recovers by treating the section as fresh.
+            cleaned: dict[str, bool] = {}
+            for key, value in raw.items():
+                if isinstance(key, str) and isinstance(value, bool):
+                    cleaned[key] = value
+            return cleaned
         return _SENTINEL
     # Unknown declared type — pass through unchanged.
     return raw

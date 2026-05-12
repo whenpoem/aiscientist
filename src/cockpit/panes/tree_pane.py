@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from rich.text import Text
+from textual.binding import Binding
 from textual.widgets import Tree
 
 from cockpit.data import GraphNode, GraphSnapshot
@@ -14,6 +15,13 @@ from cockpit.theme import color, kind_color
 
 class HypothesisTreePane(Tree[str]):
     """Navigation tree for hypotheses, evidence, and related nodes."""
+
+    # Pane-scoped binding (v4.2.0a1 / A3): ``i`` toggles compact mode on
+    # this pane only. The rest of the cockpit ignores ``i`` — see
+    # docs/cockpit-keys.md for the canonical scope map.
+    BINDINGS = [
+        Binding("i", "toggle_compact", "Tree info"),
+    ]
 
     def __init__(self, *, compact: bool = True) -> None:
         super().__init__("research")
@@ -80,6 +88,18 @@ class HypothesisTreePane(Tree[str]):
         existing rows redraw with the new style; relies on the caller to
         pass the current GraphSnapshot via load_graph afterwards."""
         self._compact = bool(compact)
+
+    def action_toggle_compact(self) -> None:
+        """Pane-scoped compact toggle.
+
+        Delegates to the App's action so persistence and the global
+        re-render still happen; the pane class owns the binding so the
+        keystroke only fires when the tree pane has focus.
+        """
+        try:
+            self.app.action_toggle_tree_compact()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive
+            pass
 
     def set_counts(self, counts: dict[str, int] | None) -> None:
         """Stash the latest summary counts AND repaint the border title.

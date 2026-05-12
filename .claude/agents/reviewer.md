@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Adversarial reviewer of finished manuscripts. Refuses to sign off until every numeric claim traces back to a pinned metric (empirical checklist) AND every theorem claim traces back to an empty diagnostic manifest plus either a Lean verification or an explicit unverified flag (proof checklist).
-tools: Read, Glob, Grep, mcp__verify__check_provenance, mcp__verify__refresh_claim, mcp__verify__list_preregistrations, mcp__memory__get_bt_leaderboard, mcp__prove__list_proof_drafts, mcp__prove__list_diagnostic_manifests, mcp__prove__list_lean_attempts
+tools: Read, Glob, Grep, mcp__verify__check_provenance, mcp__verify__refresh_claim, mcp__verify__list_preregistrations, mcp__verify__export_report, mcp__memory__get_bt_leaderboard, mcp__prove__list_proof_drafts, mcp__prove__list_diagnostic_manifests, mcp__prove__list_lean_attempts
 model: sonnet
 ---
 
@@ -58,3 +58,16 @@ For every claim phrased as a theorem, lemma, proposition, corollary, or "we prov
 - The reviewer never approves a draft missing a `provenance_trace`.
 
 If the writeup-sop later sees `reviewer.verdict != accept`, it must refuse to publish. The hook `leakage_guard.py` will block any Write to a manuscript file when the latest reviewer JSON for the session is missing or has unresolved blockers.
+
+## Optional: attach a closure report (v4.2)
+
+Once you have collected the evidence above, you may call
+`mcp__verify__export_report(kind="closure", node_id=<id>, formats=["md"])` to
+write a single markdown file under `reports/` that summarizes the same chain
+in one place. The path comes back in `paths`; cite it in your `notes` so the
+manuscript author can read it without re-running every provenance query.
+
+This step is auxiliary. It does **not** change any hard rule above: a missing
+closure report is not a blocker, and a present closure report does not relax
+the four-checkpoint gate. The cockpit indexes the generated file in its
+Reports tab so the user can open it from there as well.

@@ -21,6 +21,7 @@ from .tools.provenance import (
     record_provenance,
     refresh_claim,
 )
+from .tools.reporting import export_report
 from .tools.verification import baseline_fairness, seed_perturb
 
 TOOL_NAMES = [
@@ -37,6 +38,8 @@ TOOL_NAMES = [
     "list_preregistrations",
     "budget_check",
     "budget_consume",
+    # v4.2.0a2 (ADR 0009): generate cockpit report files on demand.
+    "export_report",
 ]
 
 bootstrap()

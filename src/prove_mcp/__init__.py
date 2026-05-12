@@ -29,7 +29,9 @@ Owned tables (prv_*)
 --------------------
 prv_corpus_problems       [proof] StatEval-style retrieval corpus.
 prv_corpus_keywords       [proof] Per-problem lexical+semantic keywords with
-                                 embeddings; backend+dim metadata pinned.
+                                 embeddings; the (backend, model, dim)
+                                 triple is pinned per row so cross-model
+                                 retrieval can be safely refused (ADR 0010).
 prv_diagnostic_manifests  [proof] Per-draft snippet diagnoses + manifest
                                  lifecycle (open / empty / applied).
 prv_lean_attempts         [proof] Audit trail of every Lean reinsurance
@@ -43,10 +45,11 @@ prv_lean_attempts         [proof] Audit trail of every Lean reinsurance
 
 Critical invariants
 -------------------
-- Cross-backend mixing is forbidden. ``ingest_proof_corpus`` and
-  ``retrieve_skeletons`` reject keyword rows whose ``embed_backend`` or
-  ``embed_dim`` differ from the active backend. To switch backends, the
-  caller must re-ingest.
+- Cross-(backend, model, dim) mixing is forbidden. ``ingest_proof_corpus``
+  records the active triple per keyword row; ``retrieve_skeletons`` rejects
+  rows whose triple differs from the active configuration. To switch any
+  leg of the triple, run ``scripts/reindex_proof_corpus.py`` (the cockpit
+  surfaces a one-time hint when it detects a mismatch).
 - Cross-domain failure matching belongs to ``mem_failures.domain``, not
   to a prv_* table. This module asks ``memory_mcp.match_signatures``
   with ``domain='proof'`` for snippet diagnosis (P3+).

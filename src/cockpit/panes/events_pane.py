@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from rich.text import Text
+from textual.binding import Binding
 from textual.widgets import RichLog
 
 from cockpit.i18n import t
@@ -14,6 +15,14 @@ from cockpit.theme import style as theme_style
 
 class EventStreamPane(RichLog):
     """Streaming event log with filter and relative-time toggle support."""
+
+    # Pane-scoped bindings (v4.2.0a1 / A3): ``w`` toggles soft-wrap on
+    # this pane only. Outside the events pane the keystroke does
+    # nothing — that's the deliberate trade against v4.1's
+    # global-priority behavior, recorded in docs/cockpit-keys.md.
+    BINDINGS = [
+        Binding("w", "toggle_wrap", "Wrap"),
+    ]
 
     def __init__(self, *, wrap: bool = True) -> None:
         # wrap defaults to True so long event payloads stay visible instead
@@ -84,6 +93,18 @@ class EventStreamPane(RichLog):
 
     def clear_visual(self) -> None:
         self.clear()
+
+    def action_toggle_wrap(self) -> None:
+        """Pane-scoped wrap toggle.
+
+        Delegates to the App's persisted-state handler so the toggle
+        lands in CockpitSettings.event_wrap; this method just exists
+        so Textual's binding chain finds an action on the pane class.
+        """
+        try:
+            self.app.action_toggle_event_wrap()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive
+            pass
 
     def _rerender(self) -> None:
         self.clear()

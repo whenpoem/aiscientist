@@ -1,4 +1,4 @@
-# MCP Tool Reference (v4.1.0a6)
+# MCP Tool Reference (v4.2.0)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -359,6 +359,13 @@ Atomically decrement the budget. Overflow returns `{"ok": False, "error": "budge
 
 **When to use**: by the budgeter agent or directly by the engineer, immediately before consuming resources.
 
+#### `export_report(kind, node_id, formats=["md"])`  *(v4.2)*
+Generate a cockpit report file from current SQLite state. Thin facade over `cockpit.export.generate` (see [ADR 0009](adr/0009-reports-as-files-monitoring-as-tui.md)). `kind` is one of `closure | draft | diagnostic | portfolio | cascade`; `formats` is a list drawn from `md | html`. Writes one file per format under `reports/<short-id>-<kind>.<format>` and inserts a row per file in `cockpit_reports` so the cockpit's Reports tab indexes it.
+
+**Returns**: `{"paths": ["reports/...", ...]}`. Raises `ValueError` for unknown kind / format / node id.
+
+**When to use**: by the reviewer agent attaching closure reports to its verdict notes, by writeup tooling capturing an evidence snapshot, or from any CLI workflow that needs a markdown trace. The `python -m cockpit.export` CLI is the same pipeline.
+
 ---
 
 ## prove MCP *(v4.0)*
@@ -368,9 +375,9 @@ Backed by the `prv_*` tables and the cross-domain `mem_failures.domain` column. 
 ### Corpus and retrieval
 
 #### `ingest_proof_corpus(source, problems)`
-Bulk-ingest a list of proof problems into `prv_corpus_problems` + `prv_corpus_keywords`. Each problem must include `problem_id`, `statement`, and at least one of `lexical_keywords` / `semantic_keywords`. Optional fields: `reference_proof`, `domain_tags`. Re-ingesting an existing `problem_id` replaces it (idempotent upsert). Keywords are vectorised through the active embedding backend (`RESEARCH_AGENT_EMBED_BACKEND`: `mock` | `local` | `openai`; Claude settings default to `mock` so the MCP starts without optional embedding packages); each keyword row records `embed_backend` + `embed_dim` so retrieval can refuse cross-backend mixing.
+Bulk-ingest a list of proof problems into `prv_corpus_problems` + `prv_corpus_keywords`. Each problem must include `problem_id`, `statement`, and at least one of `lexical_keywords` / `semantic_keywords`. Optional fields: `reference_proof`, `domain_tags`. Re-ingesting an existing `problem_id` replaces it (idempotent upsert). Keywords are vectorised through the active embedding backend (`RESEARCH_AGENT_EMBED_BACKEND`: `mock` | `local` | `openai`; Claude settings default to `mock` so the MCP starts without optional embedding packages); each keyword row records the `(embed_backend, embedding_model, embed_dim)` triple so retrieval can refuse cross-backend or cross-model mixing (see [ADR 0010](adr/0010-multi-provider-embeddings.md)).
 
-**Returns**: `{"ingested": int, "replaced": int, "backend": str, "dim": int}`
+**Returns**: `{"ingested": int, "replaced": int, "backend": str, "model": str, "dim": int}`
 
 **When to use**: at project start to seed the corpus from StatEval / arXiv / hand-curated examples.
 
@@ -385,6 +392,20 @@ Bidirectional max-matching retrieval (architecture.md §13 formula). The agent e
 **Returns**: list of `{problem_id, source, statement, reference_proof, domain_tags, lexical_score, semantic_score, similarity}`. Sorted by `similarity` descending.
 
 **When to use**: at the top of `prove-sop` to find structurally similar lemmas before drafting.
+
+#### `reindex_corpus(batch_size=25)`  *(v4.2)*
+Re-embed every stored corpus problem under the active embedding backend. Reads the keyword strings already in `prv_corpus_keywords` (which are preserved across ingestions) and re-encodes them, replacing the old vectors and writing the new `(backend, model, dim)` triple. Idempotent. Emits `proof_corpus_reindex_progress` events per batch for cockpit progress indication.
+
+**Returns**: `{"reindexed": int, "skipped": int, "backend": str, "model": str, "dim": int, "total": int}`
+
+**When to use**: after switching `RESEARCH_AGENT_EMBED_BACKEND` or `RESEARCH_AGENT_EMBED_MODEL`. The CLI wrapper `scripts/reindex_proof_corpus.py` is usually friendlier.
+
+#### `corpus_backend_signatures()`  *(v4.2)*
+List the distinct `(embed_backend, embedding_model, embed_dim)` triples currently present in `prv_corpus_keywords`, each annotated with its row count. The cockpit uses this on startup to detect when the active backend doesn't match the stored corpus and surface a one-time re-index hint.
+
+**Returns**: list of `{embed_backend, embedding_model, embed_dim, row_count}`, ordered by descending row count.
+
+**When to use**: programmatic checks before deciding whether to call `reindex_corpus`.
 
 ### Proof nodes
 

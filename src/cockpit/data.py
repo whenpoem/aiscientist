@@ -651,6 +651,57 @@ def fetch_diagnostic_manifests(limit: int = 100) -> list[dict[str, Any]]:
     return out
 
 
+def fetch_reports(limit: int = 200) -> list[dict[str, Any]]:
+    """Read the cockpit_reports index for the Reports tab.
+
+    Returns rows newest-first. Each row carries a ``missing`` flag
+    set when the indexed file no longer exists on disk — the cockpit
+    keeps the row around as audit history rather than silently
+    deleting it (ADR 0009).
+    """
+    from pathlib import Path as _Path
+
+    con = _connect()
+    try:
+        if not _table_exists(con, "cockpit_reports"):
+            return []
+        rows = con.execute(
+            """
+            SELECT report_id, file_path, kind, related_node_id, format, bytes,
+                   generated_at, generated_by
+            FROM cockpit_reports
+            ORDER BY generated_at DESC, report_id DESC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    finally:
+        con.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        path_str = row["file_path"]
+        missing = False
+        if path_str:
+            try:
+                missing = not _Path(path_str).exists()
+            except OSError:
+                missing = True
+        out.append(
+            {
+                "report_id": int(row["report_id"]),
+                "file_path": path_str,
+                "kind": row["kind"],
+                "related_node_id": row["related_node_id"],
+                "format": row["format"],
+                "bytes": int(row["bytes"] or 0),
+                "generated_at": row["generated_at"],
+                "generated_by": row["generated_by"],
+                "missing": missing,
+            }
+        )
+    return out
+
+
 def fetch_lean_attempts(limit: int = 200) -> list[dict[str, Any]]:
     """Read recent Lean attempts for the Lean tab.
 

@@ -9,7 +9,12 @@ used by tests and ``server.py``. Do not add new logic here; add it under
 from __future__ import annotations
 
 from .db import bootstrap as bootstrap
-from .tools.corpus import ingest_proof_corpus, list_corpus
+from .tools.corpus import (
+    corpus_backend_signatures,
+    ingest_proof_corpus,
+    list_corpus,
+    reindex_corpus,
+)
 
 # ruff: noqa: F401  (every import below is an intentional re-export)
 from .tools.correction import apply_correction, compose_correction_prompt
@@ -38,6 +43,9 @@ TOOL_NAMES = [
     "ingest_proof_corpus",
     "list_corpus",
     "retrieve_skeletons",
+    # v4.2.0a0: corpus maintenance (ADR 0010)
+    "reindex_corpus",
+    "corpus_backend_signatures",
     # P3: NL workflow
     "propose_proposition",
     "propose_proof_skeleton",

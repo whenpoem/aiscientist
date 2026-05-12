@@ -1,4 +1,4 @@
-# MCP 工具参考（v4.1.0a6）
+# MCP 工具参考（v4.2.0）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。
@@ -359,6 +359,13 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 **何时使用**：由 budgeter agent 调用，或者由 engineer 在消耗资源前直接调用。
 
+#### `export_report(kind, node_id, formats=["md"])`  *(v4.2)*
+根据当前 SQLite 状态生成一份报告文件，是 `cockpit.export.generate` 的轻量门面（见 [ADR 0009](adr/0009-reports-as-files-monitoring-as-tui.zh-CN.md)）。`kind` 取值 `closure | draft | diagnostic | portfolio | cascade`；`formats` 取自 `md | html`。每种格式写一个文件到 `reports/<short-id>-<kind>.<format>`，同时在 `cockpit_reports` 表里登记，cockpit 的 Reports 标签页会自动索引。
+
+**返回**：`{"paths": ["reports/...", ...]}`。遇到未知的 kind / format / node id 会抛 `ValueError`。
+
+**何时使用**：reviewer agent 在审稿意见里附结题报告路径、写作流程做证据快照、或者任何需要 markdown 记录的命令行场景。`python -m cockpit.export` CLI 走的是同一条管线。
+
 ---
 
 ## prove MCP *(v4.0)*
@@ -368,9 +375,9 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 ### 语料与检索
 
 #### `ingest_proof_corpus(source, problems)`
-批量入库一组证明问题到 `prv_corpus_problems` + `prv_corpus_keywords`。每条 problem 必须包含 `problem_id`、`statement`，并至少有 `lexical_keywords` / `semantic_keywords` 之一。可选字段：`reference_proof`、`domain_tags`。重复 ingest 相同 `problem_id` 等于替换（幂等 upsert）。关键词通过当前 embedding 后端向量化（`RESEARCH_AGENT_EMBED_BACKEND`：`mock` | `local` | `openai`；新克隆的 Claude settings 默认 `local`）；每行关键词都记录 `embed_backend` + `embed_dim`，跨后端的检索会被显式拒绝。
+批量入库一组证明问题到 `prv_corpus_problems` + `prv_corpus_keywords`。每条 problem 必须包含 `problem_id`、`statement`，并至少有 `lexical_keywords` / `semantic_keywords` 之一。可选字段：`reference_proof`、`domain_tags`。重复 ingest 相同 `problem_id` 等于替换（幂等 upsert）。关键词通过当前 embedding 后端向量化（`RESEARCH_AGENT_EMBED_BACKEND`：`mock` | `local` | `openai`；新克隆的 Claude settings 默认 `local`）；每行关键词都记录 `(embed_backend, embedding_model, embed_dim)` 三元组，跨后端或跨模型的检索会被显式拒绝（见 [ADR 0010](adr/0010-multi-provider-embeddings.zh-CN.md)）。
 
-**返回**：`{"ingested": int, "replaced": int, "backend": str, "dim": int}`
+**返回**：`{"ingested": int, "replaced": int, "backend": str, "model": str, "dim": int}`
 
 **何时使用**：项目启动时把 StatEval / arXiv / 手工种子语料一次性灌进来。
 
@@ -385,6 +392,20 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 **返回**：`{problem_id, source, statement, reference_proof, domain_tags, lexical_score, semantic_score, similarity}` 列表，按 `similarity` 降序。
 
 **何时使用**：在 `prove-sop` 的开头，起草前先找结构相似的引理。
+
+#### `reindex_corpus(batch_size=25)`  *(v4.2)*
+用当前配置的 embedding 后端重新编码所有已入库的语料。读取数据库里保存的关键词字符串（这些字符串在历次灌入中一直保留），重新生成向量并替换旧的，同时更新 `(backend, model, dim)` 三元组。操作幂等。每处理一批会发出 `proof_corpus_reindex_progress` 事件，供 cockpit 显示进度。
+
+**返回**：`{"reindexed": int, "skipped": int, "backend": str, "model": str, "dim": int, "total": int}`
+
+**何时使用**：切换了 `RESEARCH_AGENT_EMBED_BACKEND` 或 `RESEARCH_AGENT_EMBED_MODEL` 之后。命令行封装 `scripts/reindex_proof_corpus.py` 通常更方便。
+
+#### `corpus_backend_signatures()`  *(v4.2)*
+列出 `prv_corpus_keywords` 里目前有哪些不同的 `(embed_backend, embedding_model, embed_dim)` 三元组，每条附带对应的行数。cockpit 在启动时用它来检测当前后端配置是否与已有语料匹配，不匹配时提示用户重建索引。
+
+**返回**：`{embed_backend, embedding_model, embed_dim, row_count}` 列表，按行数降序。
+
+**何时使用**：在决定是否需要调 `reindex_corpus` 之前做检查。
 
 ### 证明节点
 

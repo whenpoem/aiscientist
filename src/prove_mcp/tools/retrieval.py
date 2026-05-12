@@ -67,6 +67,7 @@ def retrieve_skeletons(
     backend = get_embedder()
     backend_name = backend.name
     backend_dim = backend.dim
+    model_name = backend.model_name
 
     # Embed the query keywords first so that backend mismatch surfaces as
     # a clean error, not a silent zero-result return.
@@ -80,26 +81,34 @@ def retrieve_skeletons(
                    p.source, p.statement, p.reference_proof, p.domain_tags
             FROM prv_corpus_keywords k
             JOIN prv_corpus_problems p ON p.problem_id = k.problem_id
-            WHERE k.embed_backend = ? AND k.embed_dim = ?
+            WHERE k.embed_backend = ?
+              AND k.embed_dim = ?
+              AND k.embedding_model = ?
             """,
-            (backend_name, backend_dim),
+            (backend_name, backend_dim, model_name),
         ).fetchall()
-        # Surface a clear hint if the corpus was ingested under a different
-        # backend, instead of returning silently empty.
+        # Surface a clear hint when the corpus was ingested under a
+        # different (backend, model, dim) triple, rather than returning
+        # silently empty.
         if not rows:
             other = con.execute(
                 """
-                SELECT DISTINCT embed_backend, embed_dim
+                SELECT DISTINCT embed_backend, embedding_model, embed_dim
                 FROM prv_corpus_keywords
                 LIMIT 5
                 """
             ).fetchall()
             if other:
-                pairs = ", ".join(f"{r['embed_backend']}/dim={r['embed_dim']}" for r in other)
+                triples = ", ".join(
+                    f"{r['embed_backend']}/{r['embedding_model']}/dim={r['embed_dim']}"
+                    for r in other
+                )
                 raise RuntimeError(
-                    f"corpus has no rows for backend {backend_name!r} dim={backend_dim}; "
-                    f"existing rows are: {pairs}. Set RESEARCH_AGENT_EMBED_BACKEND to "
-                    "match, or re-ingest under the active backend."
+                    f"corpus has no rows for {backend_name!r}/{model_name!r}/"
+                    f"dim={backend_dim}; existing triples are: {triples}. "
+                    "Adjust RESEARCH_AGENT_EMBED_BACKEND / RESEARCH_AGENT_EMBED_MODEL "
+                    "to match, or run `python scripts/reindex_proof_corpus.py` "
+                    "to re-encode under the active configuration."
                 )
             return []
     finally:
