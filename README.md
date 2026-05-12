@@ -1,5 +1,9 @@
 # ClaudeScientist
 
+**A research co-pilot that remembers, verifies, and lets you steer.**
+
+[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-564-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
 ClaudeScientist plugs into Claude Code and adds what most AI scientist systems leave out: it remembers what you've tried, verifies your numbers before you publish them, and gives you a live terminal dashboard where you can watch the research unfold and step in at any time.
@@ -12,23 +16,11 @@ You give Claude a research question. It generates hypotheses, ranks them in a to
 
 Open two terminals side by side. That's the whole UI.
 
-```
-┌─────────────────────────┐  ┌─────────────────────────┐
-│  Terminal A: Claude     │  │  Terminal B: Cockpit    │
-│  Code (chat with AI)    │  │  TUI (monitor/intervene)│
-│                         │  │                         │
-│  > /research-sop ...    │  │  ┌─ Hypothesis tree ┐   │
-│  AI thinks, calls tools │  │  │ ▾ Q ViT scale    │   │
-│  AI writes/runs code    │  │  │   ▸ H_07 ...     │   │
-│                         │  │  │   ▸ H_08 ...     │   │
-│                         │  │  └──────────────────┘   │
-│                         │  │  press n=reject y=ok    │
-└─────────────────────────┘  └─────────────────────────┘
-            │                            │
-            └────────┬───────────────────┘
-                     ▼
-        .research-agent/state.db   ← one SQLite file
-```
+<picture>
+  <img alt="Cockpit TUI screenshot" src="docs/assets/cockpit-screenshot.svg" width="800">
+</picture>
+
+*The cockpit TUI — hypothesis tree, evidence, ratings, and event stream in one terminal.*
 
 The two terminals don't talk to each other directly — they both read and write the same SQLite file. This is the central design choice: every module collaborates through a shared database, not over the network.
 

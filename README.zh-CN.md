@@ -1,5 +1,9 @@
 # ClaudeScientist
 
+**A research co-pilot that remembers, verifies, and lets you steer.**
+
+[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-564-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
 > English version: [README.md](README.md)
 
 ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样东西：记住你试过什么、验证你的数字是否靠谱、给你一个终端仪表盘让你实时盯着研究进展、随时插手。
@@ -12,23 +16,11 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 并排打开两个终端窗口，就是全部界面。
 
-```
-┌─────────────────────────┐  ┌─────────────────────────┐
-│  终端 A: Claude Code    │  │  终端 B: Cockpit TUI    │
-│  (跟 AI 对话)           │  │  (监控 / 干预面板)      │
-│                         │  │                         │
-│  > /research-sop 研究…  │  │  ┌─ 假说树 ─────┐       │
-│  AI 在思考、调工具      │  │  │ ▾ Q ViT scale│       │
-│  AI 在写代码、跑实验    │  │  │   ▸ H_07 …   │       │
-│                         │  │  │   ▸ H_08 …   │       │
-│                         │  │  └──────────────┘       │
-│                         │  │  按 n 拒绝 / y 通过     │
-└─────────────────────────┘  └─────────────────────────┘
-            │                            │
-            └────────┬───────────────────┘
-                     ▼
-        .research-agent/state.db   ← 一个 SQLite 文件
-```
+<picture>
+  <img alt="Cockpit TUI 截图" src="docs/assets/cockpit-screenshot.svg" width="800">
+</picture>
+
+*Cockpit TUI —— 假说树、证据、评分、事件流，一个终端窗口搞定。*
 
 左右两个终端不直接通信——它们都跟中间那个 SQLite 文件打交道。这是整个系统最核心的设计：所有模块通过一个共享数据库协作，不走网络。
 
