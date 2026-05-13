@@ -49,7 +49,9 @@ Introduce a preregistration mechanism with the following rules:
   `ver_provenance_dag` (no drift detected by `refresh_claim`).
 
 `refresh_claim` re-hashes input files for a claim's provenance DAG and
-emits `prov_dag_stale` events; stale provenance is a hard blocker.
+emits `prov_dag_stale` events; stale provenance blocks publication-critical
+claims. Missing DAG rows are audit warnings unless the claim has no other
+trace.
 
 ## Consequences
 
@@ -78,8 +80,8 @@ emits `prov_dag_stale` events; stale provenance is a hard blocker.
   [`docs/workflows/writing-a-paper.md`](../workflows/writing-a-paper.md).
 - The mechanism only constrains the writeup workflow. Numbers can still
   appear in commit messages, scratch files, or chat output without
-  passing the four anchors. We accept this; the gate is at publication,
-  not at every utterance.
+  passing the relevant anchors. We accept this; the gate is at
+  publication-critical claims, not at every utterance.
 
 ### Alternatives considered
 

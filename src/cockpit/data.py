@@ -308,16 +308,17 @@ def fetch_claims(limit: int = 100) -> list[dict[str, Any]]:
         if _table_exists(con, "ver_seed_runs"):
             seed_rows = con.execute(
                 """
-                SELECT metric_pin_id, COUNT(*) AS run_count,
-                       AVG(mean_value) AS mean_value,
-                       AVG(std_value) AS std_value,
-                       MAX(verdict) AS verdict
+                SELECT metric_pin_id, run_id, seeds_json, values_json,
+                       mean_value, std_value, verdict, created_at
                 FROM ver_seed_runs
                 WHERE metric_pin_id IS NOT NULL
-                GROUP BY metric_pin_id
+                ORDER BY created_at DESC, run_id DESC
                 """
             ).fetchall()
-            seed_runs_by_pin = {int(row["metric_pin_id"]): dict(row) for row in seed_rows}
+            for row in seed_rows:
+                pin_id = int(row["metric_pin_id"])
+                if pin_id not in seed_runs_by_pin:
+                    seed_runs_by_pin[pin_id] = dict(row)
 
         rows = con.execute(
             """
@@ -339,9 +340,17 @@ def fetch_claims(limit: int = 100) -> list[dict[str, Any]]:
     claims: list[dict[str, Any]] = []
     for row in rows:
         seed_info = seed_runs_by_pin.get(int(row["pin_id"]), {})
-        run_count = int(seed_info.get("run_count") or 0)
+        seed_count = 0
+        if seed_info:
+            try:
+                parsed_seeds = json.loads(str(seed_info.get("seeds_json") or "[]"))
+            except json.JSONDecodeError:
+                parsed_seeds = []
+            if isinstance(parsed_seeds, list):
+                seed_count = len(parsed_seeds)
         verdict = str(seed_info.get("verdict") or "")
-        verified = run_count >= 3 and verdict == "stable"
+        required_seed_count = max(3, seed_count)
+        verified = seed_count >= 3 and verdict == "stable"
         claims.append(
             {
                 "pin_id": int(row["pin_id"]),
@@ -355,8 +364,10 @@ def fetch_claims(limit: int = 100) -> list[dict[str, Any]]:
                 "provenance_id": int(row["provenance_id"]),
                 "created_at": row["pin_created_at"],
                 "verified": verified,
-                "seed_runs": f"{run_count}/3" if run_count else "0/3",
-                "seeds": f"{run_count}/3" if run_count else "0/3",
+                "seed_runs": (
+                    f"{seed_count}/{required_seed_count}" if seed_count else "0/3"
+                ),
+                "seeds": f"{seed_count}/{required_seed_count}" if seed_count else "0/3",
                 "seed_verdict": verdict or "pending",
                 "provenance": {
                     "claim": row["provenance_claim"],

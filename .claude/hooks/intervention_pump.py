@@ -51,7 +51,8 @@ def drain() -> str:
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
-    if payload.get("hook_event_name") != "UserPromptSubmit":
+    event_name = str(payload.get("hook_event_name") or "")
+    if event_name not in {"UserPromptSubmit", "Stop"}:
         print("{}")
         return
     text = drain()
@@ -60,7 +61,7 @@ def main() -> None:
             json.dumps(
                 {
                     "hookSpecificOutput": {
-                        "hookEventName": "UserPromptSubmit",
+                        "hookEventName": event_name,
                         "additionalContext": text,
                     }
                 }

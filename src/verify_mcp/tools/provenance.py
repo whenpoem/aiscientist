@@ -103,8 +103,11 @@ def _empty_seed_summary() -> dict:
     return {
         "seed_verdict": "missing",
         "seed_run_count": 0,
+        "seed_suite_count": 0,
         "stable_seed_runs": 0,
+        "stable_seed_suites": 0,
         "latest_seed_run_id": None,
+        "latest_seed_count": 0,
         "seed_runs": [],
     }
 
@@ -127,19 +130,28 @@ def _seed_summaries_for_pins(con, pin_ids: list[int]) -> dict[int, dict]:
     for row in rows:
         pin_id = int(row["metric_pin_id"])
         summary = summaries.setdefault(pin_id, _empty_seed_summary())
+        try:
+            seeds = json.loads(row["seeds_json"] or "[]")
+        except (TypeError, json.JSONDecodeError):
+            seeds = []
+        seed_count = len(seeds) if isinstance(seeds, list) else 0
         run = {
             "run_id": int(row["run_id"]),
             "verdict": row["verdict"],
             "mean_value": float(row["mean_value"]),
             "std_value": float(row["std_value"]),
+            "seed_count": seed_count,
             "created_at": row["created_at"],
         }
-        summary["seed_run_count"] += 1
+        summary["seed_suite_count"] += 1
+        summary["seed_run_count"] += seed_count
         if row["verdict"] == "stable":
-            summary["stable_seed_runs"] += 1
+            summary["stable_seed_suites"] += 1
+            summary["stable_seed_runs"] += seed_count
         if summary["latest_seed_run_id"] is None:
             summary["latest_seed_run_id"] = int(row["run_id"])
             summary["seed_verdict"] = row["verdict"]
+            summary["latest_seed_count"] = seed_count
         if len(summary["seed_runs"]) < 5:
             summary["seed_runs"].append(run)
     return summaries
@@ -183,6 +195,8 @@ def pin_metric(
     session_id: str,
     source_command: str = "",
     note: str = "",
+    input_files: list[str] | None = None,
+    parent_prov_ids: list[int] | None = None,
 ) -> dict:
     """Pin a central metric to a provenance record for later write-up checks."""
     normalized_claim = normalize_claim(claim)
@@ -213,6 +227,14 @@ def pin_metric(
             ),
         )
         pin_id = int(pin.lastrowid)
+        dag = None
+        if input_files or parent_prov_ids:
+            dag = _record_provenance_dag(
+                con,
+                prov_id=provenance_id,
+                input_files=input_files,
+                parent_prov_ids=parent_prov_ids,
+            )
         _emit_event(
             con,
             "claim_pinned",
@@ -223,7 +245,10 @@ def pin_metric(
                 "session_id": session_id,
             },
         )
-    return {"pinned": True, "pin_id": pin_id, "provenance_id": provenance_id}
+    result = {"pinned": True, "pin_id": pin_id, "provenance_id": provenance_id}
+    if dag is not None:
+        result["dag"] = dag
+    return result
 
 
 def check_provenance(claim: str) -> dict:
@@ -302,6 +327,7 @@ def refresh_claim(claim: str) -> dict:
                     {
                         "prov_id": prov_id,
                         "stale": False,
+                        "unchecked": True,
                         "reason": "no_dag_entry",
                     }
                 )
@@ -348,15 +374,18 @@ def refresh_claim(claim: str) -> dict:
                 {
                     "prov_id": prov_id,
                     "stale": bool(stale),
+                    "unchecked": False,
                     "mismatched": mismatched,
                     "input_count": len(stored),
                 }
             )
 
     stale_count = sum(1 for entry in affected if entry.get("stale"))
+    unchecked_count = sum(1 for entry in affected if entry.get("unchecked"))
     return {
         "status": "stale" if stale_count else "fresh",
         "claim": normalized_claim,
         "checked": affected,
         "stale_count": stale_count,
+        "unchecked_count": unchecked_count,
     }

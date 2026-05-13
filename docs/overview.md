@@ -85,7 +85,7 @@ sequenceDiagram
   U->>T: press n to reject a hypothesis
   T->>DB: write cockpit_interventions
 
-  Note over C,V: Phase 4: preregister before running
+   Note over C,V: Phase 4: preregister confirmatory runs
   C->>V: preregister (lock metric, threshold, direction)
   V->>DB: write ver_preregistrations(open)
 
@@ -121,9 +121,9 @@ The research mainline is split into three phases that must run in order:
 
 1. **Decision phase**: generate hypotheses → BT tournament ranking → preregister metrics and thresholds
 2. **Experiment phase**: budget gate → safety check → run experiment → multi-seed stability check → fairness comparison → provenance record
-3. **Writeup phase**: the reviewer agent inspects every numeric claim, demanding all four of: pinned metric, stable seed verdict, met preregistration, fresh provenance
+3. **Writeup phase**: the reviewer agent classifies numeric claims. Central confirmatory metrics need the full chain: pinned metric, stable seed verdict, met preregistration, and non-stale provenance. Exploratory claims and context numbers are labelled instead of blocked by default.
 
-The reviewer rejects any number that cannot trace back to those four anchors. This is how the project enforces "trustworthy results" as an engineering invariant.
+The reviewer rejects publication-critical numbers that cannot trace back to the relevant anchors. This keeps the hard gate focused on claims users would actually publish, while letting exploratory notes and operational context remain usable.
 
 ### 5.3 Automation only does things that are reversible or auditable
 

@@ -136,6 +136,41 @@ def record_failure(
     _check_domain(domain)
     signature = _signature(trigger, symptom, root_cause, resolution)
     with tx() as con:
+        existing = con.execute(
+            """
+            SELECT failure_id, seen_count
+            FROM mem_failures
+            WHERE signature = ? AND domain = ?
+            ORDER BY failure_id ASC
+            LIMIT 1
+            """,
+            (signature, domain),
+        ).fetchone()
+        if existing is not None:
+            failure_id = int(existing["failure_id"])
+            seen_count = int(existing["seen_count"]) + 1
+            con.execute(
+                """
+                UPDATE mem_failures
+                SET seen_count = ?, last_seen = CURRENT_TIMESTAMP
+                WHERE failure_id = ?
+                """,
+                (seen_count, failure_id),
+            )
+            _emit_event(
+                con,
+                "failure_added",
+                {
+                    "failure_id": failure_id,
+                    "trigger": trigger,
+                    "symptom": symptom,
+                    "domain": domain,
+                    "seen_count": seen_count,
+                    "deduplicated": True,
+                },
+            )
+            return {"failure_id": failure_id, "domain": domain, "deduplicated": True}
+
         cur = con.execute(
             """
             INSERT INTO mem_failures(
@@ -155,9 +190,11 @@ def record_failure(
                 "trigger": trigger,
                 "symptom": symptom,
                 "domain": domain,
+                "seen_count": 1,
+                "deduplicated": False,
             },
         )
-    return {"failure_id": failure_id, "domain": domain}
+    return {"failure_id": failure_id, "domain": domain, "deduplicated": False}
 
 
 def match_signatures(

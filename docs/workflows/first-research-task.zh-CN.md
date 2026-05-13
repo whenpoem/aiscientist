@@ -75,9 +75,9 @@ mcp__memory__get_bt_leaderboard top_k=5
 
 榜首假说与亚军的置信区间不重叠时，它就是要推进的候选。
 
-## 3. 在任何实验之前先预注册
+## 3. 为确认性实验预注册
 
-这是门禁，不要跳过。
+如果下一次运行要支撑主结论，先锁定目标；如果还在探索，可以先跑，但必须把结果标成探索性，不能直接当成最终确认性结论。
 
 ```
 /preregister hyp_8a3f... metric=test_accuracy direction=higher_better threshold=0.85
@@ -110,7 +110,7 @@ engineer 会写脚本。在它写的过程中，几个 hook 会自动触发：
 mcp__verify__seed_perturb script_path=mnist_proxy.py seeds=[0,1,2]
 ```
 
-这会用不同的 `--seed` 把脚本重跑三次，计算 test accuracy 的均值和标准差，写入 `ver_seed_runs`。如果标准差小于 0.01，verdict 就是 `stable`，否则 `unstable`。cockpit 的 "Claims" 标签现在会在指标旁显示 ✓ 或 ✗。
+这会用不同的 `--seed` 把脚本重跑三次，计算 test accuracy 的均值和标准差，写入 `ver_seed_runs`。默认稳定性检查会自动选择合适容差：小型有界指标近似按绝对容差，大尺度指标按相对容差。cockpit 的 "Claims" 标签现在会在指标旁显示 ✓ 或 ✗。
 
 ## 6. pin 指标并解锁预注册
 
@@ -136,7 +136,7 @@ mcp__verify__resolve_preregistration prereg_id=preg_... observed_value=0.873
 mcp__verify__refresh_claim claim="vit_dropout_test_accuracy"
 ```
 
-这会重新计算该声明 DAG 中每个输入文件的哈希。如果有任何文件相比当初 `record_provenance` 时发生了漂移，声明会被标记为 `stale`，并触发 `prov_dag_stale` 事件。**stale 是写作的硬阻断项。**
+这会重新计算该声明 DAG 中每个输入文件的哈希。如果有任何文件相比当初 `record_provenance` 时发生了漂移，声明会被标记为 `stale`，并触发 `prov_dag_stale` 事件。stale provenance 会阻断发布级核心声明；没有 DAG 的记录会作为 unchecked 审计信息暴露出来。
 
 ## 8. 总结并暂停弱分支
 
@@ -162,7 +162,7 @@ mcp__memory__suggest_pause_low_strength ucb_threshold=-0.5
 @reviewer 准备一份 dropout 研究的一页总结
 ```
 
-reviewer agent 会强制执行 writeup 契约：每个数值声明都必须有 met 的预注册、stable 的种子结论、fresh 的 provenance、以及一个 metric pin。任何一项缺失，reviewer 都会拒绝起草，并列出阻断项。
+reviewer agent 会对发布级核心声明执行 writeup 契约：中心 confirmatory 指标需要 metric pin、stable 的种子结论、met 的预注册、以及未漂移的 provenance。探索性结果和上下文数字要如实标注，而不是一律通过所有硬门。
 
 ## 10. 结束 session
 

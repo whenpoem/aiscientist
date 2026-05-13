@@ -144,8 +144,8 @@ var_j := 1 / (1/var_j + fisher)
 
 这两个机制配合起来，构成了"可信数值"的工程化保证。
 
-- **任何最终写入手稿的数值声明都必须可追溯**到一个 `ver_preregistrations.prereg_id`（其 `status='met'`）以及一个 `ver_seed_runs.verdict='stable'`。`reviewer` 子智能体在写作阶段会强制执行这条规则。
-- **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希。** `refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。**provenance 过期是写作的硬阻断项。**
+- **发布级核心数值声明要可追溯**到 pin 过的 provenance、稳定的 seed 证据，以及 confirmatory 声明的 `ver_preregistrations.prereg_id`（其 `status='met'`）。探索性结果必须标注为探索性，而非静默提升为主结论。`reviewer` 子智能体在写作阶段会强制执行这条规则。
+- **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希。** `refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。stale provenance 会阻断发布级核心声明；没有 DAG 的记录会作为 unchecked 审计信息暴露出来，不能自动当成 freshness 证明。
 - **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正。** 一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。当前 v3.0 兼容实现中，`bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的别名。
 
 ### 11. 资源账本（v3.0）
@@ -220,7 +220,7 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 1. **同一棵树。** `mem_nodes.kind` 接受 `proposition`、`proof_skeleton`、`proof_snippet` 与原有 empirical kind。命题节点可以与 hypothesis 节点作为同一个 question 节点的兄弟。
 2. **同一本错题本。** `mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
 3. **同一张排行榜。** BT 比较同时接受 `hypothesis` 与 `proof_skeleton`（仅同 kind）。跨 kind 比较仍被禁止以避免语义混乱。
-4. **同一个评审，两份清单。** `reviewer.md` 按 manuscript 内容自动切清单——empirical 数字断言保持原有四件套（pin / seed verdict / met preregistration / fresh provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证或显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
+4. **同一个评审，两份清单。** `reviewer.md` 按 manuscript 内容自动切清单——empirical 中心声明使用相关证据锚点（pin / seed verdict / confirmatory 声明的 met preregistration / 未变旧 provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证或显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
 
 `prove_mcp.tools.nodes` 是 proof trunk 唯一允许写入 shared graph tables（`mem_nodes`、`mem_edges`，以及 proof-skeleton 的 `mem_bt_ratings` seed）的入口。这个窄例外让"同一棵树"接口真正可用，但不会让 `prove_mcp` 其它部分变成 memory table owner。
 
@@ -250,10 +250,10 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 证明主干与 empirical 主干共用 `verify_mcp.budget_check` / `budget_consume` 节流。`.claude/agents/prover.md` § Budget 与 `prove-sop` skill 都要求：
 
 1. 用 `prove_mcp.triage_for_formalization` 的 `estimated_difficulty` 估算 wallclock。
-2. 任何 >= 5 分钟的 Lean 尝试，先调 `budget_check(scope='hypothesis:<proposition_id>', resource='wallclock_sec', requested=<估算>)`。
+2. 较长的 Lean 尝试（>= 5 分钟）先调 `budget_check(scope='hypothesis:<proposition_id>', resource='wallclock_sec', requested=<估算>)`。低成本尝试在没有预算配置时可以直接执行，留审计提醒即可。
 3. 尝试结束后用真实 `duration_sec` 调 `budget_consume`，让 `res_budget_ledger` 与 `prv_lean_attempts` 保持一致。
 
-直接 `record_lean_attempt(status='timeout')` 而事先没过 `budget_check`，会被 reviewer 视为审计可疑。
+直接 `record_lean_attempt(status='timeout')` 而事先没过 `budget_check` 是审计提醒，但不影响 NL 证明本身的有效性。
 
 ### 14. 各模块地图
 

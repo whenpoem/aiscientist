@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -49,7 +50,7 @@ def test_intervention_pump_user_prompt_submit_uses_structured_context(workspace,
     assert "look at the baseline instead" in payload["hookSpecificOutput"]["additionalContext"]
 
 
-def test_intervention_pump_stop_is_a_noop(workspace, monkeypatch):
+def test_intervention_pump_stop_drains_rows(workspace, monkeypatch):
     workspace["cockpit.db"].ensure()
     con = workspace["cockpit.db"].connect()
     try:
@@ -64,7 +65,8 @@ def test_intervention_pump_stop_is_a_noop(workspace, monkeypatch):
     module = _load_hook("intervention_pump")
     payload = _run_hook(module, {"hook_event_name": "Stop", "session_id": "sess-2"}, monkeypatch)
 
-    assert payload == {}
+    assert payload["hookSpecificOutput"]["hookEventName"] == "Stop"
+    assert "stop here" in payload["hookSpecificOutput"]["additionalContext"]
 
     con = workspace["cockpit.db"].connect()
     try:
@@ -76,7 +78,23 @@ def test_intervention_pump_stop_is_a_noop(workspace, monkeypatch):
         con.close()
 
     assert row is not None
-    assert row["delivered_at"] is None
+    assert row["delivered_at"] is not None
+
+
+def test_settings_hooks_cover_read_and_stop_interventions():
+    settings_path = Path(__file__).resolve().parents[2] / ".claude" / "settings.json"
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+
+    pretool_matchers = [entry["matcher"] for entry in settings["hooks"]["PreToolUse"]]
+    assert "Read|Write|Edit|Bash" in pretool_matchers
+
+    stop_commands = [
+        hook["command"]
+        for entry in settings["hooks"]["Stop"]
+        for hook in entry["hooks"]
+    ]
+    assert any("intervention_pump.py" in command for command in stop_commands)
+    assert any("stop_flush.py" in command for command in stop_commands)
 
 
 def test_leakage_guard_returns_structured_pretooluse_deny(monkeypatch):
@@ -135,6 +153,36 @@ def test_leakage_guard_blocks_unproven_labeled_markdown_metrics(tmp_path, monkey
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "91.2%" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_leakage_guard_accepts_matching_claim_value_provenance(tmp_path, monkeypatch):
+    module = _load_hook("leakage_guard")
+    module.DB = tmp_path / "state.db"
+    con = sqlite3.connect(module.DB)
+    try:
+        con.execute(
+            "CREATE TABLE ver_provenance (claim TEXT, value TEXT)"
+        )
+        con.execute(
+            "INSERT INTO ver_provenance(claim, value) VALUES(?,?)",
+            ("validation_accuracy", "91.2%"),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    payload = _run_hook(
+        module,
+        {
+            "tool_input": {
+                "file_path": "reports/summary.md",
+                "content": "Validation Accuracy: 91.2%",
+            }
+        },
+        monkeypatch,
+    )
+
+    assert payload == {}
 
 
 def test_destructive_bash_guard_returns_structured_pretooluse_deny(monkeypatch):

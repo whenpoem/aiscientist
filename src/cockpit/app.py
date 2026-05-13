@@ -1626,7 +1626,14 @@ class CockpitApp(App[None]):
     def _execute_command(self, command: str) -> None:
         if not command:
             return
-        parts = shlex.split(command)
+        try:
+            parts = shlex.split(command)
+        except ValueError as exc:
+            self.notify(
+                t(self.lang, "command_parse_error", error=str(exc)),
+                severity="warning",
+            )
+            return
         if not parts:
             return
         op, *args = parts
@@ -1655,6 +1662,15 @@ class CockpitApp(App[None]):
         elif op == "goto" and args:
             self._goto_node(args[0])
             return  # _goto_node handles its own refresh; skip the global one
+        elif op == "pin":
+            self.notify(t(self.lang, "command_pin_usage"), severity="warning")
+            return
+        else:
+            self.notify(
+                t(self.lang, "command_unknown", command=op),
+                severity="warning",
+            )
+            return
         self.refresh_state(include_events=True)
 
     def _goto_node(self, target: str) -> None:

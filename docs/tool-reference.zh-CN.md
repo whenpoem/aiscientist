@@ -45,7 +45,7 @@
 3. `find_contradictions` — 查图里有没有互相矛盾的结论
 4. `baseline_fairness` — 确认 baseline 比较是公平的
 
-`reviewer` agent 会自动调用这些工具，任何缺少 pin、稳定 seed、met 预注册或新鲜 provenance 的声明都会被拦下。
+`reviewer` agent 会对发布级核心声明自动调用这些工具。中心 confirmatory 指标需要 pin、稳定 seed、met 预注册和未变旧的 provenance；上下文数字和探索性结果应明确标注，而不是一律当作硬门。
 
 ### 出了问题怎么办
 
@@ -108,8 +108,8 @@
 
 ### 失败记忆
 
-#### `record_failure(trigger, symptom, root_cause="", resolution="")`
-向带 FTS5 索引的 `mem_failures` 表插入一条失败记录。同时计算确定性签名，重复失败会让 `seen_count` 累加，而不是堆叠成多行。
+#### `record_failure(trigger, symptom, root_cause="", resolution="", domain="empirical")`
+向带 FTS5 索引的 `mem_failures` 表插入一条失败记录。同时计算确定性签名，同一 domain 内的重复失败会让 `seen_count` 累加，而不是堆叠成多行。
 
 **返回**：`{"failure_id": <int>}`
 
@@ -284,8 +284,8 @@
 
 ### 指标 pin
 
-#### `pin_metric(claim, value, session_id, source_command="", note="")`
-pin 住一个核心指标，让写作流程知道哪些数字是要紧的。会创建一行 provenance 和一行 `ver_metric_pins`，并把它们关联起来。发出 `claim_pinned`。
+#### `pin_metric(claim, value, session_id, source_command="", note="", input_files=None, parent_prov_ids=None)`
+pin 住一个核心指标，让写作流程知道哪些数字是要紧的。会创建一行 provenance 和一行 `ver_metric_pins`，并把它们关联起来。提供 `input_files` 或 `parent_prov_ids` 时，还会写入 provenance DAG，供后续 freshness 检查。发出 `claim_pinned`。
 
 **返回**：`{"pinned": True, "pin_id": <int>, "provenance_id": <int>}`
 
@@ -293,8 +293,8 @@ pin 住一个核心指标，让写作流程知道哪些数字是要紧的。会�
 
 ### 种子与公平性
 
-#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600)`
-对每个种子（默认 `[0, 1, 2]`）跑一遍 `script_path`。从每次的 stdout 抠出指标，计算均值和标准差，把 verdict 分类为 `stable` 或 `unstable`（阈值：std < 0.01）。提供 `metric_pin_id` 时，本次种子运行会被关联到那个 pin，这样写作检查能找到它。
+#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto")`
+对每个种子（默认 `[0, 1, 2]`）跑一遍 `script_path`。从每次的 stdout 抠出指标，计算均值和标准差，把 verdict 分类为 `stable` 或 `unstable`。`stability_mode="auto"` 对小型有界指标使用绝对容差，对大尺度指标使用相对容差；调用方也可以强制 `absolute` 或 `relative`。提供 `metric_pin_id` 时，本次种子运行会被关联到那个 pin，这样写作检查能找到它。
 
 **返回**：`{"ok": True, "values": [...], "mean": ..., "std": ..., "verdict": "stable"|"unstable"}`
 
@@ -318,17 +318,17 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ### 预注册
 
-#### `preregister(hypothesis_id, metric, direction, threshold, mc_correction="bh", alpha=0.05, seeds=None, note="")`
+#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bh")`
 **在任何实验开始之前**就锁定该假说的证伪目标。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bh`、`bonferroni`、`none`；当前 `bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的 v3.0 兼容别名。发出 `prereg_locked`。
 
-**返回**：`{"prereg_id": "preg_...", "alpha_adjusted": <float>}`
+**返回**：`{"prereg_id": "prereg_...", "status": "open", ...}`
 
 **何时使用**：作为 BT 锦标赛与 engineer 子智能体之间的门禁。任何实验都不应在没有它的情况下启动。
 
-#### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None, note="")`
+#### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None)`
 拿 `observed_value` 与锁定的阈值和方向比对。如果给了 `observed_p_value`，就在所有当前打开的预注册上应用多重比较校正。发出 `prereg_resolved`。
 
-**返回**：`{"status": "met"|"unmet", "adjusted_p_value": ..., ...}`
+**返回**：`{"status": "met"|"missed", "adjusted_p_value": ..., ...}`
 
 **何时使用**：实验跑完、指标 pin 完成之后。
 
@@ -341,7 +341,7 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ### 资源预算
 
-#### `budget_check(scope, resource, window)`
+#### `budget_check(scope, resource, requested, window="session")`
 对一行 `(scope, resource, window)` 账本做只读检查。
 
 - `scope`：通常是 `session`、`per_hypothesis` 或 `global`

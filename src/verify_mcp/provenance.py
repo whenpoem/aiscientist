@@ -12,12 +12,14 @@ from __future__ import annotations
 from claudescientist.runtime import (
     METRIC_RE,
     NUMBER_RE,
+    extract_labeled_metric_records,
     extract_metric_tokens,
 )
 
 __all__ = [
     "METRIC_RE",
     "NUMBER_RE",
+    "extract_labeled_metric_records",
     "extract_metric_tokens",
     "normalize_claim",
     "normalize_value",

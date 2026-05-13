@@ -229,10 +229,70 @@ def write_json_file(path: Path, payload: Any) -> None:
 # force the others to reach across layers.
 # ---------------------------------------------------------------------------
 
+METRIC_WORDS = (
+    "acc",
+    "accuracy",
+    "f1",
+    "auc",
+    "auroc",
+    "auprc",
+    "loss",
+    "precision",
+    "recall",
+    "mse",
+    "rmse",
+    "mae",
+    "bleu",
+    "rouge",
+    "score",
+    "metric",
+    "error",
+)
+NOISE_METRIC_WORDS = (
+    "epoch",
+    "step",
+    "seed",
+    "batch",
+    "sample",
+    "param",
+    "second",
+    "minute",
+    "hour",
+    "iteration",
+    "iter",
+    "token",
+    "ms",
+    "sec",
+    "time",
+    "throughput",
+    "speed",
+    "wall",
+)
+METRIC_LABEL_FRAGMENT = (
+    r"(?:best|train|val|valid|validation|dev|test|holdout|oof|cv|cross[ -]?val)?"
+    r"[ _-]*"
+    r"(?:top[ -]?\d+[ _-]*)?"
+    r"(?:acc(?:uracy)?|f1(?:[ _-]?score)?|auc|auroc|auprc|loss|precision|recall|"
+    r"mse|rmse|mae|bleu|rouge(?:[- ]?[a-z0-9]+)?|score|metric|error)"
+)
 METRIC_RE = re.compile(
-    r"(?P<label>(?:acc(?:uracy)?|f1|auc|loss|precision|recall|mse|rmse|mae|bleu|rouge|score|metric)[^:=\n]{0,24})"
-    r"[:= ]+"
+    rf"(?P<label>{METRIC_LABEL_FRAGMENT})\s*(?:[:=]|is|\s)\s*"
     r"(?P<value>[-+]?\d+(?:\.\d+)?%?)",
+    re.IGNORECASE,
+)
+_LABEL_BEFORE_VALUE_RE = re.compile(
+    rf"(?P<label>{METRIC_LABEL_FRAGMENT})\s*(?:[:=]|is)\s*"
+    r"(?P<value>[-+]?\d+(?:\.\d+)?%?)",
+    re.IGNORECASE,
+)
+_LABEL_AND_VALUE_RE = re.compile(
+    rf"(?P<label>{METRIC_LABEL_FRAGMENT})\s+"
+    r"(?P<value>[-+]?\d+(?:\.\d+)?%?)",
+    re.IGNORECASE,
+)
+_VALUE_BEFORE_LABEL_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?P<value>[-+]?\d+(?:\.\d+)?%?)\s+"
+    rf"(?P<label>{METRIC_LABEL_FRAGMENT})\b",
     re.IGNORECASE,
 )
 
@@ -245,6 +305,71 @@ def extract_metric_tokens(text: str) -> list[str]:
     if values:
         return values
     return NUMBER_RE.findall(text)
+
+
+def normalize_metric_label(label: str) -> str:
+    """Normalize a metric label to a stable snake-ish claim key."""
+    label = label.strip().lower()
+    label = label.replace("%", "pct")
+    label = label.replace("/", "_")
+    label = re.sub(r"[^a-z0-9]+", "_", label)
+    label = re.sub(r"_+", "_", label).strip("_")
+    return label[:64]
+
+
+def looks_like_metric_label(label: str) -> bool:
+    lowered = label.lower()
+    has_metric_word = any(word in lowered for word in METRIC_WORDS)
+    has_noise_word = any(word in lowered for word in NOISE_METRIC_WORDS)
+    return has_metric_word and not has_noise_word
+
+
+def extract_labeled_metric_records(text: str) -> list[tuple[str, str]]:
+    """Return ``(normalized_label, value)`` pairs for labelled metric output.
+
+    This deliberately ignores bare numbers. Hooks use it to avoid treating
+    years, seed counts, version numbers, and narrative quantities as result
+    claims.
+    """
+    records: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        found_on_line = False
+        for pattern in (
+            _LABEL_BEFORE_VALUE_RE,
+            _LABEL_AND_VALUE_RE,
+            _VALUE_BEFORE_LABEL_RE,
+        ):
+            for match in pattern.finditer(line):
+                label = normalize_metric_label(match.group("label"))
+                value = match.group("value")
+                if not label or not looks_like_metric_label(label):
+                    continue
+                record = (label, value)
+                if record in seen:
+                    continue
+                seen.add(record)
+                records.append(record)
+                found_on_line = True
+        if found_on_line:
+            continue
+        lowered = line.lower()
+        if not any(word in lowered for word in METRIC_WORDS):
+            continue
+        values = extract_metric_tokens(line)
+        if not values:
+            continue
+        fallback_label = normalize_metric_label(line.split(":")[0].split("=")[0])
+        if not looks_like_metric_label(fallback_label):
+            fallback_label = "bash_metric"
+        record = (fallback_label, values[0])
+        if record not in seen:
+            seen.add(record)
+            records.append(record)
+    return records
 
 
 # ---------------------------------------------------------------------------

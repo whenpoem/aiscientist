@@ -40,6 +40,24 @@ def test_pin_metric_creates_pin_and_linked_provenance(workspace):
     }
 
 
+def test_pin_metric_can_record_input_hashes(workspace, tmp_path):
+    impl = workspace["verify_mcp.impl"]
+    payload = tmp_path / "dataset.csv"
+    payload.write_text("x,y\n1,2\n", encoding="utf-8")
+
+    result = impl.pin_metric(
+        claim="validation accuracy",
+        value="0.91",
+        session_id="sess-dag",
+        input_files=[str(payload)],
+    )
+
+    assert "dag" in result
+    fresh = impl.refresh_claim("validation accuracy")
+    assert fresh["status"] == "fresh"
+    assert fresh["unchecked_count"] == 0
+
+
 def test_record_provenance_normalizes_claims(workspace):
     impl = workspace["verify_mcp.impl"]
 
@@ -78,7 +96,9 @@ def test_check_provenance_includes_seed_verdict_for_pins(workspace):
     assert evidence["pins"][0]["id"] == pin["pin_id"]
     assert evidence["pins"][0]["pin_id"] == pin["pin_id"]
     assert evidence["pins"][0]["seed_verdict"] == "stable"
-    assert evidence["pins"][0]["seed_run_count"] == 1
+    assert evidence["pins"][0]["seed_suite_count"] == 1
+    assert evidence["pins"][0]["seed_run_count"] == 3
+    assert evidence["pins"][0]["latest_seed_count"] == 3
     assert evidence["pins"][0]["latest_seed_run_id"] == seed_run["run_id"]
 
 

@@ -45,11 +45,13 @@ Critical invariants
 - ``query_heldout`` is the only intended access path to sequestered data.
   Direct file reads are blocked by ``leakage_guard.py``. Failed model runs
   still consume reserved budget because the script was already authorised.
-- The four anchors for an accepted numeric claim are: ``record_provenance``,
-  a stable ``ver_seed_runs.verdict``, a ``status='met'``
-  ``ver_preregistrations`` row, and a fresh ``ver_provenance_dag``.
+- The anchors for an accepted publication-critical numeric claim are:
+  ``record_provenance`` / ``pin_metric``, a stable ``ver_seed_runs.verdict``,
+  a ``status='met'`` ``ver_preregistrations`` row for confirmatory claims,
+  and non-stale ``ver_provenance_dag`` evidence when input files were tracked.
 - ``refresh_claim`` re-hashes input files and emits ``prov_dag_stale``
-  events; stale provenance is a hard blocker for writeup.
+  events; stale provenance is a publication blocker, while missing DAG rows are
+  surfaced as unchecked audit context rather than silently treated as proof.
 - ``bh`` and ``bonferroni`` currently share the same Bonferroni-style
   correction in ``resolve_preregistration``; it runs against the count of
   *currently open* prereg rows, so the more open at once, the stricter the

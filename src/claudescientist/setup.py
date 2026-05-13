@@ -179,6 +179,7 @@ def _print_banner() -> None:
 
 
 _QUICKSTART_DOC = Path("docs/workflows/first-research-task.md")
+_DEFAULT_HELDOUT_DIR = Path.home() / ".research-agent" / "heldout"
 
 
 def _print_cheatsheet(state: SetupState) -> None:
@@ -683,8 +684,13 @@ def step_heldout_dir(state: SetupState) -> bool:
     _heading(5, 7, "Held-out dataset directory")
     home = str(Path.home())
     current = io.read_env_file(state.env_path).get(
-        "RESEARCH_AGENT_HELDOUT_DIR", home
+        "RESEARCH_AGENT_HELDOUT_DIR", str(_DEFAULT_HELDOUT_DIR)
     )
+    # Older setup builds used the whole home directory as the held-out root.
+    # That makes the leakage guard treat normal user files as sequestered data.
+    # Heal that legacy value on the next setup run.
+    if Path(os.path.expandvars(os.path.expanduser(current))).resolve() == Path(home).resolve():
+        current = str(_DEFAULT_HELDOUT_DIR)
     default_dir = (
         _env_flag("CLAUDESCIENTIST_SETUP_HELDOUT_DIR", current)
         if state.non_interactive
@@ -695,7 +701,7 @@ def step_heldout_dir(state: SetupState) -> bool:
         chosen = default_dir
     else:
         _console.print(
-            "  default: your home directory. Pick another path if you want\n"
+            "  default: ~/.research-agent/heldout. Pick another path if you want\n"
             "  held-out registrations to live elsewhere (e.g. an external SSD)."
         )
         chosen = _ask_text(state, "held-out directory:", default=default_dir)
@@ -703,7 +709,7 @@ def step_heldout_dir(state: SetupState) -> bool:
             return False
     chosen = chosen.strip()
     if not chosen:
-        chosen = home
+        chosen = str(_DEFAULT_HELDOUT_DIR)
 
     expanded = Path(os.path.expandvars(os.path.expanduser(chosen))).resolve()
     if not expanded.exists():

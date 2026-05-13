@@ -78,6 +78,27 @@ def test_cockpit_data_layer_reads_existing_tables(workspace):
     assert intervention["event_id"] in {events[-2]["id"], events[-1]["id"]}
 
 
+def test_fetch_claims_treats_one_seed_suite_as_verified(workspace):
+    impl = workspace["verify_mcp.impl"]
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parents[1] / "verify_mcp" / "fixtures" / "seed_stable.py"
+
+    pin = impl.pin_metric(
+        claim="test accuracy",
+        value="0.875",
+        session_id="seed-suite",
+        source_command=str(fixture),
+    )
+    impl.seed_perturb(script_path=str(fixture), metric_pin_id=pin["pin_id"])
+
+    claims = cockpit_data.fetch_claims()
+
+    claim = next(row for row in claims if row["pin_id"] == pin["pin_id"])
+    assert claim["seeds"] == "3/3"
+    assert claim["verified"] is True
+
+
 def test_fetch_new_events_bootstraps_recent_window(workspace):
     for index in range(2505):
         cockpit_data.record_event("note", {"index": index})

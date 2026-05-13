@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-564-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-571-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > English version: [README.md](README.md)
 
@@ -17,7 +17,7 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 并排打开两个终端窗口，就是全部界面。
 
 <picture>
-  <img alt="Cockpit TUI 截图" src="docs/assets/cockpit-screenshot.svg" width="800">
+  <img alt="Cockpit TUI 截图" src="docs/assets/image.png" width="800">
 </picture>
 
 *Cockpit TUI —— 假说树、证据、评分、事件流，一个终端窗口搞定。*
@@ -108,8 +108,8 @@ Lean 形式化验证需要单独安装——见 [`docs/setup-lean.zh-CN.md`](doc
 默认路径：
 
 - 共享状态：仓库根目录下的 `.research-agent/state.db`
-- 隔离数据集：`%USERPROFILE%` 下，可用 `RESEARCH_AGENT_HELDOUT_DIR` 改写
-- Embedding 后端：`local`（sentence-transformers/all-MiniLM-L6-v2）；用 `RESEARCH_AGENT_EMBED_BACKEND=mock|openai` 覆盖。测试自动使用 `mock`。
+- 隔离数据集：`%USERPROFILE%\.research-agent\heldout`，可用 `RESEARCH_AGENT_HELDOUT_DIR` 改写
+- Embedding 后端：`local`（sentence-transformers/Qwen/Qwen3-Embedding-0.6B）；用 `RESEARCH_AGENT_EMBED_BACKEND=mock|openai` 覆盖。测试自动使用 `mock`。
 
 单个 MCP 模块的开发服务器命令：
 

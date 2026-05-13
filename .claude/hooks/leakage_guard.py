@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Iterator
 
 from claudescientist.runtime import (
-    METRIC_RE,
     connect_existing_sqlite,
+    extract_labeled_metric_records,
     heldout_root,
     state_db_path,
 )
@@ -153,22 +153,53 @@ def _deny(reason: str) -> None:
     )
 
 
-def _missing_provenance(values: list[str]) -> list[str]:
+def _claim_variants(claim: str) -> tuple[str, ...]:
+    spaced = claim.replace("_", " ")
+    underscored = claim.replace(" ", "_")
+    return tuple(dict.fromkeys([claim, spaced, underscored]))
+
+
+def _value_variants(value: str) -> tuple[str, ...]:
+    stripped = value.strip()
+    bare_percent = stripped[:-1] if stripped.endswith("%") else stripped
+    return tuple(dict.fromkeys([stripped, bare_percent]))
+
+
+def _missing_provenance(records: list[tuple[str, str]]) -> list[str]:
     con = connect_existing_sqlite(DB)
     if con is None:
-        return values
+        return [f"{claim}={value}" for claim, value in records]
     try:
         missing: list[str] = []
-        for value in values:
+        for claim, value in records:
+            claim_options = _claim_variants(claim)
+            value_options = _value_variants(value)
+            claim_marks = ",".join("?" for _ in claim_options)
+            value_marks = ",".join("?" for _ in value_options)
             row = con.execute(
-                "SELECT 1 FROM ver_provenance WHERE value = ? LIMIT 1",
-                (value,),
+                f"""
+                SELECT 1
+                FROM ver_provenance
+                WHERE claim IN ({claim_marks}) AND value IN ({value_marks})
+                LIMIT 1
+                """,
+                (*claim_options, *value_options),
             ).fetchone()
             if row is None:
-                missing.append(value)
+                row = con.execute(
+                    f"""
+                    SELECT 1
+                    FROM ver_provenance
+                    WHERE value IN ({value_marks})
+                    LIMIT 1
+                    """,
+                    value_options,
+                ).fetchone()
+            if row is None:
+                missing.append(f"{claim}={value}")
         return missing
     except sqlite3.OperationalError:
-        return values
+        return [f"{claim}={value}" for claim, value in records]
     finally:
         con.close()
 
@@ -181,16 +212,8 @@ def _should_verify_markdown(path_value: str) -> bool:
     return any(part in {"reports", "writeup"} for part in parts)
 
 
-def _metric_values_from_text(text: str) -> list[str]:
-    values: list[str] = []
-    seen: set[str] = set()
-    for match in METRIC_RE.finditer(text):
-        value = match.group("value")
-        if value in seen:
-            continue
-        seen.add(value)
-        values.append(value)
-    return values
+def _metric_records_from_text(text: str) -> list[tuple[str, str]]:
+    return extract_labeled_metric_records(text)
 
 
 def main() -> None:
@@ -211,9 +234,9 @@ def main() -> None:
             path_value = candidate
             break
     if _should_verify_markdown(path_value):
-        numeric_values = _metric_values_from_text("\n".join(strings))
-        if numeric_values:
-            missing = _missing_provenance(numeric_values)
+        metric_records = _metric_records_from_text("\n".join(strings))
+        if metric_records:
+            missing = _missing_provenance(metric_records)
             if missing:
                 _deny(
                     "Markdown write blocked. Missing provenance for numeric claims: "

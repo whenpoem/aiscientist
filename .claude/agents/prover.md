@@ -20,7 +20,7 @@ Lean attempts can run multiple minutes. Before starting any non-trivial attempt:
 3. If `allowed == True`, proceed to drafting. Once the attempt finishes (verified, failed, or timeout), call `mcp__verify__budget_consume(scope=..., resource='wallclock_sec', amount=<actual_duration_sec>, window='daily')` so the ledger reflects real usage.
 4. Pass the actual `duration_sec` to `record_lean_attempt` so `prv_lean_attempts` and the budget ledger stay consistent.
 
-If `mcp__verify__budget_check` returns `reason='no_budget_configured'`, ask the user to seed the ledger with `mcp__verify__budget_consume(scope='session', resource='wallclock_sec', amount=0, limit_value=3600, window='daily')` (or whatever ceiling they prefer); do **not** silently bypass the gate.
+If `mcp__verify__budget_check` returns `reason='no_budget_configured'`, surface that as an audit warning. For a low-cost attempt (about 60 s), you may proceed and record the actual duration. For longer attempts, ask the user to seed the ledger with `mcp__verify__budget_consume(scope='session', resource='wallclock_sec', amount=0, limit_value=3600, window='daily')` (or whatever ceiling they prefer).
 
 ## Lean drafting
 

@@ -1,15 +1,16 @@
 ---
 name: preregister
-description: Lock the falsification target for a hypothesis BEFORE any experiment runs. Records metric, direction, threshold, multiple-comparison correction, and seed budget into ver_preregistrations. Required by V3.0 research-sop after the BT tournament selects a winner.
+description: Lock the falsification target for a confirmatory hypothesis before promoting results to main claims. Records metric, direction, threshold, multiple-comparison correction, and seed budget into ver_preregistrations.
 ---
 
 # Preregister
 
-This skill enforces "decide before observing": the engineer cannot use seed_perturb / pin_metric to pin a number unless a matching prereg row exists.
+This skill supports "decide before observing" for confirmatory claims. Exploratory runs may still use seed_perturb / pin_metric, but any number intended as a main publication claim should have a matching prereg row first.
 
 ## When to invoke
 
-- Right after `bt-tournament` returns the top-2 hypotheses and BEFORE the engineer touches any code.
+- Before a result is promoted from exploratory to a confirmatory manuscript claim.
+- Right after `bt-tournament` returns the top-2 hypotheses when the next run is explicitly confirmatory.
 - Whenever the user types `/preregister`.
 
 ## Required arguments
@@ -27,7 +28,7 @@ This skill enforces "decide before observing": the engineer cannot use seed_pert
 
 ## Workflow
 
-1. Call `mcp__verify__list_preregistrations(hypothesis_id=...)`. If a row exists with status `open`, fail loudly: do not double-lock.
+1. Call `mcp__verify__list_preregistrations(hypothesis_id=...)`. If a row exists with status `open`, do not fail the session. Ask whether to reuse that lock, withdraw it outside this tool, or create a separate confirmatory prereg for a genuinely different metric.
 2. Call `mcp__verify__preregister(...)` with the exact metric text and threshold.
 3. Surface the resulting `prereg_id` in the cockpit `Claims` tab; the user must see it before the engineer starts implementing.
 4. Pass `prereg_id` along the agent chain so `engineer` knows which lock applies.
@@ -38,10 +39,10 @@ The engineer or verifier later calls `mcp__verify__resolve_preregistration(prere
 
 - BH / Bonferroni correction is applied across all currently-open rows (so locking many preregs at once intentionally tightens alpha).
 - `prereg_resolved` events fire into the cockpit.
-- The `reviewer` agent later refuses to accept any manuscript whose claims point to a prereg with status != `met`.
+- The `reviewer` agent later treats confirmatory manuscript claims with status != `met` as blockers. Exploratory claims must be labelled as exploratory in the manuscript.
 
 ## Guardrails
 
-- Never edit a prereg after lock. There is no `update_preregistration`. If the locking was wrong, file a new prereg with `mc_correction='none'` and add a note in the manuscript.
+- Never edit a prereg after lock. There is no `update_preregistration`. If the locking was wrong, file a new prereg and add a note in the manuscript explaining that the earlier run was exploratory or superseded.
 - `withdrawn` is reserved for cases the user actively cancels a hypothesis; the verifier never withdraws on its own.
-- Do not invoke this skill in parallel with seed_perturb. Lock first, then run.
+- Do not invoke this skill in parallel with a confirmatory seed_perturb. Exploratory seed_perturb runs may exist before the lock, but must stay labelled exploratory.

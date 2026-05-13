@@ -1,20 +1,20 @@
 # 实操：写一篇论文
 
 > English version: [writing-a-paper.md](writing-a-paper.md)
-> 如何利用验证栈起草一份"每个数字都可追溯"的手稿。如果还没读过 [`first-research-task.zh-CN.md`](first-research-task.zh-CN.md)，请先读那份——本教程假设你已经做完实验、pin 好了指标。
+> 如何利用验证栈起草一份"核心结果可追溯"的手稿。如果还没读过 [`first-research-task.zh-CN.md`](first-research-task.zh-CN.md)，请先读那份——本教程假设你已经做完实验、pin 好了指标。
 
-`reviewer` 子智能体强制执行一条严格契约：任何最终写入 `.md` 文件的数值声明，都必须可以追溯到四个锚点。这份文档解释如何端到端满足这个契约。
+`reviewer` 子智能体对发布级核心声明执行严格契约。日期、版本号、seed 数、baseline 数、模型大小等上下文数字应该准确，但它们本身不是硬门。
 
-## 四个锚点
+## 证据锚点
 
-下笔之前，先把 reviewer 会要的东西刻在脑子里。每个数字都要有：
+下笔之前，先把 reviewer 对中心结果指标会要的东西刻在脑子里：
 
 1. **指标 pin** —— 必须存在一行 `ver_metric_pins`，其 `claim` 与你引用的数字对得上
 2. **稳定的种子结论** —— 关联到该 pin 的 `ver_seed_runs.verdict='stable'`
-3. **达成的预注册** —— 一行 `ver_preregistrations`，`status='met'`
-4. **新鲜的 provenance** —— `refresh_claim` 报告 `status='fresh'`，没有漂移的输入文件
+3. **confirmatory 声明要有达成的预注册** —— 一行 `ver_preregistrations`，`status='met'`
+4. **未漂移的 provenance** —— `refresh_claim` 没有报告漂移的输入文件；没有 DAG 的记录是审计提醒，不能自动当成 freshness 证明
 
-四项中只要有一项缺失或过期，reviewer 就会拒绝起草，并列出缺失的锚点。这是功能，不是阻碍。
+发布级核心声明缺少相关锚点或 provenance 已漂移时，reviewer 会拒绝发布这条声明，并列出缺失项。探索性声明可以保留，但必须清楚标注。
 
 ## 第 0 步：先做一个快照
 
@@ -28,7 +28,7 @@ mcp__memory__snapshot label="paper-draft-v1"
 
 ## 第 1 步：列出所有声明
 
-打开一份新 markdown 文件，把你打算写的每一个数值声明列出来：
+打开一份新 markdown 文件，把你打算写的中心结果声明列出来：
 
 ```
 - ViT-S/16 加 per-head dropout 0.3，在 CIFAR-10 上达到 87.3%
@@ -38,7 +38,7 @@ mcp__memory__snapshot label="paper-draft-v1"
 - 在匹配的 epoch 预算下比较公平（proposed=20, baseline=18）
 ```
 
-这就是**声明清单（claim manifest）**。每一行对应一次锚点检查。
+这就是**声明清单（claim manifest）**。每条结果声明对应一次锚点检查；上下文数字可以留在正文里。
 
 ## 第 2 步：调用 writeup SOP
 
@@ -51,12 +51,12 @@ mcp__memory__snapshot label="paper-draft-v1"
 这会启动一个工作流，它会：
 
 1. 遍历声明清单
-2. 对每一个数值声明调用 `mcp__verify__check_provenance(claim)`
+2. 对每一个发布级核心指标或统计声明调用 `mcp__verify__check_provenance(claim)`
 3. 如果状态是 `missing`，暂停并要求你重跑实验或者删掉这条声明
 4. 如果状态是 `found`，再调用 `refresh_claim(claim)` 检测上游漂移
 5. 全部通过后，起草周边文字
 
-任何未通过验证的数字处，工作流都会明显地停下。这是正确行为。
+任何未通过验证的中心结果处，工作流都会明显地停下。上下文数字正常审阅，不当作 provenance 失败。
 
 ## 第 3 步：处理缺失的锚点
 
@@ -80,11 +80,10 @@ mcp__verify__seed_perturb script_path=<your_script>.py seeds=[0,1,2] metric_pin_
 
 ### "缺失或未达成预注册"
 
-数字是在没有预注册的情况下产生的。这里没有捷径——预注册必须**在实验之前**就存在。诚实的做法是：
+数字没有匹配的 confirmatory 预注册。要把它提升为主确认性结论没有捷径。诚实的做法是：
 
-1. 在手稿里如实承认这个结果是探索性的，而非确认性的
-2. 现在补一个预注册，**用新种子重跑**实验
-3. 引用重跑结果，而不是原结果
+1. 在手稿里如实承认这个结果是探索性的，而非确认性的，或者
+2. 现在补一个预注册，**用新种子重跑**实验，并引用重跑结果
 
 这正是项目要强制守住的"探索性分析 vs 确认性分析"的边界。
 
@@ -95,7 +94,7 @@ mcp__verify__seed_perturb script_path=<your_script>.py seeds=[0,1,2] metric_pin_
 1. 还原原始文件（如果漂移是无意的，这是最佳选项），要么
 2. 在当前文件上重跑实验，并更新 pin
 
-reviewer 不会接受 stale 的声明。
+reviewer 不会接受 stale 的发布级核心声明。
 
 ## 第 4 步：纳入审计痕迹
 
@@ -163,4 +162,4 @@ reviewer 会读完整份草稿，给出两种结果之一：
 
 ## 关于行文风格
 
-项目不对行文风格做任何主张，只强制可追溯性。一旦每个数字都通过了四锚点检查，你就可以用任何你喜欢的语气来写——除了数字之外，系统对其他一切保持沉默。
+项目不对行文风格做任何主张，只强制核心结果可追溯。一旦发布级核心声明通过了相关锚点检查，你就可以用任何你喜欢的语气来写；上下文数字和探索性结果要清楚、诚实地标注。

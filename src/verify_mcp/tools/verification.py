@@ -23,13 +23,17 @@ def _read_text(value: str) -> str:
 
 def _extract_pattern_value(text: str, pattern: str) -> float | None:
     matches = list(re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE))
-    if not matches:
-        return None
-    match = matches[-1]
-    value = match.groupdict().get("value") if match.groupdict() else None
+    if matches:
+        match = matches[-1]
+        value = match.groupdict().get("value") if match.groupdict() else None
+        if value is None:
+            groups = [group for group in match.groups() if group is not None]
+            value = groups[-1] if groups else match.group(0)
+    else:
+        tokens = extract_metric_tokens(text)
+        value = tokens[-1] if tokens else None
     if value is None:
-        groups = [group for group in match.groups() if group is not None]
-        value = groups[-1] if groups else match.group(0)
+        return None
     try:
         return float(value.replace(",", "").rstrip("%"))
     except ValueError:
@@ -52,6 +56,23 @@ def _verify_metric_pin(metric_pin_id: int | None) -> dict[str, object] | None:
     return None
 
 
+def _stability_threshold(
+    mean_value: float,
+    stability_tol: float,
+    stability_mode: str,
+) -> tuple[float, str]:
+    if stability_tol < 0:
+        raise ValueError("stability_tol must be non-negative.")
+    if stability_mode not in {"absolute", "relative", "auto"}:
+        raise ValueError("stability_mode must be one of: absolute, relative, auto")
+    if stability_mode == "absolute":
+        return float(stability_tol), "absolute"
+    relative_threshold = abs(float(mean_value)) * float(stability_tol)
+    if stability_mode == "relative":
+        return relative_threshold, "relative"
+    return max(float(stability_tol), relative_threshold), "auto"
+
+
 # ``extract_metric_tokens`` is imported but the verification tools below do
 # not currently call it directly; downstream consumers (and historical
 # callers via ``verify_mcp.impl``) sometimes import it through this module.
@@ -69,6 +90,7 @@ def seed_perturb(
     metric_pattern: str = r"test[_ ]acc(?:uracy)?[: =]+([\d.]+)",
     timeout_sec: int = 600,
     stability_tol: float = 0.01,
+    stability_mode: str = "auto",
     metric_pin_id: int | None = None,
     seed_env: str | None = "PYTHONHASHSEED",
     extra_env: dict[str, str] | None = None,
@@ -118,7 +140,13 @@ def seed_perturb(
 
     mean_value = statistics.fmean(values)
     std_value = statistics.stdev(values) if len(values) > 1 else 0.0
-    verdict = "stable" if std_value < stability_tol else "unstable"
+    threshold, resolved_stability_mode = _stability_threshold(
+        mean_value,
+        stability_tol,
+        stability_mode,
+    )
+    verdict = "stable" if std_value <= threshold else "unstable"
+    relative_std = std_value / abs(mean_value) if mean_value else None
 
     with tx() as con:
         cur = con.execute(
@@ -152,6 +180,8 @@ def seed_perturb(
                 "verdict": verdict,
                 "mean_value": mean_value,
                 "std_value": std_value,
+                "stability_threshold": threshold,
+                "stability_mode": resolved_stability_mode,
             },
         )
 
@@ -165,6 +195,10 @@ def seed_perturb(
         "values": values,
         "mean_value": mean_value,
         "std_value": std_value,
+        "relative_std": relative_std,
+        "stability_tol": stability_tol,
+        "stability_threshold": threshold,
+        "stability_mode": resolved_stability_mode,
         "verdict": verdict,
         "metric_pin_id": metric_pin_id,
         "stdout": outputs,

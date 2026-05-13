@@ -45,7 +45,7 @@ Most tasks use a handful of tools in a predictable order. Here are the five patt
 3. `find_contradictions` — check for conflicting claims in the graph
 4. `baseline_fairness` — verify fair comparison with baselines
 
-The `reviewer` agent calls these automatically and blocks any claim missing a pin, a stable seed verdict, a met preregistration, or fresh provenance.
+The `reviewer` agent calls these automatically for publication-critical claims. Central confirmatory metrics need a pin, stable seed verdict, met preregistration, and non-stale provenance; context numbers and exploratory claims are labelled rather than treated as hard gates.
 
 ### When something goes wrong
 
@@ -108,8 +108,8 @@ Walk the parent chain from `node_id` upward to the root.
 
 ### Failures
 
-#### `record_failure(trigger, symptom, root_cause="", resolution="")`
-Insert a failure record into the FTS5-indexed `mem_failures` table. Computes a deterministic signature so duplicates increment `seen_count` instead of stacking.
+#### `record_failure(trigger, symptom, root_cause="", resolution="", domain="empirical")`
+Insert a failure record into the FTS5-indexed `mem_failures` table. Computes a deterministic signature so duplicates in the same domain increment `seen_count` instead of stacking.
 
 **Returns**: `{"failure_id": <int>}`
 
@@ -273,7 +273,7 @@ Look up a claim and return its pin (if any), seed verdict, and source command.
 
 **Returns**: `{"status": "found"|"missing", "evidence": {...}}`
 
-**When to use**: by the writeup workflow before any numeric claim makes it into a manuscript.
+**When to use**: by the writeup workflow before a publication-critical result metric or statistical claim makes it into a manuscript.
 
 #### `refresh_claim(claim)`
 Re-hash every input file in the claim's provenance DAG and compare to stored hashes. Emits `prov_dag_stale` for any drift.
@@ -284,8 +284,8 @@ Re-hash every input file in the claim's provenance DAG and compare to stored has
 
 ### Pinned metrics
 
-#### `pin_metric(claim, value, session_id, source_command="", note="")`
-Pin a central metric so the writeup workflow knows which numbers matter. Creates one provenance row and one `ver_metric_pins` row, linking them. Emits `claim_pinned`.
+#### `pin_metric(claim, value, session_id, source_command="", note="", input_files=None, parent_prov_ids=None)`
+Pin a central metric so the writeup workflow knows which numbers matter. Creates one provenance row and one `ver_metric_pins` row, linking them. When `input_files` or `parent_prov_ids` are supplied, also writes a provenance DAG entry for later freshness checks. Emits `claim_pinned`.
 
 **Returns**: `{"pinned": True, "pin_id": <int>, "provenance_id": <int>}`
 
@@ -293,8 +293,8 @@ Pin a central metric so the writeup workflow knows which numbers matter. Creates
 
 ### Seed and fairness
 
-#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600)`
-Run `script_path` once per seed (defaults to `[0, 1, 2]`). Extract the metric from each stdout, compute mean and standard deviation, classify the verdict as `stable` or `unstable` (threshold: std < 0.01). When `metric_pin_id` is given, the seed run is linked to that pin so writeup checks can find it.
+#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto")`
+Run `script_path` once per seed (defaults to `[0, 1, 2]`). Extract the metric from each stdout, compute mean and standard deviation, classify the verdict as `stable` or `unstable`. `stability_mode="auto"` uses an absolute tolerance for small bounded metrics and a relative tolerance for larger-scale metrics; callers can force `absolute` or `relative`. When `metric_pin_id` is given, the seed run is linked to that pin so writeup checks can find it.
 
 **Returns**: `{"ok": True, "values": [...], "mean": ..., "std": ..., "verdict": "stable"|"unstable"}`
 
@@ -318,17 +318,17 @@ The only legitimate access path to held-out data. Reserves budget *before* execu
 
 ### Preregistration
 
-#### `preregister(hypothesis_id, metric, direction, threshold, mc_correction="bh", alpha=0.05, seeds=None, note="")`
-Lock the falsification target for a hypothesis **before any experiment runs**. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bh`, `bonferroni`, `none`; current `bh` and `bonferroni` modes are v3.0-compatible aliases for the same Bonferroni-style calculation. Emits `prereg_locked`.
+#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bh")`
+Lock the falsification target for a confirmatory hypothesis before promoting results to main claims. Exploratory runs may exist before this, but they must stay labelled exploratory. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bh`, `bonferroni`, `none`; current `bh` and `bonferroni` modes are v3.0-compatible aliases for the same Bonferroni-style calculation. Emits `prereg_locked`.
 
-**Returns**: `{"prereg_id": "preg_...", "alpha_adjusted": <float>}`
+**Returns**: `{"prereg_id": "prereg_...", "status": "open", ...}`
 
 **When to use**: as the gate between the BT tournament and the engineer subagent. No experiment should run without one.
 
-#### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None, note="")`
+#### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None)`
 Compare `observed_value` against the locked threshold and direction. If `observed_p_value` is given, apply the multiple-comparison correction across all currently-open prereg rows. Emits `prereg_resolved`.
 
-**Returns**: `{"status": "met"|"unmet", "adjusted_p_value": ..., ...}`
+**Returns**: `{"status": "met"|"missed", "adjusted_p_value": ..., ...}`
 
 **When to use**: after the experiment finishes and the metric has been pinned.
 
@@ -341,7 +341,7 @@ Filter active and historical preregistrations.
 
 ### Resource budget
 
-#### `budget_check(scope, resource, window)`
+#### `budget_check(scope, resource, requested, window="session")`
 Read-only inspection of a `(scope, resource, window)` ledger row.
 
 - `scope`: typically `session`, `per_hypothesis`, or `global`

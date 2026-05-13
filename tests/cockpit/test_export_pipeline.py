@@ -210,6 +210,39 @@ def test_hypothesis_closure_uses_current_verify_schema(
     assert "demo-session" in body
 
 
+def test_hypothesis_closure_only_includes_matching_prereg_metrics(
+    workspace, monkeypatch, tmp_path
+):
+    from cockpit.export import generate
+
+    _redirect_reports(monkeypatch, tmp_path)
+    memory_impl = workspace["memory_mcp.impl"]
+    verify_impl = workspace["verify_mcp.impl"]
+    hyp = memory_impl.propose_hypothesis("target hypothesis")
+    other = memory_impl.propose_hypothesis("other hypothesis")
+    verify_impl.preregister(
+        hyp["node_id"],
+        metric_name="accuracy",
+        direction="higher_better",
+        threshold=0.8,
+    )
+    verify_impl.preregister(
+        other["node_id"],
+        metric_name="loss",
+        direction="lower_better",
+        threshold=0.2,
+    )
+    verify_impl.pin_metric("accuracy", "0.84", "target-session")
+    verify_impl.pin_metric("loss", "0.12", "other-session")
+
+    [path] = generate("closure", hyp["node_id"], formats=("md",))
+    body = path.read_text(encoding="utf-8")
+
+    assert "accuracy" in body
+    assert "target-session" in body
+    assert "other-session" not in body
+
+
 def test_kinds_for_node_kind_filters_proposition_vs_hypothesis():
     from cockpit.export.pipeline import kinds_for_node_kind
 

@@ -84,10 +84,10 @@ domain-agnostic core**:
    tournament structure; cross-kind comparison stays disallowed to keep
    semantics clean.
 4. **One reviewer, two checklists.** `reviewer.md` switches checklist by
-   manuscript content: empirical claims keep the existing four gates
-   (pin / seed verdict / met preregistration / fresh provenance);
-   theorem claims add an empty diagnostic manifest plus either a Lean
-   verification or an explicit `unverified` flag.
+   manuscript content: empirical central claims use the relevant anchors
+   (pin / seed verdict / met preregistration for confirmatory claims /
+   non-stale provenance); theorem claims add an empty diagnostic manifest
+   plus either a Lean verification or an explicit `unverified` flag.
 
 The new MCP server is justified despite the v3.0 default of "no new MCP
 server" (see archive plan-v3.0): a domain expansion at this size is the

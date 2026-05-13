@@ -141,8 +141,23 @@ def _fetch_preregs(con: sqlite3.Connection, node_id: str) -> list[dict]:
 def _fetch_pinned_metrics(con: sqlite3.Connection, node_id: str) -> list[dict]:
     if not _table_exists(con, "ver_metric_pins"):
         return []
-    rows = con.execute(
+    if not _table_exists(con, "ver_preregistrations"):
+        return []
+
+    metric_rows = con.execute(
         """
+        SELECT DISTINCT metric_name
+        FROM ver_preregistrations
+        WHERE hypothesis_id = ?
+        """,
+        (node_id,),
+    ).fetchall()
+    metric_names = [row["metric_name"] for row in metric_rows if row["metric_name"]]
+    if not metric_names:
+        return []
+    placeholders = ",".join("?" for _ in metric_names)
+    rows = con.execute(
+        f"""
         SELECT p.id AS pin_id, p.claim AS metric, p.value,
                p.session_id AS dataset, p.created_at AS pinned_at,
                COALESCE(
@@ -153,12 +168,14 @@ def _fetch_pinned_metrics(con: sqlite3.Connection, node_id: str) -> list[dict]:
                    ORDER BY sr.created_at DESC, sr.run_id DESC
                    LIMIT 1
                  ),
-                 'pending'
-               ) AS seed_verdict
+                  'pending'
+                ) AS seed_verdict
         FROM ver_metric_pins p
+        WHERE p.claim IN ({placeholders})
         ORDER BY p.created_at DESC, p.id DESC
         LIMIT 20
         """,
+        tuple(metric_names),
     ).fetchall()
     return [dict(row) for row in rows]
 

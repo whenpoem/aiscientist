@@ -20,6 +20,49 @@ from cockpit.app import CockpitApp
 # ---------------------------------------------------------------------------
 
 
+
+@pytest.mark.asyncio
+async def test_unknown_command_warns_instead_of_silent_noop(workspace):
+    app = CockpitApp()
+    captured: list[tuple[str, str | None]] = []
+    original_notify = app.notify
+
+    def capture(message, **kwargs):
+        captured.append((str(message), kwargs.get("severity")))
+        return original_notify(message, **kwargs)
+
+    app.notify = capture  # type: ignore[method-assign]
+
+    async with app.run_test() as pilot:
+        await pilot.press("colon")
+        await pilot.press(*list("nonesuch arg"))
+        await pilot.press("enter")
+
+    assert any("Unknown command" in message for message, _ in captured)
+    assert any(severity == "warning" for _, severity in captured)
+
+
+@pytest.mark.asyncio
+async def test_malformed_command_warns_instead_of_crashing(workspace):
+    app = CockpitApp()
+    captured: list[tuple[str, str | None]] = []
+    original_notify = app.notify
+
+    def capture(message, **kwargs):
+        captured.append((str(message), kwargs.get("severity")))
+        return original_notify(message, **kwargs)
+
+    app.notify = capture  # type: ignore[method-assign]
+
+    async with app.run_test() as pilot:
+        await pilot.press("colon")
+        await pilot.press(*list('note "unterminated'))
+        await pilot.press("enter")
+
+    assert any("Could not parse command" in message for message, _ in captured)
+    assert any(severity == "warning" for _, severity in captured)
+
+
 @pytest.mark.asyncio
 async def test_help_modal_ignores_non_dismiss_keys(workspace):
     app = CockpitApp()

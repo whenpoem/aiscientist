@@ -144,8 +144,8 @@ Confidence intervals on the leaderboard are `lcb = strength - 1.96 * sqrt(var)` 
 
 These two mechanisms together enforce trustworthy numeric claims.
 
-- **Every numeric claim that ends up in a manuscript should trace** to a `ver_preregistrations.prereg_id` whose `status='met'` and to a `ver_seed_runs.verdict='stable'`. The `reviewer` agent enforces this on writeup.
-- **`ver_provenance_dag.input_hashes` records the sha256 of every cited input file at record time.** `refresh_claim` re-hashes and emits `prov_dag_stale` events on drift. **Stale provenance is a hard blocker for writeup.**
+- **Publication-critical numeric claims should trace** to pinned provenance, stable seed evidence, and, when the claim is confirmatory, a `ver_preregistrations.prereg_id` whose `status='met'`. Exploratory results must be labelled as exploratory instead of being silently promoted to main claims.
+- **`ver_provenance_dag.input_hashes` records the sha256 of every cited input file at record time.** `refresh_claim` re-hashes and emits `prov_dag_stale` events on drift. Stale provenance blocks publication-critical claims; missing DAG rows are reported as unchecked audit context rather than proof of freshness.
 - **`resolve_preregistration` computes correction against the count of currently-open prereg rows.** Locking many preregs at once intentionally tightens alpha, which is conservative multiple-comparison behavior. In the current v3.0-compatible implementation, `bh` and `bonferroni` are aliases for the same Bonferroni-style calculation.
 
 ### 11. Resource ledger (v3.0)
@@ -220,7 +220,7 @@ The two trunks compose through exactly four shared interfaces, no more. Anyone t
 1. **One tree.** `mem_nodes.kind` accepts `proposition`, `proof_skeleton`, and `proof_snippet` as well as the empirical kinds. A proposition can sit as a sibling of a hypothesis under the same question.
 2. **One failure ledger.** `mem_failures.domain` partitions records by domain; `match_signatures` accepts an optional `domain` filter and defaults to cross-domain. An off-by-one signature stored from a script crash can match an off-by-one signature in a proof snippet.
 3. **One tournament.** BT comparison accepts both `hypothesis` and `proof_skeleton` kinds (same-kind only). Cross-kind comparison is forbidden to keep semantics clean.
-4. **One reviewer, two checklists.** `reviewer.md` switches its checklist by manuscript content: empirical numeric claims keep the existing four gates (pin / seed verdict / met preregistration / fresh provenance); theorem claims add an empty diagnostic manifest plus either a Lean verification or an explicit `unverified` flag. The `unverified` flag is a manuscript-level annotation, not a `prv_diagnostic_manifests.status` value.
+4. **One reviewer, two checklists.** `reviewer.md` switches its checklist by manuscript content: empirical central claims use the relevant anchors (pin / seed verdict / met preregistration for confirmatory claims / non-stale provenance); theorem claims add an empty diagnostic manifest plus either a Lean verification or an explicit `unverified` flag. The `unverified` flag is a manuscript-level annotation, not a `prv_diagnostic_manifests.status` value.
 
 `prove_mcp.tools.nodes` is the only sanctioned writer from the proof trunk into the shared graph tables (`mem_nodes`, `mem_edges`, and proof-skeleton `mem_bt_ratings` seeds). That narrow exception keeps the one-tree interface real without turning the rest of `prove_mcp` into a memory-table owner.
 
@@ -250,10 +250,10 @@ When a contributor changes a tool or table, the label tells them which trunks th
 The proof trunk obeys the same `verify_mcp.budget_check` / `budget_consume` gating that the empirical trunk uses. Both `.claude/agents/prover.md` § Budget and the `prove-sop` skill require:
 
 1. Estimating wallclock cost from `prove_mcp.triage_for_formalization`'s `estimated_difficulty`.
-2. Calling `budget_check(scope='hypothesis:<proposition_id>', resource='wallclock_sec', requested=<estimate>)` before any Lean attempt >= 5 minutes.
+2. Calling `budget_check(scope='hypothesis:<proposition_id>', resource='wallclock_sec', requested=<estimate>)` before longer Lean attempts (>= 5 minutes). Low-cost attempts may proceed with an audit warning when no budget is configured.
 3. Calling `budget_consume` with the actual `duration_sec` after the attempt completes, so `res_budget_ledger` and `prv_lean_attempts` stay consistent.
 
-A `record_lean_attempt(status='timeout')` without a prior `budget_check` is grounds for the reviewer to flag the audit trail.
+A `record_lean_attempt(status='timeout')` without a prior `budget_check` is an audit warning. Missing budget context does not invalidate the NL proof itself.
 
 ### 14. Per-module maps
 

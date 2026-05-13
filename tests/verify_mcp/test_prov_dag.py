@@ -135,6 +135,9 @@ def test_refresh_claim_handles_no_dag_rows(workspace):
         source_command="python train.py",
     )
     result = impl.refresh_claim("acc")
-    # No DAG row means we cannot judge staleness; should be reported as fresh.
+    # No DAG row means we cannot judge staleness; it is fresh-but-unchecked,
+    # not proof that upstream files are unchanged.
     assert result["status"] == "fresh"
+    assert result["unchecked_count"] == 1
+    assert result["checked"][0]["unchecked"] is True
     assert result["checked"][0]["reason"] == "no_dag_entry"

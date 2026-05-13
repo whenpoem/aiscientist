@@ -14,7 +14,7 @@ While implementing:
 - Use scikit-learn / PyTorch / NumPy idiomatically.
 - Never `fit` a scaler on concatenated train+test.
 - Never early-stop on the test split.
-- Never hardcode paths into `.research-agent/held_out/`.
+- Never hardcode paths into `.research-agent/heldout/`, `.research-agent/held_out/`, or any registered held-out dataset path.
 
 After running:
 - Call `mcp__verify__record_provenance` with the numeric results.

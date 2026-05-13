@@ -75,9 +75,9 @@ You will see something like:
 
 The top hypothesis with non-overlapping intervals against the runner-up is the candidate to move forward.
 
-## 3. Preregister before any experiment
+## 3. Preregister confirmatory experiments
 
-This is the gate. Do not skip it.
+If the next run is meant to support a main confirmatory claim, lock the target before running it. If you are still exploring, label the run exploratory and do not present it as a final claim.
 
 ```
 /preregister hyp_8a3f... metric=test_accuracy direction=higher_better threshold=0.85
@@ -110,7 +110,7 @@ Run the seed-perturbation check:
 mcp__verify__seed_perturb script_path=mnist_proxy.py seeds=[0,1,2]
 ```
 
-This reruns the script three times with different `--seed` values, computes the mean and standard deviation of the test accuracy, and writes to `ver_seed_runs`. The `verdict` is `stable` if the standard deviation is below 0.01, otherwise `unstable`. The cockpit's "Claims" tab now shows ✓ or ✗ next to the metric.
+This reruns the script three times with different `--seed` values, computes the mean and standard deviation of the test accuracy, and writes to `ver_seed_runs`. The default stability check uses an automatic tolerance that behaves like an absolute threshold for small bounded metrics and a relative threshold for larger-scale metrics. The cockpit's "Claims" tab now shows ✓ or ✗ next to the metric.
 
 ## 6. Pin the metric and resolve the preregistration
 
@@ -136,7 +136,7 @@ If the experiment depends on input data files, refresh the claim:
 mcp__verify__refresh_claim claim="vit_dropout_test_accuracy"
 ```
 
-This re-hashes every input file in the claim's DAG. If any file drifted since the original `record_provenance`, the claim is marked `stale` and a `prov_dag_stale` event fires. **A stale claim is a hard blocker for writeup.**
+This re-hashes every input file in the claim's DAG. If any file drifted since the original `record_provenance`, the claim is marked `stale` and a `prov_dag_stale` event fires. Stale provenance blocks publication-critical claims; missing DAG entries are surfaced as unchecked audit context.
 
 ## 8. Summarize and pause weak branches
 
@@ -162,7 +162,7 @@ Now you can ask Claude to draft a short writeup:
 @reviewer prepare a one-page summary of the dropout investigation
 ```
 
-The reviewer agent enforces the writeup contract: every numeric claim must have a met preregistration, a stable seed verdict, fresh provenance, and a metric pin. If any of these are missing, the reviewer refuses to draft and lists the blockers.
+The reviewer agent enforces the writeup contract for publication-critical claims: central confirmatory metrics need a metric pin, stable seed verdict, met preregistration, and non-stale provenance. Exploratory claims and context numbers must be labelled honestly rather than forced through every gate.
 
 ## 10. End the session
 
@@ -172,7 +172,7 @@ Quit Claude Code in Terminal A, then quit the TUI in Terminal B (press `q`). Res
 
 - Generated and persisted a hypothesis graph
 - Ranked candidates with a Bradley-Terry tournament
-- Locked a falsification target before running any code
+- Locked a falsification target before running confirmatory code
 - Implemented an experiment with leakage and destructive-command guards
 - Verified the result across three random seeds
 - Recorded provenance with file fingerprints

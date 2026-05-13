@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-564-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-571-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
@@ -17,7 +17,7 @@ You give Claude a research question. It generates hypotheses, ranks them in a to
 Open two terminals side by side. That's the whole UI.
 
 <picture>
-  <img alt="Cockpit TUI screenshot" src="docs/assets/cockpit-screenshot.svg" width="800">
+  <img alt="Cockpit TUI screenshot" src="docs/assets/image.png" width="800">
 </picture>
 
 *The cockpit TUI — hypothesis tree, evidence, ratings, and event stream in one terminal.*
@@ -108,8 +108,8 @@ More:
 Default paths:
 
 - Shared state: `.research-agent/state.db` under the repo root
-- Held-out datasets: `%USERPROFILE%`, configurable via `RESEARCH_AGENT_HELDOUT_DIR`
-- Embedding backend: `local` (sentence-transformers/all-MiniLM-L6-v2); override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests use `mock` automatically.
+- Held-out datasets: `%USERPROFILE%\.research-agent\heldout`, configurable via `RESEARCH_AGENT_HELDOUT_DIR`
+- Embedding backend: `local` (sentence-transformers/Qwen/Qwen3-Embedding-0.6B); override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests use `mock` automatically.
 
 Dev server commands for individual MCP modules:
 

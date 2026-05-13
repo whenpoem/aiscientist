@@ -15,7 +15,7 @@ table below is a human summary.
 |---|---|---|---|
 | `leakage_guard.py` | PreToolUse | `Read|Write|Edit|Bash` | Deny tool calls whose paths resolve into a registered sequestered dataset; block markdown writes that name unprovenanced metric values. |
 | `destructive_bash_guard.py` | PreToolUse | `Bash` | Deny destructive commands (`rm -rf`, `git reset --hard`, etc.) unless `# CONFIRM_DESTRUCTIVE` is in the command. |
-| `provenance_log.py` | PostToolUse | `Bash` | Extract numeric tokens from stdout via `extract_metric_tokens` and write them to `ver_provenance`. |
+| `provenance_log.py` | PostToolUse | `Bash` | Extract labelled metric records from stdout via the shared runtime parser and write them to `ver_provenance`. |
 | `intervention_pump.py` | UserPromptSubmit + Stop | (any) | Drain rows from `cockpit_interventions` and inject as `additionalContext` for the next turn. |
 | `stop_flush.py` | Stop | (any) | Emit a `turn_end` cockpit event. Summary covers both trunks: empirical counts (nodes, edges, failures, papers, provenance) plus proof aggregates (`proof_manifests_*`, `lean_attempts_*`, `lean_wallclock_used_sec`). Reads `prv_diagnostic_manifests` / `prv_lean_attempts` defensively (zero on legacy DBs without the proof schema). |
 
@@ -44,7 +44,7 @@ table below is a human summary.
 
 | Hook | Reads | Writes |
 |---|---|---|
-| `leakage_guard.py` | `ver_heldout_budgets.heldout_path`, `ver_provenance.value` | (none) |
+| `leakage_guard.py` | `ver_heldout_budgets.heldout_path`, `ver_provenance.claim/value` | (none) |
 | `destructive_bash_guard.py` | (none) | (none) |
 | `provenance_log.py` | (none) | `ver_provenance` |
 | `intervention_pump.py` | `cockpit_interventions` | `cockpit_interventions.delivered_at` |

@@ -103,6 +103,60 @@ def test_seed_perturb_default_tolerance_allows_small_seed_drift(workspace, tmp_p
     assert result["ok"] is True
     assert result["verdict"] == "stable"
     assert result["std_value"] == pytest.approx(0.005, abs=1e-6)
+    assert result["stability_mode"] == "auto"
+    assert result["stability_threshold"] == pytest.approx(0.01)
+
+
+def test_seed_perturb_auto_tolerance_scales_large_metrics(workspace, tmp_path):
+    impl = workspace["verify_mcp.impl"]
+    fixture = tmp_path / "seed_large_metric.py"
+    fixture.write_text(
+        textwrap.dedent(
+            """
+            import argparse
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--seed", type=int, required=True)
+            args = parser.parse_args()
+            values = {0: 100.0, 1: 100.5, 2: 99.5}
+            print(f"score: {values[args.seed]:.1f}")
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    auto = impl.seed_perturb(script_path=str(fixture))
+    absolute = impl.seed_perturb(script_path=str(fixture), stability_mode="absolute")
+
+    assert auto["ok"] is True
+    assert auto["verdict"] == "stable"
+    assert auto["stability_threshold"] == pytest.approx(1.0)
+    assert absolute["verdict"] == "unstable"
+
+
+def test_seed_perturb_falls_back_to_labelled_metric_parser(workspace, tmp_path):
+    impl = workspace["verify_mcp.impl"]
+    fixture = tmp_path / "seed_loss.py"
+    fixture.write_text(
+        textwrap.dedent(
+            """
+            import argparse
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--seed", type=int, required=True)
+            args = parser.parse_args()
+            print(f"loss: {1.2 + args.seed * 0.001:.3f}")
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = impl.seed_perturb(script_path=str(fixture))
+
+    assert result["ok"] is True
+    assert result["values"] == [1.2, 1.201, 1.202]
 
 
 def test_seed_perturb_sets_pythonhashseed_by_default(workspace, tmp_path):

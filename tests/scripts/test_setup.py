@@ -417,11 +417,34 @@ def test_maybe_open_quickstart_silent_when_doc_missing(fake_repo, monkeypatch):
     setup_mod._maybe_open_quickstart(state)  # must not raise
 
 
-def test_step_heldout_dir_writes_default_home(fake_repo, monkeypatch):
+def test_step_heldout_dir_writes_safe_default(fake_repo, monkeypatch):
     monkeypatch.delenv("CLAUDESCIENTIST_SETUP_HELDOUT_DIR", raising=False)
     state = _make_state(fake_repo)
     assert step_heldout_dir(state) is True
-    assert "RESEARCH_AGENT_HELDOUT_DIR" in state.env_updates
+    assert state.env_updates["RESEARCH_AGENT_HELDOUT_DIR"].endswith(
+        str(Path(".research-agent") / "heldout")
+    )
+
+
+def test_step_heldout_dir_heals_legacy_home_default(fake_repo, monkeypatch):
+    (fake_repo / ".env").write_text(
+        f"RESEARCH_AGENT_HELDOUT_DIR={Path.home()}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("CLAUDESCIENTIST_SETUP_HELDOUT_DIR", raising=False)
+    state = _make_state(fake_repo)
+    assert step_heldout_dir(state) is True
+    assert Path(state.env_updates["RESEARCH_AGENT_HELDOUT_DIR"]) != Path.home()
+
+
+def test_step_heldout_dir_blank_override_stays_safe(fake_repo, monkeypatch):
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_HELDOUT_DIR", "")
+    state = _make_state(fake_repo)
+    assert step_heldout_dir(state) is True
+    assert Path(state.env_updates["RESEARCH_AGENT_HELDOUT_DIR"]) != Path.home()
+    assert state.env_updates["RESEARCH_AGENT_HELDOUT_DIR"].endswith(
+        str(Path(".research-agent") / "heldout")
+    )
 
 
 def test_step_heldout_dir_creates_target_when_missing(fake_repo, tmp_path, monkeypatch):

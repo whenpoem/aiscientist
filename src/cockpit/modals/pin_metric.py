@@ -33,6 +33,10 @@ class PinMetricModal(ModalScreen[dict[str, str] | None]):
         color: $foreground-muted;
         margin-top: 1;
     }
+    PinMetricModal #pin-error {
+        color: $error;
+        margin-top: 1;
+    }
     """
 
     def __init__(self, dataset: str = "", *, lang: str = "en") -> None:
@@ -52,6 +56,7 @@ class PinMetricModal(ModalScreen[dict[str, str] | None]):
                 yield Input(placeholder=t(self._lang, "pin_metric_field"), id="pin-metric")
                 yield Input(placeholder=t(self._lang, "pin_value"), id="pin-value")
                 yield Label(t(self._lang, "pin_help"), id="pin-help")
+                yield Label("", id="pin-error")
 
     def on_mount(self) -> None:
         self.query_one("#pin-dataset", Input).focus()
@@ -77,9 +82,15 @@ class PinMetricModal(ModalScreen[dict[str, str] | None]):
         metric = self.query_one("#pin-metric", Input).value.strip()
         value = self.query_one("#pin-value", Input).value.strip()
         if not dataset or not metric or not value:
+            self.query_one("#pin-error", Label).update(
+                t(self._lang, "pin_error_required")
+            )
             return
         try:
             float(value)
         except ValueError:
+            self.query_one("#pin-error", Label).update(
+                t(self._lang, "pin_error_numeric")
+            )
             return
         self.dismiss({"dataset": dataset, "metric": metric, "value": value})
