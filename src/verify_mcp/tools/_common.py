@@ -15,8 +15,13 @@ from claudescientist.runtime import emit_cockpit_event
 
 
 def _emit_event(con, kind: str, payload: dict) -> None:
-    """Emit a cockpit event from inside an open transaction."""
-    emit_cockpit_event(con, kind, payload)
+    """Emit a cockpit event from inside an open transaction.
+
+    Tags every row with ``source="verify_mcp"`` (Phase E provenance) so
+    the cockpit's Detail pane can surface "who emitted this" without
+    needing to thread the source through every tool call site.
+    """
+    emit_cockpit_event(con, kind, payload, source="verify_mcp")
 
 
 def _run_script(

@@ -310,14 +310,14 @@ derivation when present and recent.
 
 | Family | Glyph | Kinds |
 |---|---|---|
-| graph | ◇ | `graph_delta`, `branch_paused`, `branch_pause_suggested`, `branch_promoted`, `auto_prune`, `literature_ingested` |
+| graph | ⊞ | `graph_delta`, `branch_paused`, `branch_pause_suggested`, `branch_promoted`, `auto_prune`, `literature_ingested` |
 | bt | ⚖ | `bt_rating_updated`, `judgement_recorded` |
 | verify | ✓ | `seed_run_recorded`, `prereg_*`, `heldout_query_*`, `claim_pinned`, `snapshot_created`, `report_generated`, `replay_branch_created` |
 | prove | ⊢ | `proof_*` |
 | lean | λ | `lean_proof_*` (kept separate for source-preview rendering) |
 | intervention | ! | `intervention`, `intervention_undone` |
-| narrate | " | `agent_narration`, `note`, `phase_set` |
-| risk | ▲ | `budget_exceeded`, `prov_dag_stale`, `failure_added` (singletons) |
+| narrate | ❝ | `agent_narration`, `note`, `phase_set` |
+| risk | ⚠ | `budget_exceeded`, `prov_dag_stale`, `failure_added` (singletons) |
 
 Cards group by `(family, focus_node_id)` when the payload names a node,
 or by `(family, 60-second bucket)` for high-volume kinds without a
@@ -330,15 +330,16 @@ swallowed by aggregation.
 
 | Severity | Glyph | Kinds (default; payload-aware overrides apply) |
 |---|---|---|
-| critical | ■ | `budget_exceeded`, `prov_dag_stale` |
-| high | ▲ | `lean_proof_failed`, `branch_paused`, `failure_added`, `intervention.halt`, `prereg_resolved(unmet)`, `heldout_query_finished(failed)` |
-| medium | ● | `prereg_resolved`, `proof_diagnosis_recorded(is_flawed=True)`, `branch_pause_suggested`, `intervention*` |
-| low | · | `note`, `agent_narration`, `bt_rating_updated`, `proof_corpus_reindex_progress`, `report_generated`, `phase_set` |
+| critical | █ | `budget_exceeded`, `prov_dag_stale` |
+| high | ▓ | `lean_proof_failed`, `branch_paused`, `failure_added`, `intervention.halt`, `prereg_resolved(unmet)`, `heldout_query_finished(failed)` |
+| medium | ▒ | `prereg_resolved`, `proof_diagnosis_recorded(is_flawed=True)`, `branch_pause_suggested`, `intervention*` |
+| low | ░ | `note`, `agent_narration`, `bt_rating_updated`, `proof_corpus_reindex_progress`, `report_generated`, `phase_set` |
 | info | (blank) | everything else |
 
 Cards display the maximum severity of their constituent events. The
-severity glyph plus colour give a redundant signal so red-green
-colour-blind users can still distinguish via shape.
+severity glyphs use a fill-density gradient (`█▓▒░`) so the loudness
+reads through ink weight alone — red-green colour-blind users still
+get a clear intensity cue without relying on colour.
 
 #### Cockpit MCP tools (v5.0 additions)
 

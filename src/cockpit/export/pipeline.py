@@ -136,6 +136,7 @@ def generate(
                         "bytes": size,
                         "generated_by": generated_by,
                     },
+                    source="cockpit_export",
                 )
             con.execute("COMMIT")
         except Exception:

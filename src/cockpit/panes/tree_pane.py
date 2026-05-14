@@ -40,6 +40,10 @@ class HypothesisTreePane(Tree[str]):
         # Latest counts for border title rendering. Updated via
         # set_counts(); falls back to None until first refresh.
         self._counts: dict[str, int] | None = None
+        # Phase E3: set of bookmarked node ids. Updated via set_bookmarks
+        # whenever the App's settings list changes (i.e. on every ``b``
+        # toggle). Stored as a set for O(1) membership test in _label_for.
+        self._bookmarks: set[str] = set()
 
     def set_language(self, lang: str) -> None:
         self.lang = lang
@@ -88,6 +92,18 @@ class HypothesisTreePane(Tree[str]):
         existing rows redraw with the new style; relies on the caller to
         pass the current GraphSnapshot via load_graph afterwards."""
         self._compact = bool(compact)
+
+    def set_bookmarks(self, bookmarks) -> None:
+        """Phase E3: inject the latest bookmark set.
+
+        The App calls this from ``_refresh_graph`` so the pane stays in
+        lockstep with settings.bookmarks. Accepts any iterable of str
+        for convenience; coerces to a set internally for fast lookup.
+        """
+        try:
+            self._bookmarks = {str(b) for b in (bookmarks or []) if b}
+        except TypeError:  # pragma: no cover - defensive
+            self._bookmarks = set()
 
     def action_toggle_compact(self) -> None:
         """Pane-scoped compact toggle.
@@ -231,6 +247,15 @@ class HypothesisTreePane(Tree[str]):
 
     def _label_for(self, node: GraphNode) -> Text:
         title = Text()
+        # Phase E3: bookmark indicator. Prepends a filled four-pointed
+        # star ``✦`` to the row when the node has been bookmarked by
+        # the user. The glyph was picked deliberately disjoint from the
+        # kind / phase / family / severity axes — see
+        # tests/cockpit/test_glyph_axes.py for the disjointness
+        # guarantee. Uses the ``warning`` color tier so the bookmark
+        # reads as a deliberate "user mark" rather than a state cue.
+        if node.node_id in self._bookmarks:
+            title.append("✦ ", style=color("warning"))
         title.append(self._prefix_for(node), style=self._style_for(node))
         title.append(" ")
         title.append(self._short_id(node.node_id), style=self._style_for(node))

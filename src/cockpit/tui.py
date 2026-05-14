@@ -6,6 +6,7 @@ import argparse
 
 from . import data
 from .app import CockpitApp, render_snapshot
+from .diagnostics import default_log_path, get_logger
 from .i18n import SUPPORTED_LANGS, normalize_lang
 from .theme import theme_names
 
@@ -37,8 +38,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # Phase A: initialize the cockpit logger up-front so even the
+    # --prune-events / --once short-circuits get their diagnostics
+    # written to disk. Calling get_logger here is idempotent — the
+    # App will later call get_logger("app") and share the same
+    # handlers.
+    log = get_logger("tui")
+    log.info(
+        "cockpit.tui starting: argv=%r log_path=%s",
+        list(argv) if argv is not None else None,
+        default_log_path(),
+    )
     if args.prune_events is not None:
         deleted = data.prune_events(keep_last=args.prune_events)
+        log.info("prune_events: kept %d, deleted %d", args.prune_events, deleted)
         print(f"pruned {deleted} cockpit_events rows")
         return 0
     # When --lang is omitted, fall back to "en" only for the headless --once

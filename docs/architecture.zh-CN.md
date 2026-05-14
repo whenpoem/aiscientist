@@ -298,14 +298,14 @@ v5.0 重新组织了 cockpit 的信息呈现方式。之前的主视图回答的
 
 | 家族 | 符号 | 包含的事件类型 |
 |---|---|---|
-| graph | ◇ | `graph_delta`, `branch_paused`, `branch_pause_suggested`, `branch_promoted`, `auto_prune`, `literature_ingested` |
+| graph | ⊞ | `graph_delta`, `branch_paused`, `branch_pause_suggested`, `branch_promoted`, `auto_prune`, `literature_ingested` |
 | bt | ⚖ | `bt_rating_updated`, `judgement_recorded` |
 | verify | ✓ | `seed_run_recorded`, `prereg_*`, `heldout_query_*`, `claim_pinned`, `snapshot_created`, `report_generated`, `replay_branch_created` |
 | prove | ⊢ | `proof_*` |
 | lean | λ | `lean_proof_*`（与 prove 分开，便于源码预览渲染）|
 | intervention | ! | `intervention`, `intervention_undone` |
-| narrate | " | `agent_narration`, `note`, `phase_set` |
-| risk | ▲ | `budget_exceeded`, `prov_dag_stale`, `failure_added`（单例卡片）|
+| narrate | ❝ | `agent_narration`, `note`, `phase_set` |
+| risk | ⚠ | `budget_exceeded`, `prov_dag_stale`, `failure_added`（单例卡片）|
 
 卡片按 `(family, focus_node_id)` 分组（payload 指明了目标节点时），或按 `(family, 60 秒时间桶)` 分组（高频且无目标节点的事件，目前只有 `proof_corpus_reindex_progress`）。`budget_exceeded`、`prov_dag_stale`、`failure_added`、`agent_narration`、`phase_set` 和 `note` 始终生成单独卡片，确保单条重要信号不被聚合淹没。
 
@@ -313,13 +313,13 @@ v5.0 重新组织了 cockpit 的信息呈现方式。之前的主视图回答的
 
 | 严重度 | 符号 | 默认归属的事件类型（payload 层面有覆盖） |
 |---|---|---|
-| critical | ■ | `budget_exceeded`, `prov_dag_stale` |
-| high | ▲ | `lean_proof_failed`, `branch_paused`, `failure_added`, `intervention.halt`, `prereg_resolved(unmet)`, `heldout_query_finished(failed)` |
-| medium | ● | `prereg_resolved`, `proof_diagnosis_recorded(is_flawed=True)`, `branch_pause_suggested`, `intervention*` |
-| low | · | `note`, `agent_narration`, `bt_rating_updated`, `proof_corpus_reindex_progress`, `report_generated`, `phase_set` |
+| critical | █ | `budget_exceeded`, `prov_dag_stale` |
+| high | ▓ | `lean_proof_failed`, `branch_paused`, `failure_added`, `intervention.halt`, `prereg_resolved(unmet)`, `heldout_query_finished(failed)` |
+| medium | ▒ | `prereg_resolved`, `proof_diagnosis_recorded(is_flawed=True)`, `branch_pause_suggested`, `intervention*` |
+| low | ░ | `note`, `agent_narration`, `bt_rating_updated`, `proof_corpus_reindex_progress`, `report_generated`, `phase_set` |
 | info | （空）| 其余所有 |
 
-卡片显示其包含事件中的最高严重度。严重度同时用符号和颜色双重标记，方便红绿色盲用户通过形状区分。
+卡片显示其包含事件中的最高严重度。严重度符号采用填充密度梯度（`█▓▒░`），靠"墨水浓度"传递轻重——红绿色盲用户不依赖颜色也能一眼看出严重程度。
 
 #### Cockpit MCP 工具（v5.0 新增）
 

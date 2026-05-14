@@ -49,15 +49,19 @@ _FALLBACKS: dict[str, str] = {
     "kind-proof-skeleton": "#c45a3a",
     "kind-proof-snippet": "#a04830",
     "kind-refuted": "#cf6679",
-    # Activity card severity bands (v5.0). Aliased to the semantic
-    # warning/error/success palette so light/dark themes flow through.
-    # Glyphs in activity.py (■▲●·) carry the same signal for users who
-    # cannot rely on color (red-green colour-blindness).
-    "severity-critical": "#cf6679",  # aliases error
-    "severity-high": "#e3b341",      # aliases warning
-    "severity-medium": "#d97757",    # aliases primary (amber-ish)
-    "severity-low": "#a89e8e",       # aliases foreground-muted
-    "severity-info": "#e8e2d8",      # aliases foreground
+    # Activity card severity bands. Phase B: decoupled from
+    # primary/warning/error so a medium-severity card border no longer
+    # collides with the active-pane highlight (``border-active``). The
+    # ramp walks cool-gray → amber → muted red, independent of the
+    # cockpit's primary accent. Glyphs in activity.py (█▓▒░ ) carry
+    # the same intensity signal as a fill-density gradient so users
+    # who cannot rely on color (red-green colour-blindness) still get
+    # the loudness cue.
+    "severity-critical": "#d35858",
+    "severity-high": "#c89043",
+    "severity-medium": "#b8843d",
+    "severity-low": "#7a7264",
+    "severity-info": "#a89e8e",
 }
 
 _CURRENT_VARS: dict[str, str] = dict(_FALLBACKS)

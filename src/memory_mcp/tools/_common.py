@@ -40,9 +40,15 @@ def _fts_query(text: str) -> str:
 
 
 def _emit_event(con, kind: str, payload: dict) -> None:
-    """Emit a cockpit event, swallowing transient SQLite errors."""
+    """Emit a cockpit event, swallowing transient SQLite errors.
+
+    The ``source`` tag (Phase E provenance) is hardcoded to
+    ``"memory_mcp"`` here — every event emitted from this MCP server
+    has the same provenance, so each tool would otherwise have to pass
+    the literal. Tagging at the helper keeps the call sites clean.
+    """
     try:
-        emit_cockpit_event(con, kind, payload)
+        emit_cockpit_event(con, kind, payload, source="memory_mcp")
     except sqlite3.Error:
         return
 

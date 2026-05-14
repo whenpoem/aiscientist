@@ -18,6 +18,7 @@ def push_graph_delta(node_id: str, kind: str, text: str) -> dict:
     event_id = data.record_event(
         "graph_delta",
         {"node_id": node_id, "kind": kind, "text": text},
+        source="cockpit_mcp",
     )
     return {"ok": True, "event_id": event_id}
 
@@ -32,7 +33,7 @@ def queue_intervention(kind: str, target: str | None = None, payload: str = "") 
 @mcp.tool
 def record_note(text: str) -> dict:
     """Compatibility helper for scripted note-taking."""
-    event_id = data.record_event("note", {"text": text})
+    event_id = data.record_event("note", {"text": text}, source="cockpit_mcp")
     return {"ok": True, "event_id": event_id}
 
 
@@ -97,6 +98,7 @@ def set_phase(
             "focus_nodes": nodes,
             "intent": sanitized_intent,
         },
+        source="cockpit_mcp",
     )
     return {"ok": True, "event_id": event_id}
 
@@ -129,6 +131,7 @@ def narrate(text: str, scope: str = "session") -> dict:
     event_id = data.record_event(
         "agent_narration",
         {"text": body, "scope": scope_str},
+        source="cockpit_mcp",
     )
     return {"ok": True, "event_id": event_id}
 

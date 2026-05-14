@@ -113,6 +113,13 @@ class CockpitSettings:
     # cleanly when either is False.
     phase_strip_visible: bool = True
     animations_enabled: bool = True
+    # Phase E3: per-node bookmarks. The ``b`` keystroke toggles the
+    # selected node into / out of this list; ``B`` opens a modal listing
+    # the marked nodes for quick navigation. Stored as a flat list of
+    # node ids; persists across sessions. The serializer supports
+    # list-of-string round-trip — see :func:`_render_value` and
+    # :func:`_coerce_value`.
+    bookmarks: list = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "CockpitSettings":
@@ -155,7 +162,71 @@ def load_settings(path: Path | None = None) -> CockpitSettings:
         return CockpitSettings()
     if not isinstance(data, dict):
         return CockpitSettings()
+    data = migrate(data)
     return CockpitSettings.from_dict(data)
+
+
+def migrate(data: dict) -> dict:
+    """Apply known migrations to a raw TOML dict.
+
+    Phase A intentionally ships this as a near-noop *framework*: the
+    runtime-side healing (``focused_pane == "events"`` → ``"activity"``,
+    ``layout_preset in {focus, single}`` → ``wide``) still lives in
+    :class:`cockpit.app.CockpitApp.__init__` so existing tests that
+    round-trip ``focused_pane="events"`` keep working. The point of
+    surfacing the scaffold *now* is so future versions can register
+    schema-version-gated transforms here in one place instead of
+    sprinkling more heals across the App.
+
+    The function is defensive:
+
+    - Unknown ``schema_version`` (e.g. a newer cockpit wrote the file
+      and the user downgraded) is logged at WARNING — the HUD then
+      paints the ⚠ chip so the user knows their config may be partially
+      ignored. The function still returns the dict so the cockpit boots.
+    - Non-int / missing ``schema_version`` is coerced to ``1`` (the
+      v4.x baseline) silently — that's the most common path on first
+      upgrade and does not need a log entry.
+    - The function never raises. A malformed dict comes in, a (still
+      malformed but interpretable) dict comes out, ``from_dict`` handles
+      the rest.
+    """
+    # Lazy import: settings.py is loaded extremely early (before App,
+    # sometimes before Textual). Importing diagnostics at module load
+    # would create a circular import in some test paths. Local import
+    # is cheap and keeps the dependency graph honest.
+    from .diagnostics import get_logger
+
+    log = get_logger("settings")
+    out = dict(data)
+    raw_version = out.get("schema_version")
+    try:
+        version = int(raw_version) if raw_version is not None else 1
+    except (TypeError, ValueError):
+        version = 1
+    if version > SCHEMA_VERSION:
+        log.warning(
+            "settings schema_version=%r is newer than this cockpit's "
+            "supported version %d; unknown fields will be ignored. "
+            "Consider upgrading the cockpit.",
+            raw_version,
+            SCHEMA_VERSION,
+        )
+        # Don't rewrite the version — leave the future-version marker so
+        # a subsequent newer cockpit doesn't think it has been downgraded.
+        return out
+    # Place future schema-version-gated transforms here. Each step
+    # should bump ``version`` and (optionally) ``out["schema_version"]``
+    # so a re-save lands the cleaned form. Example shape (not active
+    # yet — kept here to document the pattern):
+    #
+    #   if version < 2:
+    #       if out.get("focused_pane") == "events":
+    #           out["focused_pane"] = "activity"
+    #       version = 2
+    #       out["schema_version"] = 2
+    out["schema_version"] = SCHEMA_VERSION
+    return out
 
 
 def save_settings(settings: CockpitSettings, path: Path | None = None) -> Path:
@@ -192,6 +263,15 @@ def _render_value(value: object) -> str:
     if isinstance(value, str):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
+    if isinstance(value, list):
+        # Inline TOML array. We only round-trip primitives (str, int,
+        # float, bool); any other element type would require a real
+        # TOML emitter and isn't a shape the cockpit's settings use.
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, (bool, int, float, str)):
+                parts.append(_render_value(item))
+        return "[" + ", ".join(parts) + "]"
     if isinstance(value, dict):
         # Inline TOML table: { key = value, key = value }. We use this
         # rather than [table] headers so the file stays readable as one
@@ -267,6 +347,13 @@ def _coerce_value(declared_type, raw):
                 if isinstance(key, str) and isinstance(value, bool):
                     cleaned[key] = value
             return cleaned
+        return _SENTINEL
+    if type_name == "list":
+        # Phase E3: bookmarks is a list of node-id strings. We accept
+        # whatever the file says but filter to strings — anything else
+        # would crash the tree-pane bookmark lookup with a type error.
+        if isinstance(raw, list):
+            return [v for v in raw if isinstance(v, str)]
         return _SENTINEL
     # Unknown declared type — pass through unchanged.
     return raw

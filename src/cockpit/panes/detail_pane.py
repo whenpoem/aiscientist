@@ -43,6 +43,12 @@ class NodeDetailPane(VerticalScroll):
         #   "node"     — sectioned graph-node view
         self._mode = "hint"
         self._override_text: Text | None = None
+        # Phase C: breadcrumb above the banner. Tells the user where the
+        # current content came from (Tree selection vs Tabs drill-in) so
+        # the multi-source pane stops feeling magical. In drill-in mode
+        # the breadcrumb also hints "Esc to return" so the escape path
+        # is discoverable without reading the help screen.
+        self._breadcrumb = Static("", id="detail-pane-breadcrumb")
         # Title banner doubles as the override body holder. In "node"
         # mode it carries just the node's short id + kind label; in
         # "override" / "hint" mode it carries the entire payload.
@@ -60,8 +66,13 @@ class NodeDetailPane(VerticalScroll):
         # Callback fired when the user toggles a section. Wired by the
         # App so the toggle persists to settings.
         self._on_section_toggled = None
+        # Latest breadcrumb args, kept so set_language() can re-render
+        # the localized text without the App needing to push values
+        # through again on every language toggle.
+        self._breadcrumb_state: tuple[str, dict] = ("hint", {})
 
     def compose(self) -> ComposeResult:
+        yield self._breadcrumb
         yield self._banner
         for key in SECTION_KEYS:
             body = Static("", id=f"detail-section-{key}-body")
@@ -114,6 +125,12 @@ class NodeDetailPane(VerticalScroll):
     def set_language(self, lang: str) -> None:
         self.lang = lang
         self.border_title = t(self.lang, "detail_title")
+        # Re-render the breadcrumb in the new language without waiting
+        # for the next App-triggered refresh — the strings inside are
+        # localized, and the App's refresh_state() will follow shortly
+        # for the body content.
+        kind, args = self._breadcrumb_state
+        self._render_breadcrumb(kind, **args)
         # The current view is in the old language; the App will call
         # update_for_node / show_hint / show_override shortly to refresh.
 
@@ -124,6 +141,7 @@ class NodeDetailPane(VerticalScroll):
         self._banner.update(text)
         self._hide_sections()
         self._banner.styles.display = "block"
+        self._render_breadcrumb("hint")
         self.scroll_home(animate=False)
 
     def show_override(self, title: str, body: str) -> None:
@@ -136,6 +154,7 @@ class NodeDetailPane(VerticalScroll):
         self._banner.update(text)
         self._hide_sections()
         self._banner.styles.display = "block"
+        self._render_breadcrumb("override", label=title)
         self.scroll_home(animate=False)
 
     def clear_override(self) -> None:
@@ -159,6 +178,11 @@ class NodeDetailPane(VerticalScroll):
         title_text = Text(title, style=theme_style("primary", bold=True))
         self._banner.update(title_text)
         self._banner.styles.display = "block"
+        # Breadcrumb: "from Tree · <node_id>". Phase C: this is the
+        # user-facing tell that the Detail pane is reflecting the tree
+        # selection (vs a tab drill-in, which goes through show_override
+        # and ends up at "drill-in · <label>  ·  Esc to return").
+        self._render_breadcrumb("node", target=node_id)
         # Reveal / hide per section.
         seen: set[str] = set()
         for section in sections:
@@ -206,6 +230,38 @@ class NodeDetailPane(VerticalScroll):
     def _hide_sections(self) -> None:
         for container in self._section_widgets.values():
             container.styles.display = "none"
+
+    def _render_breadcrumb(self, kind: str, **args) -> None:
+        """Update the top breadcrumb Static for the current view mode.
+
+        ``kind`` is one of ``"hint"``, ``"node"``, ``"override"``. The
+        ``args`` carry the kind-specific format values (``target`` for
+        node mode, ``label`` for override mode). The pane caches the
+        last call so :meth:`set_language` can re-render without the
+        App needing to re-push values.
+        """
+        self._breadcrumb_state = (kind, dict(args))
+        from cockpit.theme import color as _color
+
+        if kind == "hint":
+            text = Text(
+                t(self.lang, "breadcrumb_hint"),
+                style=_color("foreground-subtle"),
+            )
+        elif kind == "override":
+            label = str(args.get("label", "")).strip() or "?"
+            text = Text(
+                t(self.lang, "breadcrumb_override", label=label),
+                style=_color("warning"),
+            )
+        else:  # node
+            target = str(args.get("target", "")).strip() or "?"
+            source = t(self.lang, "source_tree")
+            text = Text(
+                t(self.lang, "breadcrumb_node", source=source, target=target),
+                style=_color("foreground-muted"),
+            )
+        self._breadcrumb.update(text)
 
     # Kept for backwards compatibility with the v4.1.0a4 visual-polish
     # tests that still call this directly.

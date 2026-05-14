@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS cockpit_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL,
   payload TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  source TEXT
 );
 """
 COCKPIT_EVENT_INDEX_SCHEMA = """
@@ -228,12 +229,28 @@ def apply_schema_migration(
     )
 
 
-def emit_cockpit_event(con: sqlite3.Connection, kind: str, payload: dict[str, Any]) -> int:
+def emit_cockpit_event(
+    con: sqlite3.Connection,
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    source: str | None = None,
+) -> int:
+    """Append a row to ``cockpit_events``.
+
+    ``source`` is an optional provenance tag (e.g. ``"memory_mcp"``,
+    ``"verify_mcp"``, ``"cockpit_mcp"``, ``"cockpit_user"``) so the TUI
+    can answer the "who emitted this event" question in the Detail
+    pane. Older callers that don't pass ``source`` get ``NULL`` and
+    the UI renders them as ``unknown`` — the data path stays
+    backwards-compatible.
+    """
     con.execute(COCKPIT_EVENT_SCHEMA)
     con.execute(COCKPIT_EVENT_INDEX_SCHEMA)
+    ensure_columns(con, "cockpit_events", {"source": "TEXT"})
     cursor = con.execute(
-        "INSERT INTO cockpit_events(kind, payload, created_at) VALUES(?,?,?)",
-        (kind, json.dumps(payload, ensure_ascii=True), now_utc_iso()),
+        "INSERT INTO cockpit_events(kind, payload, created_at, source) VALUES(?,?,?,?)",
+        (kind, json.dumps(payload, ensure_ascii=True), now_utc_iso(), source),
     )
     return int(cursor.lastrowid or 0)
 

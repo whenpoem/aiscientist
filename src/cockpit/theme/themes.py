@@ -54,6 +54,17 @@ WARM_DARK = Theme(
         "kind-proof-skeleton": "#c45a3a",
         "kind-proof-snippet": "#a04830",
         "kind-refuted": "#cf6679",
+        # Phase B: severity is decoupled from primary/warning/error so a
+        # ``medium``-severity card border no longer shares its color
+        # with the active-pane highlight (``border-active``). The ramp
+        # walks from cool gray (low) through amber (medium/high) to a
+        # warmer red than `error` for critical, so the eye reads
+        # severity intensity independently of the cockpit's accent.
+        "severity-critical": "#d35858",
+        "severity-high": "#c89043",
+        "severity-medium": "#b8843d",
+        "severity-low": "#7a7264",
+        "severity-info": "#a89e8e",
     },
 )
 
@@ -88,6 +99,11 @@ WARM_LIGHT = Theme(
         "kind-proof-skeleton": "#a04830",
         "kind-proof-snippet": "#7e3820",
         "kind-refuted": "#a04050",
+        "severity-critical": "#a04050",
+        "severity-high": "#a87928",
+        "severity-medium": "#8a6620",
+        "severity-low": "#8a8074",
+        "severity-info": "#5e544a",
     },
 )
 
@@ -122,6 +138,11 @@ COOL_DARK = Theme(
         "kind-proof-skeleton": "#d29922",
         "kind-proof-snippet": "#a98012",
         "kind-refuted": "#f85149",
+        "severity-critical": "#f85149",
+        "severity-high": "#d29922",
+        "severity-medium": "#a98012",
+        "severity-low": "#8b949e",
+        "severity-info": "#6e7681",
     },
 )
 
@@ -156,6 +177,14 @@ HIGH_CONTRAST = Theme(
         "kind-proof-skeleton": "#ff8800",
         "kind-proof-snippet": "#cc6600",
         "kind-refuted": "#ff0000",
+        # High-contrast severity: NASA-control-room amber/red rather
+        # than fully saturated RGB. AAA contrast against #000 background
+        # without the LCD edge-chromatic-aberration of pure #00ff00.
+        "severity-critical": "#ff5050",
+        "severity-high": "#ffb000",
+        "severity-medium": "#ff8800",
+        "severity-low": "#cccccc",
+        "severity-info": "#999999",
     },
 )
 

@@ -150,10 +150,32 @@ Screen.animations-off * {
     border: round $panel;
     padding: 0 1;
     margin: 0 1 1 0;
+    /* Border title chrome (Phase B): muted by default; inverts on
+     * .pane-active for a fully visible "this is where keys land" cue.
+     * The 2-cell border color swap alone is too subtle on dark themes
+     * — the inverted title is the new primary signal. */
+    border-title-style: bold;
+    border-title-color: $foreground 60%;
 }
 
 .pane-active {
     border: round $primary;
+    /* Inverted title chip on the active pane. Reads as a high-contrast
+     * tag in the user's peripheral vision and survives in screenshots
+     * where the 2-pixel border edge is hard to spot. */
+    border-title-color: $background;
+    border-title-background: $primary;
+    border-title-style: bold;
+}
+
+/* Phase B: Activity pane is the cockpit's "live surface" — it is where
+ * new events land each tick. Give it a slightly elevated background
+ * (`$boost`) so the eye immediately separates "consulting" panes
+ * (tree / detail / tabs on `$surface`) from "watching" the activity
+ * stream. The luminance step is one slot only — not a heavy tint.
+ */
+#activity-pane {
+    background: $boost;
 }
 
 #tree-pane,
@@ -161,6 +183,36 @@ Screen.animations-off * {
 #activity-pane,
 #tabs-pane {
     height: 1fr;
+}
+
+/* Phase C: Detail pane breadcrumb. Single-line muted strip above the
+ * banner that tells the user *where* the current content came from
+ * (Tree selection / Tabs drill-in / no selection). Height: 1 keeps it
+ * unobtrusive; the dim color tier means it does not compete with the
+ * banner's primary-color title. */
+#detail-pane-breadcrumb {
+    height: 1;
+    padding: 0;
+    margin: 0;
+    color: $foreground 60%;
+}
+
+/* Phase D: intervention-flash. Added to the tree pane for ~250 ms after
+ * the user presses y/n/r/c/m/p so the eye gets a visible "your keystroke
+ * registered" cue beyond the toast. The flash uses $accent which is the
+ * cockpit's loudest theme colour — sits above the regular pane-active
+ * highlight so it stands out even when the tree pane is already active.
+ * Honors the .animations-off screen class for users who muted motion. */
+.pane.intervention-flash {
+    border: round $accent;
+    background: $boost;
+}
+
+Screen.animations-off .pane.intervention-flash {
+    /* Reduced-motion path: keep the border swap (it's still useful as a
+     * confirmation cue) but drop the background tint so the screen does
+     * not pulse. */
+    background: $surface;
 }
 
 /* v5.0 audit log: the original event stream is preserved but
@@ -181,6 +233,24 @@ Screen.animations-off * {
 #events-pane.audit-log.expanded {
     display: block;
     height: 1fr;
+}
+
+/* Phase E4: event-timeline strip. Single-row dock above the audit-log
+ * dock, below the command-line / context-bar. Hidden by default; the
+ * ``:timeline`` command toggles ``.timeline-hidden`` off. The strip is
+ * read-only — no border, no padding — so it reads as a status line
+ * rather than another pane. */
+#timeline-pane {
+    dock: bottom;
+    height: 1;
+    padding: 0 1;
+    margin: 0 1 0 1;
+    color: $foreground;
+    background: $surface;
+}
+
+#timeline-pane.timeline-hidden {
+    display: none;
 }
 
 /* ===== command line + chrome bars ======================================= */

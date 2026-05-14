@@ -49,6 +49,18 @@ class PhaseStripPane(Static):
         self.lang = "en"
         self._phase: Phase = Phase(name="idle")
         self.shrink = True
+        # Phase D: own ticker so the "since 2m 14s" age updates every
+        # second instead of freezing between App-driven update_phase()
+        # calls. A static ``since 5m`` line read as "the cockpit froze"
+        # to users who looked at the strip for more than a minute. The
+        # ticker handle is None until on_mount installs it.
+        self._tick_handle = None
+
+    def on_mount(self) -> None:  # noqa: D401
+        # 1-second ticker re-renders the same Phase with a fresh "now"
+        # so the "since" age moves forward in real time. The phase
+        # itself only changes when the App calls update_phase().
+        self._tick_handle = self.set_interval(1.0, self._redraw)
 
     def set_language(self, lang: str) -> None:
         self.lang = lang

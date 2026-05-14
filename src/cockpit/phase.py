@@ -103,16 +103,27 @@ PHASE_COLOR_TOKEN: dict[str, str] = {
 
 # Glyph for the phase badge. Plain ASCII / basic Unicode so cmd.exe,
 # Windows Terminal, iTerm, alacritty all render consistently — no
-# emoji.
+# emoji. Each glyph is one monospaced cell.
+#
+# Phase B (visual axis disambiguation): the phase axis now uses
+# process-flow glyphs (a question mark, a comparator, an arrow, a
+# checkmark, a turnstile, a hollow star, a quote) that do NOT collide
+# with the kind axis (geometric shapes in :mod:`cockpit.i18n`
+# ``KIND_ICONS``) nor with the severity gradient in
+# :mod:`cockpit.activity` ``SEVERITY_GLYPH``. The only deliberate
+# overlap is with :mod:`cockpit.activity` ``FAMILY_GLYPH`` for the
+# ``verify`` / ``prove`` / ``narrate`` families — same name, same
+# glyph, intentional semantic alignment (a "verify-family event during
+# the verify phase" reads as visual reinforcement, not redundancy).
 PHASE_GLYPH: dict[str, str] = {
     "idle": " ",
-    "explore": "◇",
-    "select": "⚖",
+    "explore": "?",      # was ◇ (collided with kind=question + family=graph)
+    "select": "⊜",       # was ⚖ (now exclusive to family=bt)
     "experiment": "▶",
     "verify": "✓",
     "prove": "⊢",
-    "review": "★",
-    "narrate": "\"",
+    "review": "☆",       # was ★ (collided with kind=conclusion)
+    "narrate": "❝",     # was " (also better typography)
 }
 
 

@@ -107,3 +107,77 @@ def test_default_config_path_returns_namespaced_path(monkeypatch):
     path = default_config_path()
     assert "claudescientist" in path.as_posix()
     assert path.name == "cockpit.toml"
+
+
+# ---------------------------------------------------------------------------
+# Phase A: migration scaffold
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_is_pass_through_for_current_schema(tmp_path: Path):
+    """Phase A ships the migration scaffold as a near-noop. A dict whose
+    schema_version already matches SCHEMA_VERSION should come back with
+    the same shape (modulo schema_version being explicitly set)."""
+    from cockpit.settings import SCHEMA_VERSION, migrate
+
+    original = {
+        "schema_version": SCHEMA_VERSION,
+        "theme": "claude-cool-dark",
+        "lang": "zh",
+        "focused_pane": "events",  # still valid on-disk (app heals at runtime)
+    }
+    migrated = migrate(dict(original))
+    assert migrated["schema_version"] == SCHEMA_VERSION
+    assert migrated["theme"] == "claude-cool-dark"
+    assert migrated["lang"] == "zh"
+    assert migrated["focused_pane"] == "events"
+
+
+def test_migrate_coerces_missing_schema_version(tmp_path: Path):
+    from cockpit.settings import SCHEMA_VERSION, migrate
+
+    migrated = migrate({"theme": "claude-warm-dark"})
+    # Coerced up to the current version so a re-save will land the
+    # right marker for future cockpits to read.
+    assert migrated["schema_version"] == SCHEMA_VERSION
+
+
+def test_migrate_future_version_logs_warning(monkeypatch, tmp_path: Path):
+    """A file written by a newer cockpit must still load — but it should
+    light up the HUD ⚠ chip so the user knows their config may be only
+    partially honored."""
+    from cockpit import diagnostics
+    from cockpit.settings import migrate
+
+    monkeypatch.setenv(
+        "RESEARCH_AGENT_COCKPIT_CONFIG", str(tmp_path / "cockpit.toml")
+    )
+    diagnostics._INITIALIZED = False  # noqa: SLF001 - force re-init under tmp_path
+    import logging as _logging
+
+    for handler in list(_logging.getLogger("cockpit").handlers):
+        _logging.getLogger("cockpit").removeHandler(handler)
+    diagnostics.reset_health()
+
+    migrated = migrate({"schema_version": 999, "theme": "claude-warm-dark"})
+    # The future version marker is preserved so a subsequent newer
+    # cockpit doesn't think we downgraded.
+    assert migrated["schema_version"] == 999
+    state = diagnostics.health_state()
+    assert state["warnings"] == 1
+    assert "newer" in state["last_message"].lower()
+
+
+def test_load_settings_round_trips_focused_pane_events(tmp_path: Path):
+    """Regression: the runtime ``events → activity`` heal lives in
+    :class:`cockpit.app.CockpitApp`, NOT in the settings layer. The
+    on-disk form must still preserve ``focused_pane = "events"`` so
+    pre-v5 configs survive a load/save cycle without losing user intent.
+    """
+    target = tmp_path / "cockpit.toml"
+    target.write_text(
+        'theme = "claude-warm-dark"\nfocused_pane = "events"\n',
+        encoding="utf-8",
+    )
+    loaded = load_settings(target)
+    assert loaded.focused_pane == "events"

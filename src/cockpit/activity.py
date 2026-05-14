@@ -110,15 +110,23 @@ KIND_FAMILY: dict[str, str] = {
 }
 
 # Glyph for the card's family chip. Plain Unicode — no emoji.
+#
+# Phase B (visual axis disambiguation): ``graph`` moves off ◇ to free
+# that glyph for ``kind=question`` (and the phase axis no longer claims
+# it either). ``risk`` moves off ▲ to free that glyph for
+# ``kind=hypothesis`` and to remove the severity-high/risk-family
+# "▲ ▲ branch_paused" double-triangle the user called out. The
+# verify/prove/narrate overlaps with the phase axis are deliberate —
+# see :data:`cockpit.phase.PHASE_GLYPH`.
 FAMILY_GLYPH: dict[str, str] = {
-    "graph": "◇",
+    "graph": "⊞",       # was ◇ (collided with kind=question)
     "bt": "⚖",
     "verify": "✓",
     "prove": "⊢",
     "lean": "λ",
     "intervention": "!",
-    "narrate": "\"",
-    "risk": "▲",
+    "narrate": "❝",     # was " — matches phase=narrate, better typography
+    "risk": "⚠",        # was ▲ (collided with kind=hypothesis + severity=high)
 }
 
 # Color token (resolved via cockpit.theme.color()) per family.
@@ -167,11 +175,18 @@ KIND_SEVERITY: dict[str, str] = {
 }
 
 # Glyph + style for severity. Pairs with color via cockpit.theme.color().
+#
+# Phase B (visual axis disambiguation): severity now uses a density
+# gradient (block shading) instead of mixed shape glyphs. The visual
+# language reads as "intensity" without overlapping kind (geometric
+# shapes), family (mixed symbols), or phase (process-flow). The
+# critical / high / medium / low / info ramp matches how the eye
+# parses ink density — heaviest ink = loudest signal.
 SEVERITY_GLYPH: dict[str, str] = {
-    "critical": "■",
-    "high": "▲",
-    "medium": "●",
-    "low": "·",
+    "critical": "█",   # was ■ (collided with kind=proposition)
+    "high": "▓",       # was ▲ (collided with kind=hypothesis + family=risk)
+    "medium": "▒",     # was ● (clashed visually with HUD heartbeat dot)
+    "low": "░",        # was · (now part of a coherent density ramp)
     "info": " ",
 }
 

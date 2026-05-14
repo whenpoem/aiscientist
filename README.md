@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-v5.0.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-661-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.0.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-729-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 

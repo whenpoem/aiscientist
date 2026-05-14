@@ -204,6 +204,33 @@ def test_status_bar_heartbeat_renders_dot(workspace):
     assert text.startswith("○") or text.startswith("●")
 
 
+def test_status_bar_health_chip_silent_when_clean(workspace):
+    """Phase A: the HUD ⚠ chip is empty when the cockpit log has no
+    warnings/errors. The format string then renders flush — identical
+    to the pre-Phase-A layout."""
+    from cockpit import diagnostics
+
+    diagnostics.reset_health()
+    bar = StatusBar()
+    chip = bar._format_health()
+    assert chip == ""
+
+
+def test_status_bar_health_chip_lights_after_warning(workspace):
+    """One logged WARNING must flip the chip on so the user sees
+    something is up. The chip uses total = warnings + errors."""
+    from cockpit import diagnostics
+
+    diagnostics.reset_health()
+    log = diagnostics.get_logger("test_health_chip")
+    log.warning("smoke")
+    bar = StatusBar()
+    chip = bar._format_health()
+    assert "⚠" in chip
+    assert "1" in chip
+    diagnostics.reset_health()
+
+
 @pytest.mark.asyncio
 async def test_intervention_press_y_emits_toast(workspace):
     memory_impl = workspace["memory_mcp.impl"]

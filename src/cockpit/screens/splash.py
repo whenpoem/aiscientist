@@ -50,31 +50,26 @@ from cockpit.i18n import t
 from cockpit.theme import color
 from cockpit.theme import style as theme_style
 
-# Per-character interval for the typewriter phase. 70ms feels like
-# "deliberately appearing" without dragging — faster than 50ms reads as
-# instantaneous (and the typewriter effect is wasted), slower than 100ms
-# reads as old-modem.
-_TYPE_INTERVAL_S = 0.07
-# Per-cell interval for the underline draw. Shorter than the typewriter so
-# the underline feels like a snappier accent on the already-paced title.
-_UNDERLINE_INTERVAL_S = 0.025
-# Pause between title completion and subtitle fade-in. Long enough that
-# the eye registers the title underline before the next element enters.
-_SUBTITLE_DELAY_AFTER_TITLE_S = 0.30
-_HINT_DELAY_AFTER_SUBTITLE_S = 0.20
-# Breathing tick for the skip hint. 80ms × 40 phase steps = 3.2s full
-# cycle — slow enough to feel "alive", not "blinking". The breath runs
-# until the user dismisses, so it doubles as a "still waiting" cue.
+# Phase D: tightened splash timing.
+#
+# The previous defaults (typewriter 70ms/char + underline 25ms/cell +
+# subtitle/hint delays + 2s logo wipe ≈ 3s total) made the splash feel
+# *long* on every cockpit launch — fine the first time, hostile when
+# the user opens cockpit dozens of times a day. The new defaults keep
+# the cinematic shape (type-in → underline → settle) but compress to
+# ~700ms total. ``reduced_motion`` still skips the per-frame work
+# entirely; the env-var path is also unchanged.
+_TYPE_INTERVAL_S = 0.035
+_UNDERLINE_INTERVAL_S = 0.012
+_SUBTITLE_DELAY_AFTER_TITLE_S = 0.10
+_HINT_DELAY_AFTER_SUBTITLE_S = 0.08
+# Breathing tick for the skip hint — kept slow so the screen feels
+# alive while the user reads the title. 3.2s full cycle.
 _HINT_BREATH_INTERVAL_S = 0.08
 _HINT_BREATH_PHASES = 40
 
-# Per-column interval for the ASCII-art logo wipe. 30ms is slow enough
-# that the typing motion is visible (faster than vsync would coalesce
-# columns into invisible jumps) and fast enough that the full ~67-col
-# logo finishes inside ~2 seconds — overlapping the title typewriter
-# (980ms) but completing slightly after, so the splash "settles" with
-# the logo as the closing accent.
-_LOGO_INTERVAL_S = 0.030
+# Logo column-wipe: also compressed. ~12ms × 67 cols ≈ 0.8s.
+_LOGO_INTERVAL_S = 0.012
 
 # Min terminal size to render the logo. Below this, the splash falls
 # back to its logo-less form so the layout doesn't overflow / clip.

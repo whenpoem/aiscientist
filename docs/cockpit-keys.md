@@ -26,6 +26,8 @@ own bindings.
 | `P` | Toggle phase strip visibility (v5.0) |
 | `M` | Mute / unmute activity-pane animations (v5.0) |
 | `a` / `A` | Show / hide the audit log view (v5.0) |
+| `b` | Toggle bookmark on the selected node (v5.1) |
+| `B` | Open the bookmarks navigator modal (v5.1) |
 | `u` | Undo the most recent intervention (only if undelivered) |
 | `<` / `>` | Nudge wide-layout tree column narrower / wider |
 | `q` | Quit the app (pops the current Screen first if one is open) |
@@ -36,8 +38,8 @@ own bindings.
 A priority-binding helper inside the App ensures that capital-letter
 priority keys yield to any focused `Input` widget — typing literal `L`
 inside a modal field still types `L` rather than toggling language.
-The helper covers `L`, `T`, `F`, `H`, `R`, `N`, `u`, `<`, `>`, plus
-the v5.0 additions `P`, `M`, `a`, `A`.
+The helper covers `L`, `T`, `F`, `H`, `R`, `N`, `u`, `<`, `>`, the
+v5.0 additions `P`, `M`, `a`, `A`, and the v5.1 additions `b`, `B`.
 
 ## Selection actions
 

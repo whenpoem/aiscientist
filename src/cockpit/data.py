@@ -770,9 +770,9 @@ def fetch_new_events(last_event_id: int = 0, limit: int = 2000) -> list[dict[str
         if last_event_id <= 0:
             rows = con.execute(
                 """
-                SELECT id, kind, payload, created_at
+                SELECT id, kind, payload, created_at, source
                 FROM (
-                    SELECT id, kind, payload, created_at
+                    SELECT id, kind, payload, created_at, source
                     FROM cockpit_events
                     ORDER BY id DESC
                     LIMIT ?
@@ -784,7 +784,7 @@ def fetch_new_events(last_event_id: int = 0, limit: int = 2000) -> list[dict[str
         else:
             rows = con.execute(
                 """
-                SELECT id, kind, payload, created_at
+                SELECT id, kind, payload, created_at, source
                 FROM cockpit_events
                 WHERE id > ?
                 ORDER BY id ASC
@@ -835,7 +835,29 @@ def prune_events(*, keep_last: int = 50_000) -> int:
         con.close()
 
 
-def record_event(kind: str, payload: dict[str, Any] | str | None = None) -> int:
+def record_event(
+    kind: str,
+    payload: dict[str, Any] | str | None = None,
+    *,
+    source: str | None = None,
+) -> int:
+    """Append a row to ``cockpit_events``.
+
+    ``source`` is the optional provenance tag (Phase E). Pass one of:
+
+    - ``"cockpit_mcp"`` — when called via the cockpit MCP server tools
+      (push_graph_delta, record_note, set_phase, narrate).
+    - ``"cockpit_user"`` — when the TUI user typed the ``:note`` command.
+    - ``"cockpit_intervention"`` — internal: the write_intervention
+      side-channel that records an ``"intervention"`` event row.
+    - ``"memory_mcp"`` / ``"verify_mcp"`` / ``"prove_mcp"`` — when the
+      respective MCP server emits.
+    - ``"cockpit_export"`` — when a report is generated.
+
+    Pass ``None`` to leave the column ``NULL``; the UI renders that as
+    ``unknown``. Callers older than Phase E pass nothing → backward
+    compatible.
+    """
     con = _connect()
     payload_text = (
         payload
@@ -845,10 +867,10 @@ def record_event(kind: str, payload: dict[str, Any] | str | None = None) -> int:
     try:
         cursor = con.execute(
             """
-            INSERT INTO cockpit_events(kind, payload, created_at)
-            VALUES(?,?,?)
+            INSERT INTO cockpit_events(kind, payload, created_at, source)
+            VALUES(?,?,?,?)
             """,
-            (kind, payload_text, now_utc_iso()),
+            (kind, payload_text, now_utc_iso(), source),
         )
         con.commit()
         return int(cursor.lastrowid or 0)
@@ -871,9 +893,37 @@ def write_intervention(kind: str, target: str | None, payload: str) -> dict[str,
         event_id = record_event(
             "intervention",
             {"kind": kind, "target": target, "payload": cleaned_payload},
+            source="cockpit_intervention",
         )
         con.commit()
         return {"intervention_id": intervention_id, "event_id": event_id}
+    finally:
+        con.close()
+
+
+def count_pending_interventions() -> int:
+    """Return how many cockpit-queued interventions have not yet been
+    delivered to the agent.
+
+    Phase C uses this for the quit-confirmation modal: if the user
+    presses ``q`` while a non-zero count of rows still has
+    ``delivered_at IS NULL``, the cockpit asks for confirmation so they
+    know the agent will still see those interventions on the next
+    UserPromptSubmit. Returning 0 on any DB error so the confirmation
+    is never *required* — the modal only adds friction when we can prove
+    there is something pending.
+    """
+    try:
+        con = _connect()
+    except Exception:  # pragma: no cover - defensive
+        return 0
+    try:
+        row = con.execute(
+            "SELECT COUNT(*) AS n FROM cockpit_interventions WHERE delivered_at IS NULL"
+        ).fetchone()
+        return int(row["n"]) if row is not None else 0
+    except sqlite3.OperationalError:
+        return 0
     finally:
         con.close()
 
@@ -920,6 +970,7 @@ def undo_intervention(intervention_id: int) -> dict[str, object]:
                 "kind": row["kind"],
                 "target": row["target"],
             },
+            source="cockpit_user",
         )
         con.commit()
         return {

@@ -20,6 +20,7 @@ from . import data
 from .activity import ActivityCard, aggregate_from_db
 from .bars import progress_bar
 from .commands import CockpitCommands, ThemeSwitcherCommands
+from .diagnostics import get_logger, health_state, reset_health
 from .i18n import normalize_lang, t, toggle_lang
 from .layout import (
     LAYOUT_FOCUS,
@@ -29,8 +30,20 @@ from .layout import (
     css_class_for,
     resolve_for_width,
 )
-from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
-from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
+from .modals import (
+    BookmarksModal,
+    ConfirmModal,
+    HelpScreen,
+    PinMetricModal,
+    TextInputModal,
+)
+from .panes import (
+    EventStreamPane,
+    HypothesisTreePane,
+    NodeDetailPane,
+    RightTabsPane,
+    TimelinePane,
+)
 from .panes.activity_pane import ActivityPane
 from .panes.focus_pane import FocusState, derive_focus_from_db
 from .panes.phase_strip import PhaseStripPane
@@ -52,11 +65,46 @@ from .theme import (
     update_theme_vars,
 )
 
+# Cockpit-side observability (Phase A2). ``get_logger`` is side-effect
+# free at call time — it attaches a lazy file handler that only opens
+# the log file on first emission. So a plain ``import cockpit.app``
+# does NOT touch the filesystem; only an actual ``_log.warning(...)``
+# / ``_log.exception(...)`` does. The reviewer flagged the pre-A2
+# eager initialisation; see cockpit/diagnostics.py for the rewrite.
+_log = get_logger("app")
+
 # v5.0 Activity Streaming migrated the canonical "events" pane to
 # "activity" in the body grid; the original RichLog moved to a bottom-
 # docked "audit log". Settings persisted under the legacy name are healed
 # to the new name on load (see :func:`_normalize_focus_pane`).
 FOCUS_ORDER = ("tree", "detail", "activity", "tabs")
+
+
+def _pane_label(lang: str, pane: str) -> str:
+    """Localized pane name for the HUD focus-mode chip and breadcrumb.
+
+    The cockpit's pane titles are already translated (``tree_title``,
+    ``detail_title``, etc.), but they carry the "1 Hypothesis Tree"
+    numeric prefix and "Activity" capitalization that don't fit the
+    inline chip layout. This helper extracts a clean short label per
+    language.
+    """
+    table_en = {
+        "tree": "Tree",
+        "detail": "Detail",
+        "activity": "Activity",
+        "tabs": "Tabs",
+        "events": "Audit log",
+    }
+    table_zh = {
+        "tree": "假设树",
+        "detail": "详情",
+        "activity": "活动",
+        "tabs": "表格",
+        "events": "审计日志",
+    }
+    table = table_zh if str(lang).startswith("zh") else table_en
+    return table.get(pane, pane or "?")
 
 
 class StatusBar(Static):
@@ -81,6 +129,12 @@ class StatusBar(Static):
             "latest_event_at": None,
         }
         self._clock = "--:--"
+        # Phase D: heartbeat phase counter. Bumped once per second by
+        # ``_tick`` so the leftmost heartbeat chip alternates colour
+        # while the cockpit has recent activity — a peripheral-vision
+        # "is the agent alive" signal that does not need the user to
+        # look at the right-side "last event" text.
+        self._heartbeat_phase = 0
 
     def on_mount(self) -> None:
         self.set_interval(1.0, self._tick)
@@ -100,6 +154,10 @@ class StatusBar(Static):
 
     def _tick(self) -> None:
         self._clock = datetime.now().strftime("%H:%M")
+        # Bump the heartbeat phase so _format_heartbeat alternates colour
+        # on each tick. We only care about the parity, so the counter can
+        # wrap freely without an explicit modulo.
+        self._heartbeat_phase = (self._heartbeat_phase + 1) & 0xFFFF
         self._refresh_display()
 
     def _refresh_display(self) -> None:
@@ -113,7 +171,11 @@ class StatusBar(Static):
         self.current_text = t(
             self.lang,
             hud_key,
+            heartbeat=self._format_heartbeat(),
             app=t(self.lang, "app_name"),
+            health=self._format_health(),
+            focus_mode=self._format_focus_mode(),
+            action_target=self._format_action_target(),
             active_hypotheses=self._summary.get("active_hypotheses", 0),
             refuted_nodes=self._summary.get("refuted_nodes", 0),
             pinned_claims=self._summary.get("pinned_claims", 0),
@@ -125,7 +187,108 @@ class StatusBar(Static):
             lang_code=self.lang.upper(),
             clock=self._clock,
         )
+        # Static.update parses Rich markup unless explicitly disabled. The
+        # heartbeat chip relies on markup (``[$accent]●[/]``) for its
+        # breath colour swap — without markup parsing the user would see
+        # the literal tags. The rest of the HUD is plain text, so the
+        # markup-enabled mode is the right default.
         self.update(self.current_text)
+
+    def _format_heartbeat(self) -> str:
+        """Render the leftmost heartbeat chip with a 2-state colour breath.
+
+        Reads ``self._summary["latest_event_at"]`` to decide between
+        "warm" (event in the last ~10 s — bright dot, breath active)
+        and "cold" (no recent event — muted ring, no breath). The colour
+        swap on each ``_tick`` is what makes the chip feel "alive" in
+        peripheral vision; it does NOT require a sub-second timer.
+
+        The chip is rendered with Rich markup so the surrounding HUD
+        text stays plain. Static.update() parses markup by default.
+        """
+        raw = self._summary.get("latest_event_at")
+        # Parse the last-event timestamp to decide warm vs cold. Errors
+        # fall through to "cold" — the dot still shows, it just stops
+        # breathing.
+        warm = False
+        if raw:
+            try:
+                parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - parsed).total_seconds()
+                warm = age >= 0 and age < 10
+            except ValueError:
+                warm = False
+        if not warm:
+            return "[$foreground-muted]○[/]"
+        # Warm: alternate between accent (full intensity) and foreground
+        # (slightly dimmer) each tick so the eye perceives a slow breath.
+        if self._heartbeat_phase & 1:
+            return "[$accent]●[/]"
+        return "[$foreground]●[/]"
+
+    def _format_action_target(self) -> str:
+        """Render the "▶ acts on: <node>" chip on the right side of the HUD.
+
+        Peeks at the running App's ``selected_node_id`` (the same node
+        every y/n/r/c/m/p binding targets, regardless of which pane has
+        keyboard focus). The chip is empty when nothing is selected so
+        the HUD spacing flows naturally on cold start.
+
+        The peek is defensive: during the StatusBar's first mount the
+        widget exists before the App's ``selected_node_id`` attribute
+        does, and during shutdown the App may be partially torn down.
+        Either edge returns the empty chip rather than raising.
+        """
+        try:
+            node_id = getattr(self.app, "selected_node_id", None)
+        except Exception:  # pragma: no cover - defensive: app accessor edge
+            return t(self.lang, "action_target_empty")
+        if not node_id:
+            return t(self.lang, "action_target_empty")
+        return t(self.lang, "action_target", target=node_id)
+
+    def _format_focus_mode(self) -> str:
+        """Render the "[FOCUS: <pane>]" chip on the left side of the HUD.
+
+        Lights up only when the user has entered single-pane focus mode
+        (layout_preset = "focus"). The chip names the currently visible
+        pane in the user's language so they know which pane the F-key
+        will hide on next press.
+        """
+        try:
+            preset = self.app._settings.layout_preset  # type: ignore[attr-defined]
+            focused = self.app.focused_pane  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive: app accessor edge
+            return t(self.lang, "focus_mode_off")
+        if preset not in ("focus", "single"):
+            return t(self.lang, "focus_mode_off")
+        pane_label = _pane_label(self.lang, focused)
+        return t(self.lang, "focus_mode_on", pane=pane_label)
+
+    def _format_health(self) -> str:
+        """Render the health chip from the cockpit diagnostics state.
+
+        Empty string when no warnings/errors have been logged this
+        session — the HUD format string then renders flush, identical
+        to the pre-Phase-A layout. When the cockpit has logged anything
+        at WARNING or above, a ``⚠{n}`` chip appears between ``{app}``
+        and the first metric so the user has a visible tell that the
+        cockpit's log file is worth checking.
+
+        The chip uses *total events ≥ warning* rather than separating
+        warnings from errors: at the chip's 1-cell visual budget the
+        nuance is invisible. The exact split lives in ``cockpit.log``.
+        """
+        try:
+            state = health_state()
+        except Exception:  # pragma: no cover - defensive: diagnostics import path
+            return t(self.lang, "health_clean")
+        total = int(state.get("errors", 0) or 0) + int(state.get("warnings", 0) or 0)
+        if total <= 0:
+            return t(self.lang, "health_clean")
+        return t(self.lang, "health_warning", count=total)
 
     def _format_heldout(self) -> str:
         budgets = self._summary.get("heldout_budgets") or []
@@ -298,6 +461,14 @@ class CockpitApp(App[None]):
         # the agent hasn't consumed it yet (delivered_at IS NULL). After
         # delivery the cockpit must NOT lie that it can rewind history.
         Binding("u", "undo_intervention", "Undo", priority=True),
+        # Phase E3: ``b`` toggles a bookmark on the current selection;
+        # ``B`` opens the bookmark-navigator modal. priority=True on both
+        # so they fire even when a focused DataTable / Tree would
+        # otherwise swallow the keystroke (same precedent as L/T/F).
+        # The yield-to-input helper keeps literal ``b``/``B`` typing
+        # inside the filter / command input working.
+        Binding("b", "toggle_bookmark", "Bookmark", priority=True),
+        Binding("B", "show_bookmarks", "Bookmarks", priority=True),
         Binding("escape", "cancel_context", show=False),
         Binding("q", "quit_requested", "Quit", priority=True),
     ]
@@ -315,6 +486,14 @@ class CockpitApp(App[None]):
         settings: CockpitSettings | None = None,
     ) -> None:
         super().__init__()
+        # Phase A: each fresh CockpitApp resets the diagnostics health
+        # counters. In production this matches the natural per-process
+        # lifecycle (cockpit launches → fresh counters → user sees the
+        # ⚠ chip only for THIS session's events). In the test suite the
+        # diagnostics module is not hot-reloaded by conftest.workspace,
+        # so without this call a warning logged by an earlier test would
+        # leak into a later test's HUD assertions.
+        reset_health()
         # Settings precedence: explicit kwargs > saved file > built-in defaults.
         # The CLI passes lang/theme as None when the user didn't specify them,
         # so a saved choice from a prior session survives across launches.
@@ -403,6 +582,11 @@ class CockpitApp(App[None]):
         events = EventStreamPane(wrap=self._settings.event_wrap)
         events.add_class("audit-log")
         yield events
+        # Phase E4: bottom-docked event timeline strip. Hidden by
+        # default; toggled by ``:timeline``. Yielded *before* the
+        # command-line so the dock:bottom stack reads (bottom-to-top):
+        # ContextBar → Input → Timeline → AuditLog.
+        yield TimelinePane()
         yield Input(placeholder="command", id="command-line", classes="hidden")
         yield ContextBar(lang=self.lang)
 
@@ -440,6 +624,12 @@ class CockpitApp(App[None]):
         self._refresh_phase()
         self._refresh_activity()
         self._refresh_focus()
+        # Phase A: surface a one-time hint when the cockpit_events table is
+        # large enough that the 1-second poll loop becomes a real cost.
+        # We do NOT auto-prune — that would silently destroy audit context
+        # a long-running researcher may depend on. The hint asks the user
+        # to run the manual --prune-events CLI flag.
+        self._maybe_warn_events_table_size()
         # Restore focus to the previously active pane. tree / detail /
         # events are plain widgets; calling .focus() synchronously is
         # safe and keeps key bindings working from the first keystroke
@@ -475,7 +665,7 @@ class CockpitApp(App[None]):
                     )
                 )
             except Exception:  # pragma: no cover - defensive
-                pass
+                _log.exception("WelcomeScreen push failed; continuing without it")
 
         # Splash is pushed LAST so the main view is fully composed,
         # themed, and event-pumped behind it. Popping the splash then
@@ -491,7 +681,7 @@ class CockpitApp(App[None]):
                     )
                 )
             except Exception:  # pragma: no cover - splash must never block boot
-                pass
+                _log.exception("SplashScreen push failed; continuing without it")
 
     def on_resize(self, event: events.Resize) -> None:  # noqa: ARG002
         # Re-evaluate the active layout whenever the terminal resizes. The
@@ -503,6 +693,47 @@ class CockpitApp(App[None]):
     def on_unmount(self) -> None:
         self._stop_event_worker = True
         self._persist_settings()
+
+    # -- Phase A: health checks --------------------------------------------
+
+    # Threshold chosen empirically: at ~50k rows the per-tick activity /
+    # focus / phase derivations measurably stall on slower disks; at 20k
+    # they're effectively free. We warn at 50k and suggest pruning to 20k.
+    _EVENTS_WARN_THRESHOLD = 50_000
+    _EVENTS_SUGGEST_KEEP = 20_000
+
+    def _maybe_warn_events_table_size(self) -> None:
+        """Surface a one-shot toast + log line when cockpit_events is large.
+
+        Idempotent: only fires the toast the first time the threshold is
+        crossed in a given launch. A second mount (theme reload, etc.)
+        won't repeat the toast because by then the app instance is already
+        warmed. Logged at WARNING so the HUD's ⚠ chip lights up — the
+        toast is transient, the chip is the persistent tell.
+        """
+        try:
+            counts = data.fetch_counts()
+        except Exception:  # pragma: no cover - defensive
+            _log.exception("fetch_counts failed during startup size check")
+            return
+        events = int(counts.get("events", 0) or 0)
+        if events < self._EVENTS_WARN_THRESHOLD:
+            return
+        _log.warning(
+            "cockpit_events has %d rows (threshold %d); poll-tick performance "
+            "may degrade. Suggest --prune-events %d.",
+            events,
+            self._EVENTS_WARN_THRESHOLD,
+            self._EVENTS_SUGGEST_KEEP,
+        )
+        try:
+            self.notify(
+                t(self.lang, "events_table_large", count=events),
+                severity="warning",
+                timeout=10.0,
+            )
+        except Exception:  # pragma: no cover - defensive: notify pre-mount edge
+            _log.exception("_maybe_warn_events_table_size: notify failed")
 
     # -- theme machinery ---------------------------------------------------
 
@@ -672,6 +903,89 @@ class CockpitApp(App[None]):
         self._last_intervention_kind = None
         self._last_intervention_target = None
 
+    def action_toggle_bookmark(self) -> None:
+        """``b`` — add / remove the currently selected node from bookmarks.
+
+        Toggle semantics: if the node is already in the bookmark list,
+        remove it; otherwise append it. Persists to settings so
+        bookmarks survive across sessions. The tree pane's
+        ``_label_for`` reads ``self._settings.bookmarks`` on its next
+        repaint to render the ``✦`` prefix on bookmarked rows.
+
+        No-op (with a toast hint) when nothing is selected — bookmarking
+        "nothing" would never round-trip back to a useful jump.
+        """
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("b"):
+            return
+        node_id = self.selected_node_id
+        if not node_id:
+            self.notify(t(self.lang, "bookmark_no_selection"), severity="warning")
+            return
+        current = list(self._settings.bookmarks or [])
+        if node_id in current:
+            current.remove(node_id)
+            self.notify(t(self.lang, "bookmark_removed", target=node_id))
+        else:
+            current.append(node_id)
+            self.notify(t(self.lang, "bookmark_added", target=node_id))
+        self._settings.bookmarks = current
+        self._persist_settings()
+        # Force the tree pane to repaint so the new bookmark prefix
+        # shows immediately rather than waiting for the next tick.
+        try:
+            self._refresh_graph()
+        except Exception:  # pragma: no cover - defensive
+            _log.exception("action_toggle_bookmark: tree repaint failed")
+
+    def action_show_bookmarks(self) -> None:
+        """``B`` — open the bookmark-navigator modal.
+
+        The modal returns one of:
+
+        - ``None`` — user cancelled (Esc / ``q`` / no bookmarks)
+        - ``("jump", node_id)`` — jump tree focus to that node
+        - ``("delete", node_id)`` — remove that bookmark and reopen the
+          modal so the user can keep cleaning house without re-keying B
+
+        Reopening on delete is intentional: a single ``B`` press to
+        triage a long stale-bookmark list is the common case.
+        """
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("B"):
+            return
+        bookmarks = list(self._settings.bookmarks or [])
+        self.push_screen(
+            BookmarksModal(bookmarks, self.graph, lang=self.lang),
+            callback=self._handle_bookmark_action,
+        )
+
+    def _handle_bookmark_action(self, result) -> None:
+        if not result:
+            return
+        try:
+            kind, node_id = result
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return
+        if kind == "jump":
+            self._goto_node(node_id)
+            return
+        if kind == "delete":
+            current = list(self._settings.bookmarks or [])
+            if node_id in current:
+                current.remove(node_id)
+                self._settings.bookmarks = current
+                self._persist_settings()
+                self.notify(t(self.lang, "bookmark_removed", target=node_id))
+                try:
+                    self._refresh_graph()
+                except Exception:  # pragma: no cover - defensive
+                    _log.exception("_handle_bookmark_action: tree repaint failed")
+            # Reopen so the user can continue triaging.
+            self.action_show_bookmarks()
+
     def action_shrink_tree(self) -> None:
         if self._priority_action_blocked_by_help():
             return
@@ -775,11 +1089,17 @@ class CockpitApp(App[None]):
                     "SELECT COUNT(*) AS n FROM mem_nodes"
                 ).fetchone()
                 return int(row[0]) == 0
-            except sqlite3.OperationalError:
+            except sqlite3.OperationalError as exc:
+                # Most likely: schema not yet created (fresh install).
+                # Logged at INFO because it's expected on cold start; the
+                # HUD health chip only lights up on WARNING+, so the
+                # cockpit does not nag for this case.
+                _log.info("_should_show_welcome: mem_nodes not ready (%s)", exc)
                 return True
             finally:
                 con.close()
         except Exception:  # pragma: no cover - defensive
+            _log.exception("_should_show_welcome: probe failed; defaulting to True")
             return True
 
     def _quickstart_doc_path(self):
@@ -796,7 +1116,7 @@ class CockpitApp(App[None]):
             self._settings.welcome_shown = True
             self._persist_settings()
         except Exception:  # pragma: no cover - defensive
-            pass
+            _log.exception("_mark_welcome_seen: could not persist welcome_shown")
 
     def _on_detail_section_toggled(self, section_key: str, collapsed: bool) -> None:
         """Persist the user's collapse/expand action on a detail section.
@@ -811,7 +1131,11 @@ class CockpitApp(App[None]):
             self._settings.detail_section_collapsed = state
             self._persist_settings()
         except Exception:  # pragma: no cover - defensive
-            pass
+            _log.exception(
+                "_on_detail_section_toggled: section=%r collapsed=%r — persistence failed",
+                section_key,
+                collapsed,
+            )
 
     def _persist_settings(self) -> None:
         """Write the current settings snapshot to disk. Swallows OSError so
@@ -830,7 +1154,11 @@ class CockpitApp(App[None]):
         try:
             save_settings(settings_to_save)
         except OSError:
-            pass
+            # Read-only FS, parent missing, or path too long. The cockpit
+            # still runs without persistence; user gets the ⚠ chip in the
+            # HUD as the visible tell. Logged so the next launch's audit
+            # trail explains the missing settings.
+            _log.exception("save_settings failed; preferences will not survive this session")
 
     @property
     def status_bar(self) -> StatusBar:
@@ -859,6 +1187,10 @@ class CockpitApp(App[None]):
     @property
     def tabs_pane(self) -> RightTabsPane:
         return self.query_one(RightTabsPane)
+
+    @property
+    def timeline_pane(self) -> TimelinePane:
+        return self.query_one(TimelinePane)
 
     @property
     def command_line(self) -> Input:
@@ -1426,7 +1758,36 @@ class CockpitApp(App[None]):
         if len(self.screen_stack) > 1:
             self.pop_screen()
             return
-        self.exit()
+        # Phase C: confirm before quitting if interventions are queued
+        # but not yet delivered. The agent will still see them on the
+        # next UserPromptSubmit, but the user should know.
+        pending = 0
+        try:
+            pending = data.count_pending_interventions()
+        except Exception:  # pragma: no cover - defensive
+            _log.exception("count_pending_interventions failed at quit-time")
+        if pending <= 0:
+            self.exit()
+            return
+        self.push_screen(
+            ConfirmModal(
+                title=t(self.lang, "quit_pending_title"),
+                prompt=t(self.lang, "quit_pending_body", count=pending),
+                lang=self.lang,
+            ),
+            callback=self._handle_quit_confirm,
+        )
+
+    def _handle_quit_confirm(self, confirmed: bool) -> None:
+        """Callback for the quit-with-pending-interventions modal.
+
+        ``confirmed=True`` → exit; ``False`` (Esc / n / dismissed) →
+        stay in the cockpit. The pending rows themselves are NOT
+        touched either way — the user can still ``u``-undo the most
+        recent one before the agent picks it up.
+        """
+        if confirmed:
+            self.exit()
 
     def action_approve_node(self) -> None:
         self._queue_intervention("approve")
@@ -1519,6 +1880,21 @@ class CockpitApp(App[None]):
                     return
             except Exception:  # pragma: no cover
                 pass
+            # Modal-specific submit path. Some modal controls (notably
+            # BookmarksModal's ListView) don't expose action_submit on
+            # the focused widget in this Textual version; their Enter
+            # semantics live on the screen action instead.
+            action_jump = getattr(top, "action_jump", None)
+            if callable(action_jump):
+                try:
+                    result = action_jump()
+                    import inspect as _inspect
+
+                    if _inspect.isawaitable(result):
+                        await result
+                except Exception:  # pragma: no cover
+                    pass
+                return
             # Inputs inside the modal — submit to fire on_input_submitted.
             try:
                 focused = top.focused  # type: ignore[attr-defined]
@@ -1799,7 +2175,44 @@ class CockpitApp(App[None]):
             return
         result = data.write_intervention(kind, node_id, "")
         self._track_intervention(result, kind, node_id)
+        self._flash_intervention()
         self.refresh_state(include_events=True)
+
+    def _flash_intervention(self) -> None:
+        """Brief visual confirmation that an action key was registered.
+
+        Phase D: adds ``.intervention-flash`` to the tree pane for ~250 ms.
+        The class swaps the pane border to ``$accent`` and lightly tints
+        the background; ``Screen.animations-off`` suppresses the tint for
+        users who muted motion. The toast still fires regardless — the
+        flash is supplemental peripheral-vision feedback.
+
+        Failures are logged but never bubbled — visual feedback is a
+        nice-to-have, the underlying intervention has already landed in
+        the DB by the time this method runs.
+        """
+        try:
+            pane = self.tree_pane
+        except NoMatches:  # pragma: no cover - defensive: pre-mount edge
+            return
+        try:
+            pane.add_class("intervention-flash")
+        except Exception:  # pragma: no cover - defensive
+            _log.exception("_flash_intervention: add_class failed")
+            return
+
+        def _clear() -> None:
+            try:
+                pane.remove_class("intervention-flash")
+            except Exception:  # pragma: no cover - defensive
+                _log.exception("_flash_intervention: remove_class failed")
+
+        try:
+            self.set_timer(0.25, _clear)
+        except Exception:  # pragma: no cover - defensive
+            # Could not schedule the clear — remove the class immediately
+            # so the cockpit isn't stuck in a flashing state.
+            _clear()
 
     def _track_intervention(
         self,
@@ -1886,7 +2299,13 @@ class CockpitApp(App[None]):
             return
         op, *args = parts
         if op == "note":
-            data.record_event("note", {"text": " ".join(args)})
+            # ``:note`` is the cockpit user's manual journal entry —
+            # tag it ``cockpit_user`` so the provenance line in the
+            # Detail pane reads "from cockpit (you)" instead of leaving
+            # the source as NULL / unknown.
+            data.record_event(
+                "note", {"text": " ".join(args)}, source="cockpit_user"
+            )
         elif op in {"reject", "approve"}:
             target = args[0] if args else self.selected_node_id
             payload = " ".join(args[1:]) if len(args) > 1 else ""
@@ -1912,6 +2331,95 @@ class CockpitApp(App[None]):
             return  # _goto_node handles its own refresh; skip the global one
         elif op == "pin":
             self.notify(t(self.lang, "command_pin_usage"), severity="warning")
+            return
+        elif op == "theme":
+            # ``:theme <name>`` — direct jump rather than the cycle bound
+            # to T. Unknown names produce a localized warning, NOT a
+            # silent fallback (silent fallback hid the user's typo and
+            # then they wondered why the theme didn't change).
+            if not args:
+                self.notify(
+                    t(self.lang, "cmd_unknown_value", kind="theme", value=""),
+                    severity="warning",
+                )
+                return
+            name = args[0]
+            from .theme import theme_names as _theme_names
+
+            if name not in _theme_names():
+                self.notify(
+                    t(self.lang, "cmd_unknown_value", kind="theme", value=name),
+                    severity="warning",
+                )
+                return
+            self._apply_theme(name, persist=True, notify=True)
+            return
+        elif op == "lang":
+            # ``:lang <code>`` — switch language directly. ``L`` is the
+            # toggle; this is the explicit form for users with more
+            # than two languages in their muscle memory (and a way to
+            # set the language deterministically in a screencast).
+            if not args:
+                self.notify(
+                    t(self.lang, "cmd_unknown_value", kind="lang", value=""),
+                    severity="warning",
+                )
+                return
+            from .i18n import SUPPORTED_LANGS
+
+            code = args[0].lower()
+            if code not in SUPPORTED_LANGS:
+                self.notify(
+                    t(self.lang, "cmd_unknown_value", kind="lang", value=code),
+                    severity="warning",
+                )
+                return
+            if code != self.lang:
+                self.lang = code
+                self._apply_language()
+                self.refresh_state(include_events=True)
+                self.notify(t(self.lang, "language_notice"))
+                self._persist_settings()
+            return
+        elif op == "focus":
+            # ``:focus`` — alias for the F key. Useful when the user is
+            # in the middle of typing into the command line and doesn't
+            # want to bounce keys.
+            self._toggle_focus_impl()
+            return
+        elif op == "health":
+            # ``:health`` — clear the in-memory health-state counters
+            # AFTER the user has read the log. The chip vanishes on
+            # next tick (StatusBar re-reads the state every second).
+            reset_health()
+            self.notify(t(self.lang, "cmd_health_cleared"))
+            return
+        elif op == "timeline":
+            # ``:timeline`` — toggle the bottom event-density strip.
+            # Phase E4 ships visualisation only; an optional arg
+            # ``on`` / ``off`` lets a screencast force a specific
+            # state without depending on the previous toggle parity.
+            try:
+                pane = self.timeline_pane
+            except NoMatches:  # pragma: no cover - defensive
+                return
+            if args and args[0].lower() in {"on", "1", "show", "true"}:
+                target = True
+            elif args and args[0].lower() in {"off", "0", "hide", "false"}:
+                target = False
+            else:
+                target = not pane.is_visible
+            pane.set_visible(target)
+            if target:
+                # Push the current event tail in so the strip isn't
+                # blank on first open.
+                try:
+                    pane.set_events(data.fetch_new_events(0, limit=200))
+                except Exception:  # pragma: no cover - defensive
+                    _log.exception(":timeline fetch_events failed")
+            self.notify(
+                t(self.lang, "timeline_on" if target else "timeline_off")
+            )
             return
         else:
             self.notify(
@@ -2006,6 +2514,12 @@ class CockpitApp(App[None]):
     def _refresh_graph(self) -> None:
         previous_node_id = self.selected_node_id or self.tree_pane.current_node_id()
         self.graph = data.fetch_graph()
+        # Phase E3: push the bookmark set into the tree pane BEFORE
+        # ``load_graph`` rebuilds the labels — that's the point where
+        # ``_label_for`` reads ``self._bookmarks`` to decide whether to
+        # prefix each row with ``✦``. Out-of-order would leave the
+        # first paint without the indicator.
+        self.tree_pane.set_bookmarks(self._settings.bookmarks)
         self.selected_node_id = self.tree_pane.load_graph(
             self.graph,
             show_refuted=self.show_refuted,
@@ -2108,6 +2622,20 @@ class CockpitApp(App[None]):
         self.last_event_id = int(rows[-1]["id"]) if rows else int(data.fetch_latest_event_id())
         self.events_pane.set_filter_text(self._pane_filters["events"])
         self.events_pane.set_relative_timestamps(self.relative_timestamps)
+        # Phase E4: push the recent-events tail into the timeline strip
+        # only when it is visible. The strip uses ``fetch_events`` (not
+        # the delta cursor) because it always wants the most-recent
+        # ``max_cells`` rows in chronological order — even if the user
+        # just opened the strip after thousands of events have passed.
+        try:
+            timeline = self.timeline_pane
+        except NoMatches:  # pragma: no cover - defensive
+            timeline = None
+        if timeline is not None and timeline.is_visible:
+            try:
+                timeline.set_events(data.fetch_new_events(0, limit=200))
+            except Exception:  # pragma: no cover - defensive
+                _log.exception("_refresh_events: timeline.set_events failed")
 
     def _dispatch_events(self, rows: list[dict]) -> None:
         kinds = {str(row.get("kind", "")) for row in rows}

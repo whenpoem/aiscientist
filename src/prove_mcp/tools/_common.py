@@ -13,10 +13,11 @@ def _emit_event(con: sqlite3.Connection, kind: str, payload: dict) -> None:
     """Emit a cockpit event, swallowing transient SQLite errors.
 
     Mirrors ``memory_mcp.tools._common._emit_event`` so cross-trunk event
-    semantics stay aligned.
+    semantics stay aligned. Tags every row with ``source="prove_mcp"``
+    (Phase E provenance) so the cockpit can surface event origin.
     """
     try:
-        emit_cockpit_event(con, kind, payload)
+        emit_cockpit_event(con, kind, payload, source="prove_mcp")
     except sqlite3.Error:
         return
 

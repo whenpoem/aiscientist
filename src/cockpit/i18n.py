@@ -110,14 +110,15 @@ TEXT: dict[str, dict[str, str]] = {
         "refutes": "refutes",
         "support_refute": "{supports} supports / {refutes} refutes",
         "hud": (
-            "{app}  H {active_hypotheses} / refuted {refuted_nodes} / "
+            "{heartbeat}  {app}{health}{focus_mode}  H {active_hypotheses} / "
+            "refuted {refuted_nodes} / "
             "claims {pinned_claims} ({unverified_claims} unverified) / "
-            "heldout {heldout} / risks {risks} / last {last_event}  "
-            "{theme}·{lang_code}  {clock}"
+            "heldout {heldout} / risks {risks} / last {last_event}"
+            "{action_target}  {theme}·{lang_code}  {clock}"
         ),
         "hud_compact": (
-            "{app}  H {active_hypotheses}/{refuted_nodes}  "
-            "claims {pinned_claims}  risks {risks}  "
+            "{heartbeat}  {app}{health}{focus_mode}  H {active_hypotheses}/{refuted_nodes}  "
+            "claims {pinned_claims}  risks {risks}{action_target}  "
             "{theme}·{lang_code} {clock}"
         ),
         "heldout_none": "none",
@@ -126,6 +127,83 @@ TEXT: dict[str, dict[str, str]] = {
         "seconds_ago": "{value}s ago",
         "minutes_ago": "{value}m ago",
         "hours_ago": "{value}h ago",
+        # Phase A: HUD health chip. Empty when the cockpit's session log
+        # has no warnings/errors; " ⚠{n}" otherwise. The leading space is
+        # part of the chip so the HUD spacing reflows automatically — the
+        # format string is "{app}{health}  H ..." and renders flush when
+        # clean.
+        "health_clean": "",
+        "health_warning": " ⚠{count}",
+        # Toast surfaced once per launch when the cockpit_events table is
+        # large enough to slow the 1-second poll. Suggests the manual
+        # prune CLI — auto-pruning would surprise long-running sessions
+        # that depend on older audit context.
+        "events_table_large": (
+            "cockpit_events has {count} rows — "
+            "consider `python -m cockpit.tui --prune-events 20000`"
+        ),
+        # Phase C: HUD chips. action_target shows what the next
+        # y/n/r/c/m/p will act on (always the tree selection, even when
+        # focus is in tabs / activity). focus_mode lights up when the
+        # user is in single-pane focus mode so the absent neighbour panes
+        # don't read as "where did they go". Both are empty strings on
+        # the default path so the HUD reflows flush.
+        "action_target_empty": "",
+        "action_target": "  ▶ {target}",
+        "focus_mode_off": "",
+        "focus_mode_on": "  ⊡ {pane}",
+        # Phase C: Detail pane breadcrumb. The pane is multi-source
+        # (tree selection / tab drill-in / startup hint); the breadcrumb
+        # tells the user where the current content came from and how to
+        # leave drill-in mode.
+        "breadcrumb_node": "from {source} · {target}",
+        "breadcrumb_override": "drill-in · {label}  ·  Esc to return",
+        "breadcrumb_hint": "no selection",
+        "source_tree": "Tree",
+        "source_tabs": "Tabs",
+        # Phase C: Quit confirmation when interventions are pending
+        # delivery. The agent might still pick them up on the next
+        # UserPromptSubmit; quitting cockpit doesn't drop them, but the
+        # user should know before walking away.
+        "quit_pending_title": "Quit with pending interventions?",
+        "quit_pending_body": (
+            "{count} intervention(s) have not yet been delivered to the agent. "
+            "They will still be picked up on the next user prompt. "
+            "Press y to quit, n to stay."
+        ),
+        # Phase C: extended command palette entries.
+        "cmd_theme_help": "Switch theme to {name}",
+        "cmd_lang_help": "Switch language to {name}",
+        "cmd_focus_help": "Toggle single-pane focus mode",
+        "cmd_health_help": "Clear cockpit health-state warnings",
+        "cmd_health_cleared": "cockpit health-state cleared",
+        "cmd_unknown_value": "unknown {kind}: {value!r}",
+        # Phase E: provenance display. ``event_source`` is the
+        # "emitted by" line label in the event-drill body; the
+        # ``provenance_<source>`` entries map the raw column value to
+        # a friendly localized name. Unknown sources fall back to the
+        # raw column value via :func:`cockpit.details.provenance_label`.
+        "event_source": "emitted by",
+        "provenance_unknown": "unknown",
+        "provenance_cockpit_mcp": "cockpit MCP server",
+        "provenance_cockpit_user": "cockpit (you)",
+        "provenance_cockpit_intervention": "cockpit intervention pump",
+        "provenance_cockpit_export": "report exporter",
+        "provenance_memory_mcp": "memory MCP",
+        "provenance_verify_mcp": "verify MCP",
+        "provenance_prove_mcp": "prove MCP",
+        # Phase E3: bookmarks.
+        "bookmark_no_selection": "Select a node before bookmarking with b.",
+        "bookmark_added": "Bookmarked {target}",
+        "bookmark_removed": "Removed bookmark on {target}",
+        "bookmarks_title": "Bookmarks",
+        "bookmarks_empty": "No bookmarks yet. Press b on a node to add one.",
+        "bookmarks_hint": "Enter jump · d delete · j/k move · Esc close",
+        # Phase E4: timeline strip.
+        "timeline_empty": "no events yet",
+        "timeline_caption": "{shown}/{total} events",
+        "timeline_on": "Timeline strip: visible",
+        "timeline_off": "Timeline strip: hidden",
         "context_tree": (
             "Tree: j/k move · y/n approve/reject · p pin · "
             "⇧L lang · ⇧T theme · ⇧F focus · ^P palette"
@@ -453,14 +531,15 @@ TEXT: dict[str, dict[str, str]] = {
         "refutes": "反驳",
         "support_refute": "{supports} 支持 / {refutes} 反驳",
         "hud": (
-            "{app}  活跃 {active_hypotheses} / 已反驳 {refuted_nodes} / "
+            "{heartbeat}  {app}{health}{focus_mode}  活跃 {active_hypotheses} / "
+            "已反驳 {refuted_nodes} / "
             "指标 {pinned_claims}（未验证 {unverified_claims}）/ "
-            "留出 {heldout} / 风险 {risks} / 最近 {last_event}  "
-            "{theme}·{lang_code}  {clock}"
+            "留出 {heldout} / 风险 {risks} / 最近 {last_event}"
+            "{action_target}  {theme}·{lang_code}  {clock}"
         ),
         "hud_compact": (
-            "{app}  假设 {active_hypotheses}/{refuted_nodes}  "
-            "指标 {pinned_claims}  风险 {risks}  "
+            "{heartbeat}  {app}{health}{focus_mode}  假设 {active_hypotheses}/{refuted_nodes}  "
+            "指标 {pinned_claims}  风险 {risks}{action_target}  "
             "{theme}·{lang_code} {clock}"
         ),
         "heldout_none": "无",
@@ -469,6 +548,56 @@ TEXT: dict[str, dict[str, str]] = {
         "seconds_ago": "{value} 秒前",
         "minutes_ago": "{value} 分钟前",
         "hours_ago": "{value} 小时前",
+        "health_clean": "",
+        "health_warning": " ⚠{count}",
+        "events_table_large": (
+            "cockpit_events 有 {count} 行，建议运行 "
+            "`python -m cockpit.tui --prune-events 20000`"
+        ),
+        # Phase C: HUD chips (zh).
+        "action_target_empty": "",
+        "action_target": "  ▶ {target}",
+        "focus_mode_off": "",
+        "focus_mode_on": "  ⊡ {pane}",
+        "breadcrumb_node": "来自 {source} · {target}",
+        "breadcrumb_override": "钻取 · {label}  ·  Esc 返回",
+        "breadcrumb_hint": "未选中",
+        "source_tree": "假设树",
+        "source_tabs": "右侧表格",
+        "quit_pending_title": "存在未交付干预，是否确认退出？",
+        "quit_pending_body": (
+            "有 {count} 条干预尚未被 agent 消费。"
+            "退出后这些干预仍会在下一次 UserPromptSubmit 时被消费。"
+            "按 y 确认退出，n 留在 cockpit。"
+        ),
+        "cmd_theme_help": "切换主题到 {name}",
+        "cmd_lang_help": "切换语言为 {name}",
+        "cmd_focus_help": "切换单面板焦点模式",
+        "cmd_health_help": "清除 cockpit 健康状态告警",
+        "cmd_health_cleared": "已清除 cockpit 健康状态",
+        "cmd_unknown_value": "未知 {kind}: {value!r}",
+        # Phase E: provenance display (zh).
+        "event_source": "来源",
+        "provenance_unknown": "未知",
+        "provenance_cockpit_mcp": "cockpit MCP 服务",
+        "provenance_cockpit_user": "cockpit（你）",
+        "provenance_cockpit_intervention": "cockpit 干预泵",
+        "provenance_cockpit_export": "报告导出器",
+        "provenance_memory_mcp": "memory MCP",
+        "provenance_verify_mcp": "verify MCP",
+        "provenance_prove_mcp": "prove MCP",
+        # Phase E3: bookmarks (zh).
+        "bookmark_no_selection": "请先选中一个节点再按 b 收藏。",
+        "bookmark_added": "已收藏 {target}",
+        "bookmark_removed": "已取消收藏 {target}",
+        "bookmarks_title": "收藏夹",
+        "bookmarks_empty": "暂无收藏。在节点上按 b 即可添加。",
+        "bookmarks_hint": "Enter 跳转 · d 删除 · j/k 移动 · Esc 关闭",
+        # Phase E4: timeline strip (zh).
+        "timeline_empty": "暂无事件",
+        "timeline_caption": "{shown}/{total} 条事件",
+        "timeline_on": "时间线已显示",
+        "timeline_off": "时间线已隐藏",
         "context_tree": (
             "假设树: j/k 移动 · y/n 批准/拒绝 · p 固定指标 · "
             "⇧L 语言 · ⇧T 主题 · ⇧F 焦点 · ^P 命令面板"

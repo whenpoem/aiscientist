@@ -319,6 +319,11 @@ def event_detail_text(row: dict, lang: str) -> tuple[str, str]:
     the user can scan structured fields without scrolling a single dense
     line. We keep this in plain str (not Rich Text) because the JSON
     indentation already conveys hierarchy and styling would compete.
+
+    Phase E: surfaces the row's ``source`` column (provenance tag) as
+    an "emitted by" line. Old rows (pre-v4 schema or pre-Phase-E
+    callers) carry ``NULL`` and render as the localized
+    ``provenance_unknown`` label.
     """
     kind = str(row.get("kind", "event"))
     created = str(row.get("created_at", ""))
@@ -329,12 +334,33 @@ def event_detail_text(row: dict, lang: str) -> tuple[str, str]:
         payload_str = "-"
     else:
         payload_str = str(payload)
+    source_label = provenance_label(row.get("source"), lang)
     title = f"{t(lang, 'event_drill_title', kind=kind)}"
     body_lines = [
         f"id: {row.get('id', '-')}",
         f"{t(lang, 'created')}: {created}",
+        f"{t(lang, 'event_source')}: {source_label}",
         "",
         f"{t(lang, 'event_payload')}:",
         payload_str,
     ]
     return (title, "\n".join(body_lines))
+
+
+def provenance_label(raw_source, lang: str) -> str:
+    """Translate a raw ``cockpit_events.source`` value into UI text.
+
+    Known values get a localized friendly label; anything else (a new
+    source string from a future MCP server, or a hand-edited DB row)
+    is echoed as-is so it still conveys *some* information.
+    ``None`` / empty → the localized ``provenance_unknown`` placeholder.
+    """
+    if not raw_source:
+        return t(lang, "provenance_unknown")
+    key = f"provenance_{raw_source}"
+    label = t(lang, key)
+    # ``cockpit.i18n.t`` returns the key unchanged when no translation
+    # exists — that's the signal to fall back to the raw value.
+    if label == key:
+        return str(raw_source)
+    return label

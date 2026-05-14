@@ -69,6 +69,13 @@ def workspace(tmp_path, monkeypatch):
         "prove_mcp.tools.correction",
         "prove_mcp.tools.lean_bridge",
         "prove_mcp.impl",
+        # cockpit.diagnostics is reloaded BEFORE cockpit.db / .data / .app
+        # so the per-test tmp_path resolution kicks in and the rotating
+        # file handler from a previous test doesn't keep a dangling
+        # reference to a now-deleted directory. cockpit.app's module-level
+        # ``_log = get_logger("app")`` therefore lands in this test's
+        # logs/cockpit.log, not the previous test's.
+        "cockpit.diagnostics",
         "cockpit.db",
     ]
     optional_modules = [
