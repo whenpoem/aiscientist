@@ -49,6 +49,15 @@ _FALLBACKS: dict[str, str] = {
     "kind-proof-skeleton": "#c45a3a",
     "kind-proof-snippet": "#a04830",
     "kind-refuted": "#cf6679",
+    # Activity card severity bands (v5.0). Aliased to the semantic
+    # warning/error/success palette so light/dark themes flow through.
+    # Glyphs in activity.py (■▲●·) carry the same signal for users who
+    # cannot rely on color (red-green colour-blindness).
+    "severity-critical": "#cf6679",  # aliases error
+    "severity-high": "#e3b341",      # aliases warning
+    "severity-medium": "#d97757",    # aliases primary (amber-ish)
+    "severity-low": "#a89e8e",       # aliases foreground-muted
+    "severity-info": "#e8e2d8",      # aliases foreground
 }
 
 _CURRENT_VARS: dict[str, str] = dict(_FALLBACKS)

@@ -62,13 +62,17 @@ contracts:
   understands deviation is sanctioned, not exceptional.
 - Skill files stay short (the v3.0 examples are 21–48 lines).
 
-### Hooks and reviewer gates — laws, non-negotiable
+### Hooks and reviewer gates — mechanical lifecycle controls
 
-- A hook (entry under `.claude/hooks/`) or a reviewer-side gate is the
-  only mechanism that can block a tool call or refuse a verdict. New
-  hooks require an ADR-level justification — they restrict what the main
-  model can do.
-- v3.0 inventory of laws:
+- A hook (entry under `.claude/hooks/`) is a mandatory lifecycle process
+  run by Claude Code. Hooks split into two categories:
+  - **Law hooks** can block a tool call. They need ADR-level
+    justification because they restrict what the main model can do.
+  - **Lifecycle hooks** cannot block ordinary work. They inject context,
+    emit events, or record audit data. They still need tests because
+    broken lifecycle hooks degrade observability and steering.
+- A reviewer-side gate is the only mechanism that can refuse a verdict.
+- v3.0 inventory:
   - `leakage_guard.py` — denies reads/writes into held-out paths.
   - `destructive_bash_guard.py` — denies destructive shell commands
     without an explicit `# CONFIRM_DESTRUCTIVE` marker.

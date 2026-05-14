@@ -9,6 +9,21 @@ from .i18n import t
 
 def row_detail(row: dict[str, Any], lang: str) -> tuple[str, str]:
     """Return the detail-pane title/body for a selected tabular row."""
+    # v5.0 Focus rows carry a distinctive ``kind`` marker. Handle first
+    # so the literature / corpus branches below don't false-match on
+    # the focus row's structurally similar key set.
+    if row.get("kind") in {"focus", "empty"} and "node" in row and "score" in row:
+        return (
+            f"{t(lang, 'focus_title')} {row.get('node', '-')}",
+            "\n".join(
+                [
+                    f"{t(lang, 'focus_col_node')}: {row.get('node', '-')}",
+                    f"{t(lang, 'focus_col_score')}: {row.get('score', '-')}",
+                    f"{t(lang, 'focus_col_phase')}: {row.get('phase', '-')}",
+                    f"{t(lang, 'focus_col_intent')}: {row.get('intent', '-')}",
+                ]
+            ),
+        )
     if {"severity", "category", "summary"} <= set(row):
         return (
             f"{t(lang, 'risks')} {row['item']}",

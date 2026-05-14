@@ -33,6 +33,26 @@ Open two terminal windows side by side:
 
 **The single most important point**: the two terminals **do not talk to each other directly**. Both of them talk to the SQLite file in the middle. This is the central design choice of the entire system — every module collaborates through a shared database file rather than over the network.
 
+### What each terminal answers (v5.0)
+
+The two terminals look superficially similar — both show "what the AI
+is doing" — but they answer different questions on different time
+scales. Knowing which to look at where keeps the dual-view from
+feeling redundant.
+
+| Aspect | Terminal A (Claude Code) | Terminal B (Cockpit) |
+|---|---|---|
+| Granularity | Each tool call, each thinking block | Research-phase, focus node, activity card |
+| Time scale | Real-time token-by-token | Last 30 minutes, phase-by-phase |
+| What it shows | Claude's natural-language response + tool I/O | Derived state: phase strip + activity cards + focus tab |
+| What it does NOT show | Cross-trunk current focus, recent reject/redirect interventions | Claude's specific thinking text, file diffs |
+| What you do here | Reply to Claude, Ctrl-C to halt | Reject / approve / inject note / queue intervention |
+| Storage | Claude Code session (.claude.json) | `.research-agent/state.db` (single SQLite) |
+| User posture | Conversation partner | Research lead — eyes-up monitor |
+
+If Terminal A is what the AI just *did*, Terminal B is what's *true*
+about the research right now. Both are useful; they don't overlap.
+
 ## 3. The five roles and where they live
 
 | Role | Where | Job | Analogy |

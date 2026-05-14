@@ -19,6 +19,11 @@ table below is a human summary.
 | `intervention_pump.py` | UserPromptSubmit + Stop | (any) | Drain rows from `cockpit_interventions` and inject as `additionalContext` for the next turn. |
 | `stop_flush.py` | Stop | (any) | Emit a `turn_end` cockpit event. Summary covers both trunks: empirical counts (nodes, edges, failures, papers, provenance) plus proof aggregates (`proof_manifests_*`, `lean_attempts_*`, `lean_wallclock_used_sec`). Reads `prv_diagnostic_manifests` / `prv_lean_attempts` defensively (zero on legacy DBs without the proof schema). |
 
+`intervention_pump.py` is a next-turn bridge, not an interrupt channel. It
+does not wake or modify an already-running tool call or subagent; cockpit
+interventions submitted during a long run are delivered on the next
+`UserPromptSubmit` or `Stop` hook that Claude Code fires.
+
 ## Critical invariants
 
 - **Idempotency.** Every hook must tolerate being invoked twice on the same

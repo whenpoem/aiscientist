@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 
+from . import data
 from .app import CockpitApp, render_snapshot
 from .i18n import SUPPORTED_LANGS, normalize_lang
 from .theme import theme_names
@@ -24,11 +25,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="visual theme (overrides saved settings)",
     )
+    parser.add_argument(
+        "--prune-events",
+        type=int,
+        metavar="N",
+        default=None,
+        help="delete old cockpit_events rows, keeping the newest N, then exit",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.prune_events is not None:
+        deleted = data.prune_events(keep_last=args.prune_events)
+        print(f"pruned {deleted} cockpit_events rows")
+        return 0
     # When --lang is omitted, fall back to "en" only for the headless --once
     # snapshot (which doesn't have access to settings persistence). For the
     # interactive path we pass None so saved settings win.

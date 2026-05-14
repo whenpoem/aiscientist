@@ -283,6 +283,36 @@ cold-start polish. Items now closed:
 
 Retrospective: [`retrospective-v4.2.md`](retrospective-v4.2.md).
 
+## What v5.0 actually delivered
+
+v5.0.0 reframes the cockpit as a research-action monitor, replacing
+the flat event stream with activity-level reading. Items now closed:
+
+- Phase strip (top dock) showing the derived current phase across
+  eight states (`idle / explore / select / experiment / verify / prove /
+  review / narrate`), with anti-flicker logic requiring ≥2 same-phase
+  events before switching out of idle.
+- Activity pane replacing EventStreamPane as the primary grid view.
+  Events are aggregated into per-action cards grouped by family
+  (graph / bt / verify / prove / lean / intervention / narrate / risk)
+  with severity bands from critical to info.
+- Focus tab (first cross-group tab) showing the node(s) the agent is
+  currently working on, derived from exponential time-decay scoring.
+- Audit log: the original EventStreamPane preserved verbatim as a
+  collapsible bottom-docked strip (toggle with `A`). Eleven
+  previously-untyped event kinds gained explicit formatters.
+- Two new optional MCP tools: `cockpit__set_phase` and
+  `cockpit__narrate`, giving SOP-driven agents a sanctioned channel
+  for annotating decisions without coupling to rendering details.
+- Settings additions: `phase_strip_visible` (`P`),
+  `animations_enabled` (`M`). Legacy `focused_pane="events"` is
+  healed to `"activity"` on load.
+- No schema migration. Phase / focus / activity are pure functions
+  over the existing `cockpit_events` table.
+
+Design rationale: [ADR 0011](adr/0011-cockpit-activity-streaming.md).
+Architecture details: [architecture.md §14](architecture.md#14-cockpit-activity-streaming-v50).
+
 ## A few directions explicitly **not** on the roadmap
 
 To avoid misinterpretation, here are directions I would not pursue:

@@ -341,11 +341,13 @@ def step_sanity(state: SetupState) -> bool:
     py = io.probe_python()
     uv = io.probe_uv()
     claude = io.probe_claude()
+    npx = io.probe_npx()
     _check_table(
         [
             (py.ok, ("python " + (">=" if not _UNICODE_OK else "≥") + " 3.11"), py.detail),
             (uv.ok, "uv on PATH", uv.detail),
             (claude.ok, "claude on PATH (recommended)", claude.detail),
+            (npx.ok, "npx on PATH (OpenAlex MCP)", npx.detail),
         ]
     )
     if not py.ok:
@@ -358,6 +360,12 @@ def step_sanity(state: SetupState) -> bool:
         _console.print(
             "[yellow]claude not found — the cockpit and MCP servers run "
             "without it, but you'll need it to drive a research session.[/yellow]"
+        )
+    if not npx.ok:
+        _console.print(
+            "[yellow]npx not found — OpenAlex literature search will be "
+            "unavailable until Node.js/npm is installed. arXiv search still "
+            "uses `uv tool run arxiv-mcp-server`.[/yellow]"
         )
     return True
 

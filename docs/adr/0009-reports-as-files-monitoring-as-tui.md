@@ -70,9 +70,9 @@ report path in its `notes` for the manuscript author's convenience.
   for. Long draft text, full diagnostic manifests, and side-by-side
   portfolios all live in files the user opens with their preferred
   tool.
-- Reports become shareable. The path is stable; the user can commit
-  it, attach it to an issue, or hand it to a collaborator without
-  re-running the cockpit.
+- Reports become shareable. The path is stable; the user can attach
+  it to an issue, hand it to a collaborator, or explicitly force-add
+  selected files to git without re-running the cockpit.
 - The Reports tab gives the user a single index of what has been
   generated; the detail pane surfaces the same files under the node
   they describe.
@@ -83,9 +83,12 @@ report path in its `notes` for the manuscript author's convenience.
 ### Negative
 
 - The user has to manage the `reports/` directory. Files do not
-  garbage-collect themselves. The `cockpit_reports` table keeps
-  rows after the file is deleted (with a ``missing`` flag) so the
-  audit history survives; cleanup is a manual operation.
+  garbage-collect themselves. The directory is gitignored by default
+  because reports can contain private results, held-out-derived
+  metrics, and unpublished drafts; intentional sharing should use an
+  explicit path or `git add -f reports/<file>`. The `cockpit_reports`
+  table keeps rows after the file is deleted (with a ``missing`` flag)
+  so the audit history survives; cleanup is a manual operation.
 - Two surfaces show the same evidence: the cockpit's live tabs and
   the generated reports. The user has to learn which is which —
   monitoring vs. archive. We accept that as the cost of having a

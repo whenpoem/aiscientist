@@ -7,6 +7,7 @@ v2 (v4.2.0a2 / ADR 0009): + cockpit_reports for the reports index. The
     table holds a row per generated report file under ``reports/`` so
     the Reports tab + detail-pane Reports section can index them
     without scanning the filesystem on every refresh.
+v3: + cockpit_events created_at index for long-running sessions.
 """
 
 from __future__ import annotations
@@ -37,6 +38,9 @@ CREATE TABLE IF NOT EXISTS cockpit_events (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_cockpit_events_created_at
+  ON cockpit_events(created_at);
+
 CREATE TABLE IF NOT EXISTS cockpit_reports (
   report_id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL UNIQUE,
@@ -61,7 +65,7 @@ def ensure() -> None:
     bootstrap_all()
     con = connect_sqlite(state_db_path())
     try:
-        apply_schema_migration(con, "cockpit", COCKPIT_SCHEMA, schema_version=2)
+        apply_schema_migration(con, "cockpit", COCKPIT_SCHEMA, schema_version=3)
     finally:
         con.close()
 

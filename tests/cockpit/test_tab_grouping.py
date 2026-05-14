@@ -47,10 +47,12 @@ def test_unknown_tab_falls_back_to_first_group():
 @pytest.mark.parametrize(
     "current,expected",
     [
+        # v5.0 inserted ``focus`` as the first cross-group tab.
+        ("focus", "risks"),
         ("risks", "claims"),
         ("claims", "literature"),
         ("literature", "reports"),  # cross group now ends with reports
-        ("reports", "risks"),  # wrap within cross
+        ("reports", "focus"),  # wrap within cross (back to focus)
         ("failures", "failures"),  # singleton group stays put
         ("corpus", "diagnostics"),
         ("lean", "corpus"),  # wrap within proof
@@ -63,11 +65,13 @@ def test_next_tab_in_group_cycles_within(current, expected):
 @pytest.mark.parametrize(
     "current,expected_first",
     [
+        # v5.0: cross group now starts with focus.
+        ("focus", "failures"),       # cross → empirical
         ("risks", "failures"),       # cross → empirical
         ("claims", "failures"),      # cross → empirical
         ("failures", "corpus"),      # empirical → proof
-        ("corpus", "risks"),         # proof → cross (wrap)
-        ("lean", "risks"),           # proof → cross (wrap)
+        ("corpus", "focus"),         # proof → cross (wrap to focus)
+        ("lean", "focus"),           # proof → cross (wrap to focus)
     ],
 )
 def test_next_group_lands_on_first_tab(current, expected_first):
@@ -84,6 +88,9 @@ async def test_f_cycles_within_group_only(workspace):
     app = CockpitApp()
     async with app.run_test() as pilot:
         await pilot.press("4")  # focus tabs pane
+        # v5.0: the Focus tab is now the first Cross-group tab.
+        assert app.tabs_pane.active == "focus"
+        await pilot.press("f")
         assert app.tabs_pane.active == "risks"
         await pilot.press("f")
         assert app.tabs_pane.active == "claims"
@@ -92,7 +99,7 @@ async def test_f_cycles_within_group_only(workspace):
         await pilot.press("f")
         assert app.tabs_pane.active == "reports"
         await pilot.press("f")
-        assert app.tabs_pane.active == "risks"  # wrapped, did not leak
+        assert app.tabs_pane.active == "focus"  # wrapped back to focus
 
 
 @pytest.mark.asyncio
@@ -103,13 +110,14 @@ async def test_capital_n_jumps_to_next_group(workspace):
     app = CockpitApp()
     async with app.run_test() as pilot:
         await pilot.press("4")
-        assert app.tabs_pane.active == "risks"
+        # v5.0: Cross group default is now ``focus`` (was ``risks``).
+        assert app.tabs_pane.active == "focus"
         await pilot.press("N")
         assert app.tabs_pane.active == "failures"  # Empirical group's first
         await pilot.press("N")
         assert app.tabs_pane.active == "corpus"  # Proof group's first
         await pilot.press("N")
-        assert app.tabs_pane.active == "risks"  # wrapped back to Cross
+        assert app.tabs_pane.active == "focus"  # wrapped back to Cross
 
 
 @pytest.mark.asyncio

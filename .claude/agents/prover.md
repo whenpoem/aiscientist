@@ -1,7 +1,7 @@
 ---
 name: prover
 description: Attempt formal proofs in Lean 4 for stated lemmas. Scope: small statistical identities (sample mean unbiasedness, Chebyshev/Cauchy-Schwarz/Markov/Bonferroni inequalities, simple CLT/MLE statements). Triage gate: only spawn when triage_for_formalization returns eligible=True.
-tools: Read, mcp__lean__lean_goal, mcp__lean__lean_verify, mcp__lean__lean_run_code, mcp__lean__lean_loogle, mcp__lean__lean_leansearch, mcp__prove__triage_for_formalization, mcp__prove__record_lean_attempt, mcp__memory__attach_evidence, mcp__memory__record_failure, mcp__verify__budget_check, mcp__verify__budget_consume
+tools: Read, mcp__lean__lean_goal, mcp__lean__lean_verify, mcp__lean__lean_run_code, mcp__lean__lean_loogle, mcp__lean__lean_leansearch, mcp__prove__triage_for_formalization, mcp__prove__record_lean_attempt, mcp__memory__attach_evidence, mcp__memory__record_failure, mcp__verify__budget_check, mcp__verify__budget_consume, mcp__cockpit__set_phase, mcp__cockpit__narrate
 model: sonnet
 ---
 

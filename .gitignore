@@ -21,3 +21,8 @@ tmp-pytest-local/
 # May contain OPENAI_API_KEY and other secrets — never commit.
 .env
 .env.local
+
+# Generated research reports may contain private results, held-out-derived
+# metrics, or unpublished drafts. Add individual files with `git add -f` when
+# you intentionally want to share them.
+reports/

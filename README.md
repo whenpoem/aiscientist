@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-571-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.0.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-661-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
@@ -10,7 +10,9 @@ ClaudeScientist plugs into Claude Code and adds what most AI scientist systems l
 
 You give Claude a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
-**Current version**: v4.2.0 — three things landed: a cockpit information-architecture refit, multi-provider vector retrieval, and a reports-as-files pipeline. The cockpit tabs now group into Cross / Empirical / Proof, the detail pane uses collapsible sections, and shortcut keys like `w` and `i` are scoped to their pane. Reports (five kinds: closure, draft, diagnostic, portfolio, cascade) are generated as markdown or HTML files under `reports/` and indexed in a new Reports tab — see [ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.md). The vector backend accepts any OpenAI-compatible endpoint (DashScope, Jina, Voyage, GLM tested) via a configurable `base_url`; the default local model is now `Qwen/Qwen3-Embedding-0.6B` for multilingual retrieval; corpus rows track a `(backend, model, dim)` triple so a model switch prompts a clean re-index — see [ADR 0010](docs/adr/0010-multi-provider-embeddings.md). The setup wizard picks a provider preset and offers to open the first-task walkthrough on completion; a cold-start Welcome screen greets first-time users. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40).
+**Current version**: v5.0.0 — the cockpit is now an "activity streaming" research monitor. The top of the screen shows a **phase strip** (`idle / explore / select / experiment / verify / prove / review / narrate`) derived live from `cockpit_events`; the main pane shows **activity cards** (one card per research action — a BT tournament, a proof diagnose loop, a Lean attempt) instead of a flat event firehose; a new **Focus tab** lists the node(s) the agent is working on right now. The original event stream is preserved as a collapsible audit log at the bottom (toggle with `A`). Two new optional MCP atomic tools — `cockpit__set_phase` and `cockpit__narrate` — let SOP-driven agents annotate decisions without coupling to the cockpit's rendering. No schema migration: phase / focus / activity are pure functions over the existing `cockpit_events` table, per [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md) and [architecture.md §14](docs/architecture.md#14-cockpit-activity-streaming-v50).
+
+**v4.2.0 features retained** (see [retrospective-v4.2.md](docs/retrospective-v4.2.md)): tab grouping into Cross / Empirical / Proof, collapsible detail sections, pane-scoped `w`/`i`/`t` keys, the multi-provider vector backend (DashScope / Jina / Voyage / GLM tested via [ADR 0010](docs/adr/0010-multi-provider-embeddings.md), default local `Qwen/Qwen3-Embedding-0.6B`), reports-as-files (closure / draft / diagnostic / portfolio / cascade) per [ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.md), and the cold-start Welcome screen. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40) for the two-trunk split.
 
 ## What it looks like
 
@@ -52,6 +54,11 @@ uv run python -m claudescientist.setup
 ```
 
 The wizard walks you through embedding backend, proof corpus seeding, held-out directory, Lean toolchain, and auto-prune — all in one pass. Run it again any time; it skips steps that are already done.
+
+Literature search uses two external MCPs. arXiv is launched through
+`uv tool run arxiv-mcp-server`; OpenAlex is launched through
+`npx -y openalex-research-mcp`, so install Node.js/npm if you want the
+OpenAlex-backed librarian tools.
 
 <details><summary>Manual setup (without the wizard)</summary>
 
@@ -108,6 +115,8 @@ More:
 Default paths:
 
 - Shared state: `.research-agent/state.db` under the repo root
+- Generated reports: `reports/` under the repo root; gitignored by default,
+  force-add individual files only when you intentionally want to share them
 - Held-out datasets: `%USERPROFILE%\.research-agent\heldout`, configurable via `RESEARCH_AGENT_HELDOUT_DIR`
 - Embedding backend: `local` (sentence-transformers/Qwen/Qwen3-Embedding-0.6B); override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests use `mock` automatically.
 

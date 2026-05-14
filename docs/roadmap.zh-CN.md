@@ -278,6 +278,31 @@ v4.2.0 分四个 alpha 落地，围绕三个主题：仪表盘信息结构重整
 
 回顾文档：[`retrospective-v4.2.zh-CN.md`](retrospective-v4.2.zh-CN.md)。
 
+## v5.0 实际交付
+
+v5.0.0 把 cockpit 改造成研究动作监控，用活动级别的阅读视图替代了原来
+的扁平事件流。已关闭的事项：
+
+- 阶段栏（顶部停靠）：展示从事件派生出的当前阶段，八个状态
+  （`idle / explore / select / experiment / verify / prove / review /
+  narrate`），带抗抖动逻辑——至少连续出现两个同阶段事件才切出 idle。
+- 活动面板替换 EventStreamPane 成为网格主视图。事件按家族
+  （graph / bt / verify / prove / lean / intervention / narrate / risk）
+  聚合成卡片，严重度从 critical 到 info 分五档。
+- 焦点 tab（跨主干标签页首位）：展示 agent 当前在做的节点，用
+  指数时间衰减评分派生。
+- 审计日志：原 EventStreamPane 原样保留为底部可折叠窄条（`A` 展开）。
+  原来 11 个没有专用格式化器的事件类型全部补上了。
+- 两个新的可选 MCP 工具：`cockpit__set_phase` 和 `cockpit__narrate`，
+  给 SOP 驱动的 agent 一个合规的分支点标注通道，不耦合渲染细节。
+- Settings 新增 `phase_strip_visible`（`P`）、`animations_enabled`（`M`）。
+  旧的 `focused_pane="events"` 在加载时自动修正为 `"activity"`。
+- 无 schema 迁移。阶段、焦点、活动卡片全部是 `cockpit_events` 表之上
+  的纯函数派生。
+
+设计动机：[ADR 0011](adr/0011-cockpit-activity-streaming.md)。
+架构细节：[architecture.zh-CN.md §14](architecture.zh-CN.md#14-cockpit-活动流式监控v50)。
+
 ## 几个不属于路线图的方向
 
 为了避免误解，这里也列出几个**不**会追加的方向：

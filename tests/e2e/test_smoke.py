@@ -47,11 +47,11 @@ def test_claude_settings_register_stdio_cockpit_and_node_openalex():
     assert openalex["args"] == ["-y", "openalex-research-mcp"]
 
     expected_hooks = {
-        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/leakage_guard.py\"",
-        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/destructive_bash_guard.py\"",
-        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/provenance_log.py\"",
-        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/intervention_pump.py\"",
-        "uv run python \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_flush.py\"",
+        "uv run --no-sync python \"$CLAUDE_PROJECT_DIR/.claude/hooks/leakage_guard.py\"",
+        "uv run --no-sync python \"$CLAUDE_PROJECT_DIR/.claude/hooks/destructive_bash_guard.py\"",
+        "uv run --no-sync python \"$CLAUDE_PROJECT_DIR/.claude/hooks/provenance_log.py\"",
+        "uv run --no-sync python \"$CLAUDE_PROJECT_DIR/.claude/hooks/intervention_pump.py\"",
+        "uv run --no-sync python \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_flush.py\"",
     }
     actual_commands = {
         hook["command"]

@@ -15,6 +15,7 @@ from typing import Any
 DEFAULT_STATE_DIR = Path(".research-agent")
 DEFAULT_DB_NAME = "state.db"
 HELDOUT_DIR_ENV = "RESEARCH_AGENT_HELDOUT_DIR"
+CLAUDE_PROJECT_DIR_ENV = "CLAUDE_PROJECT_DIR"
 MIGRATION_SCHEMA = """
 CREATE TABLE IF NOT EXISTS ra_migrations (
   component TEXT PRIMARY KEY,
@@ -33,6 +34,35 @@ CREATE TABLE IF NOT EXISTS cockpit_events (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 """
+COCKPIT_EVENT_INDEX_SCHEMA = """
+CREATE INDEX IF NOT EXISTS idx_cockpit_events_created_at
+  ON cockpit_events(created_at);
+"""
+
+
+def _looks_like_repo_root(path: Path) -> bool:
+    return (path / "pyproject.toml").exists() and (path / ".claude").is_dir()
+
+
+def project_root(start: Path | None = None) -> Path | None:
+    """Resolve the claudescientist repo root without trusting cwd.
+
+    Claude Code normally exports ``CLAUDE_PROJECT_DIR``. Prefer that when it
+    points at a checkout; otherwise walk upward from ``start`` (or cwd). This
+    keeps hooks, MCP servers, and the cockpit on the same runtime files even
+    when a session is launched from a subdirectory.
+    """
+    project_dir = os.environ.get(CLAUDE_PROJECT_DIR_ENV)
+    if project_dir:
+        candidate = Path(project_dir).expanduser().resolve()
+        if _looks_like_repo_root(candidate):
+            return candidate
+
+    cur = (start or Path.cwd()).expanduser().resolve()
+    for candidate in (cur, *cur.parents):
+        if _looks_like_repo_root(candidate):
+            return candidate
+    return None
 
 
 def state_db_path() -> Path:
@@ -42,6 +72,9 @@ def state_db_path() -> Path:
     state_dir = os.environ.get("RESEARCH_AGENT_STATE_DIR")
     if state_dir:
         return Path(state_dir).expanduser() / DEFAULT_DB_NAME
+    root = project_root()
+    if root is not None:
+        return root / DEFAULT_STATE_DIR / DEFAULT_DB_NAME
     return DEFAULT_STATE_DIR / DEFAULT_DB_NAME
 
 
@@ -197,6 +230,7 @@ def apply_schema_migration(
 
 def emit_cockpit_event(con: sqlite3.Connection, kind: str, payload: dict[str, Any]) -> int:
     con.execute(COCKPIT_EVENT_SCHEMA)
+    con.execute(COCKPIT_EVENT_INDEX_SCHEMA)
     cursor = con.execute(
         "INSERT INTO cockpit_events(kind, payload, created_at) VALUES(?,?,?)",
         (kind, json.dumps(payload, ensure_ascii=True), now_utc_iso()),

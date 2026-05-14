@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-4.2.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-571-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.0.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-661-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > English version: [README.md](README.md)
 
@@ -10,7 +10,9 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 你丢给 Claude 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
 
-**当前版本**：v4.2.0 —— 这个版本做了三件事：重新整理了仪表盘的信息结构、让向量检索支持多家 API 服务商、新增了报告导出功能。仪表盘的 tab 页分成三组（跨主干 / 实验 / 证明），详情面板改成可折叠分节，快捷键按面板划分作用域。报告导出支持五种类型（结题、草稿、诊断、对比集、级联跟踪），输出 markdown 或 HTML 文件到 `reports/` 目录，cockpit 里用 Reports 标签页统一索引（见 [ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.zh-CN.md)）。向量后端现在可以对接任何 OpenAI 兼容的 API 服务商——阿里云 DashScope、Jina、Voyage、智谱 GLM 均已测通；本地默认模型换成了多语言的 `Qwen/Qwen3-Embedding-0.6B`；语料行记录 `(backend, model, dim)` 三元组，换了模型会提示你重建索引（见 [ADR 0010](docs/adr/0010-multi-provider-embeddings.zh-CN.md)）。设置向导新增了服务商选择菜单；首次打开 cockpit 会看到 Welcome 引导屏。详见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
+**当前版本**：v5.0.0 —— 仪表盘变成「活动流式」研究监控。屏幕顶部是**阶段栏**（`idle / explore / select / experiment / verify / prove / review / narrate` 八态),从 `cockpit_events` 实时推断;主面板是**活动卡**(一张卡 = 一个研究动作——一次 BT 锦标赛、一次证明诊断、一次 Lean 尝试),取代原来的事件流水;新的 **Focus tab** 列出 agent 当下在搞的节点。原有事件流被保留为底部可折叠的**审计日志**(`A` 切换)。新增两个可选 MCP 原子工具:`cockpit__set_phase` 和 `cockpit__narrate`,让 SOP 驱动的 agent 在分支点显式标注上下文,而不耦合到 cockpit 的渲染细节。**无 schema 迁移**——阶段 / 焦点 / 活动卡都是 `cockpit_events` 之上的纯函数派生。详见 [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md) 和 [architecture.zh-CN.md §14](docs/architecture.zh-CN.md#14-cockpit-activity-streaming-v50)。
+
+**v4.2.0 的功能继续可用**(见 [retrospective-v4.2.zh-CN.md](docs/retrospective-v4.2.zh-CN.md)):tab 分三组(跨主干 / 实验 / 证明)、详情面板可折叠分节、`w`/`i`/`t` 按面板划分作用域;向量检索支持任何 OpenAI 兼容服务商([ADR 0010](docs/adr/0010-multi-provider-embeddings.zh-CN.md),DashScope / Jina / Voyage / GLM 已测,本地默认 `Qwen/Qwen3-Embedding-0.6B`);报告导出([ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.zh-CN.md))和冷启动 Welcome 屏不变。两主干切分见 [architecture.zh-CN.md §13](docs/architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ## 长什么样
 
@@ -52,6 +54,10 @@ uv run python -m claudescientist.setup
 ```
 
 向导会一步步引导你完成 embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
+
+文献检索依赖两个外部 MCP。arXiv 通过 `uv tool run arxiv-mcp-server`
+启动；OpenAlex 通过 `npx -y openalex-research-mcp` 启动，所以如果要用
+OpenAlex 相关 librarian 工具，需要先安装 Node.js/npm。
 
 <details><summary>手动安装（不用向导）</summary>
 
@@ -108,6 +114,7 @@ Lean 形式化验证需要单独安装——见 [`docs/setup-lean.zh-CN.md`](doc
 默认路径：
 
 - 共享状态：仓库根目录下的 `.research-agent/state.db`
+- 生成报告：仓库根目录下的 `reports/`，默认已加入 `.gitignore`；只有明确要分享时才对单个文件 `git add -f`
 - 隔离数据集：`%USERPROFILE%\.research-agent\heldout`，可用 `RESEARCH_AGENT_HELDOUT_DIR` 改写
 - Embedding 后端：`local`（sentence-transformers/Qwen/Qwen3-Embedding-0.6B）；用 `RESEARCH_AGENT_EMBED_BACKEND=mock|openai` 覆盖。测试自动使用 `mock`。
 

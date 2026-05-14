@@ -226,6 +226,81 @@ class EventStreamPane(RichLog):
                 f"status={payload.get('status', kind)}"
                 f"{duration_str}"
             )
+        # v5.0: replaces the v4.x ``str(payload)`` fallback for the
+        # remaining 11 emitted kinds. The audit log is the
+        # debugger-facing surface but readable summaries cost almost
+        # nothing and beat naked dict repr for anyone scanning it.
+        if kind == "budget_exceeded":
+            return (
+                f"scope={payload.get('scope', '-')} "
+                f"used={payload.get('used', '-')}/{payload.get('limit', '-')} "
+                f"resource={payload.get('resource', '-')}"
+            )
+        if kind == "prov_dag_stale":
+            return (
+                f"claim={payload.get('claim', '-')} "
+                f"reason={payload.get('reason', '-')}"
+            )
+        if kind == "prereg_locked":
+            return (
+                f"hyp={payload.get('hypothesis_id', '-')} "
+                f"metric={payload.get('metric', '-')} "
+                f"direction={payload.get('direction', '-')} "
+                f"threshold={payload.get('threshold', '-')}"
+            )
+        if kind == "prereg_resolved":
+            return (
+                f"hyp={payload.get('hypothesis_id', '-')} "
+                f"verdict={payload.get('verdict', payload.get('status', '-'))}"
+            )
+        if kind == "bt_rating_updated":
+            delta = payload.get("delta_strength")
+            delta_str = f" Δ{float(delta):+.3f}" if isinstance(delta, (int, float)) else ""
+            return (
+                f"node={payload.get('node_id', '-')} "
+                f"strength={payload.get('strength', '-')}{delta_str}"
+            )
+        if kind == "branch_promoted":
+            return f"node={payload.get('node_id', '-')} → promoted"
+        if kind == "branch_paused":
+            return (
+                f"node={payload.get('node_id', '-')} "
+                f"reason={payload.get('reason', '-')}"
+            )
+        if kind == "branch_pause_suggested":
+            return (
+                f"node={payload.get('node_id', '-')} "
+                f"score={payload.get('strength', payload.get('score', '-'))}"
+            )
+        if kind == "replay_branch_created":
+            return (
+                f"branch={payload.get('branch_id', '-')} "
+                f"snapshot={payload.get('snapshot_id', '-')}"
+            )
+        if kind == "auto_prune":
+            return (
+                f"node={payload.get('node_id', '-')} "
+                f"action={payload.get('action', '-')}"
+            )
+        if kind == "proof_corpus_reindex_progress":
+            return (
+                f"progress={payload.get('done', 0)}/{payload.get('total', 0)} "
+                f"backend={payload.get('backend', '-')}"
+            )
+        # v5.0 cockpit-emitted kinds:
+        if kind == "phase_set":
+            focus = payload.get("focus_nodes") or []
+            focus_str = ", ".join(str(x) for x in focus[:3])
+            return (
+                f"phase={payload.get('phase', '-')} "
+                f"focus=[{focus_str}] "
+                f"intent={(payload.get('intent') or '')[:60]}"
+            )
+        if kind == "agent_narration":
+            text = str(payload.get("text", ""))
+            if len(text) > 100:
+                text = text[:97] + "…"
+            return f"scope={payload.get('scope', '-')}  \"{text}\""
         return str(payload)
 
     def _format_timestamp(self, raw: str) -> str:

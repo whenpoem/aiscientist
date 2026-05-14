@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: Read-only literature review, idea generation, and hypothesis proposal. Cannot modify code or files.
-tools: Read, Glob, Grep, WebFetch, mcp__memory__get_active_frontier, mcp__memory__get_ancestors, mcp__memory__query_literature, mcp__memory__find_baselines_for, mcp__memory__find_contradictions, mcp__memory__match_signatures, mcp__arxiv__search_papers, mcp__openalex__search_works, mcp__openalex__search_by_topic, mcp__openalex__get_work, mcp__openalex__get_related_works
+tools: Read, Glob, Grep, WebFetch, mcp__memory__get_active_frontier, mcp__memory__get_ancestors, mcp__memory__query_literature, mcp__memory__find_baselines_for, mcp__memory__find_contradictions, mcp__memory__match_signatures, mcp__arxiv__search_papers, mcp__openalex__search_works, mcp__openalex__search_by_topic, mcp__openalex__get_work, mcp__openalex__get_related_works, mcp__cockpit__set_phase, mcp__cockpit__narrate
 model: sonnet
 ---
 

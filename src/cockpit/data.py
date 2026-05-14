@@ -803,6 +803,38 @@ def fetch_new_events(last_event_id: int = 0, limit: int = 2000) -> list[dict[str
     return events
 
 
+def prune_events(*, keep_last: int = 50_000) -> int:
+    """Delete old cockpit event rows while preserving the newest window.
+
+    The event stream is append-only during normal operation. This explicit
+    housekeeping hook is intentionally manual so cleanup never surprises a
+    research session that depends on older audit context.
+    """
+    if keep_last < 1:
+        raise ValueError("keep_last must be >= 1")
+    con = _connect()
+    try:
+        cutoff = con.execute(
+            """
+            SELECT id
+            FROM cockpit_events
+            ORDER BY id DESC
+            LIMIT 1 OFFSET ?
+            """,
+            (keep_last,),
+        ).fetchone()
+        if cutoff is None:
+            return 0
+        cursor = con.execute(
+            "DELETE FROM cockpit_events WHERE id <= ?",
+            (int(cutoff["id"]),),
+        )
+        con.commit()
+        return int(cursor.rowcount or 0)
+    finally:
+        con.close()
+
+
 def record_event(kind: str, payload: dict[str, Any] | str | None = None) -> int:
     con = _connect()
     payload_text = (

@@ -165,10 +165,18 @@ Hook 是系统的机械保证。它们作为短命子进程，由 Claude Code �
 | `PreToolUse` (Write/Edit/Bash) | `leakage_guard.py` | 拒绝任何路径解析到 held-out 目录下的工具调用 |
 | `PreToolUse` (Bash) | `destructive_bash_guard.py` | 拒绝破坏性命令，除非命令中出现 `# CONFIRM_DESTRUCTIVE` 标记 |
 | `PostToolUse` (Bash) | `provenance_log.py` | 从 stdout 中抠出数值 token 写入 `ver_provenance` |
-| `UserPromptSubmit` | `intervention_pump.py` | 排空 `cockpit_interventions` 注入到 `additionalContext` |
+| `UserPromptSubmit` | `intervention_pump.py` | 排空 `cockpit_interventions`，注入到下一轮主 agent 的 `additionalContext` |
 | `Stop` | `intervention_pump.py` + `stop_flush.py` | 同样排空，并额外发出一个 `turn_end` 事件 |
 
 Hook 必须是幂等的，并且在数据库缺失或损坏时优雅降级（典型场景：首次运行，数据库还没建立）。读不到状态意味着"没有待处理的干预"，不是崩溃。
+
+cockpit 干预不是实时中断通道。如果主 agent 已经启动了长时间运行的
+subagent 或 tool call，TUI 里提交的干预会留在 `cockpit_interventions`
+中，直到 Claude Code 触发下一次 `UserPromptSubmit` 或 `Stop` hook 才会交付。
+
+`cockpit_events` 在正常运行时只追加不自动删除。长时间会话可以显式运行
+`uv run python -m cockpit.tui --prune-events 50000` 清理旧 UI 事件；该命令保留
+最新 N 行，不会碰报告文件或 `cockpit_reports` 索引。
 
 ### 13. 共用内核与领域主干（v4.0）
 
@@ -255,7 +263,80 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 
 直接 `record_lean_attempt(status='timeout')` 而事先没过 `budget_check` 是审计提醒，但不影响 NL 证明本身的有效性。
 
-### 14. 各模块地图
+### 14. Cockpit 活动流式监控（v5.0）
+
+v5.0 重新组织了 cockpit 的信息呈现方式。之前的主视图回答的是"刚才触发了哪个原子操作"，现在改为回答"agent 当前在做什么 / 有没有东西需要我介入 / 研究层面刚发生了什么"。这只是展示层的调整——底层的 `cockpit_events` 表、它的写入契约、各 MCP 服务器的 payload 格式全部不变。设计动机和备选方案见 [ADR 0011](adr/0011-cockpit-activity-streaming.md)。
+
+#### 五层信息面
+
+| 层 | 数据来源 | 回答什么问题 |
+|---|---|---|
+| 阶段栏（顶部停靠）| `cockpit.phase.derive_phase`，读最近 200 条事件 | "现在在干嘛？" |
+| 活动面板（网格主区）| `cockpit.activity.aggregate`，读最近 30 分钟 | "研究层面刚发生了什么？" |
+| 焦点 tab（右侧标签页首位）| `cockpit.panes.focus_pane.derive_focus`，读最近 2 分钟 | "agent 盯着哪个节点？" |
+| 其他 tab（风险 / 失败 / 声明 / 文献 / 报告 / 语料 / 诊断 / Lean）| `cockpit.data` 查询 | "我能查什么？" |
+| 审计日志（底部停靠，默认折叠）| EventStreamPane 原样保留 | "哪些原子操作被触发了？" |
+
+每个派生都是对 `cockpit_events` 行的纯函数。不引入新表——阶段、焦点、活动卡片每次 tick 都重新计算。这符合 [ADR 0007](adr/0007-tools-skills-hooks-layering.md) 的"工作流状态从数据推断，不做持久化"原则。
+
+#### 阶段词汇表
+
+八个阶段，大致按 SOP 推进顺序排列：
+
+- `idle` —— 窗口期内无活动（默认 90 秒无事件后进入）
+- `explore` —— `graph_delta` / `literature_ingested` 占主导
+- `select` —— `judgement_recorded` / `bt_rating_updated` / `branch_*` 占主导
+- `experiment` —— `failure_added` / redirect 类 `intervention`
+- `verify` —— `seed_run_recorded` / `prereg_*` / `heldout_query_*` / `budget_exceeded` / `prov_dag_stale`
+- `prove` —— `proof_*` / `lean_*`
+- `review` —— `claim_pinned` / `report_generated` / `snapshot_created` / `replay_branch_created`
+- `narrate` —— 只有 `agent_narration` 而没有上述任何事件
+
+`cockpit__set_phase` 发出的显式 `phase_set` 事件在出现且足够新时会覆盖派生结果。
+
+#### 活动卡片家族
+
+| 家族 | 符号 | 包含的事件类型 |
+|---|---|---|
+| graph | ◇ | `graph_delta`, `branch_paused`, `branch_pause_suggested`, `branch_promoted`, `auto_prune`, `literature_ingested` |
+| bt | ⚖ | `bt_rating_updated`, `judgement_recorded` |
+| verify | ✓ | `seed_run_recorded`, `prereg_*`, `heldout_query_*`, `claim_pinned`, `snapshot_created`, `report_generated`, `replay_branch_created` |
+| prove | ⊢ | `proof_*` |
+| lean | λ | `lean_proof_*`（与 prove 分开，便于源码预览渲染）|
+| intervention | ! | `intervention`, `intervention_undone` |
+| narrate | " | `agent_narration`, `note`, `phase_set` |
+| risk | ▲ | `budget_exceeded`, `prov_dag_stale`, `failure_added`（单例卡片）|
+
+卡片按 `(family, focus_node_id)` 分组（payload 指明了目标节点时），或按 `(family, 60 秒时间桶)` 分组（高频且无目标节点的事件，目前只有 `proof_corpus_reindex_progress`）。`budget_exceeded`、`prov_dag_stale`、`failure_added`、`agent_narration`、`phase_set` 和 `note` 始终生成单独卡片，确保单条重要信号不被聚合淹没。
+
+#### 严重度分档
+
+| 严重度 | 符号 | 默认归属的事件类型（payload 层面有覆盖） |
+|---|---|---|
+| critical | ■ | `budget_exceeded`, `prov_dag_stale` |
+| high | ▲ | `lean_proof_failed`, `branch_paused`, `failure_added`, `intervention.halt`, `prereg_resolved(unmet)`, `heldout_query_finished(failed)` |
+| medium | ● | `prereg_resolved`, `proof_diagnosis_recorded(is_flawed=True)`, `branch_pause_suggested`, `intervention*` |
+| low | · | `note`, `agent_narration`, `bt_rating_updated`, `proof_corpus_reindex_progress`, `report_generated`, `phase_set` |
+| info | （空）| 其余所有 |
+
+卡片显示其包含事件中的最高严重度。严重度同时用符号和颜色双重标记，方便红绿色盲用户通过形状区分。
+
+#### Cockpit MCP 工具（v5.0 新增）
+
+`cockpit.mcp_server` 新增两个原子动词：
+
+- `cockpit__set_phase(phase, focus_nodes, intent)` —— 写入一条 `phase_set` 事件。phase 必须属于八个阶段之一；`focus_nodes` 限制最多 8 条，每条匹配 `^[a-z]+_[a-z0-9_]+$`；`intent` 截断到 200 字符。
+- `cockpit__narrate(text, scope)` —— 写入一条 `agent_narration` 事件。text 1–500 字符（strip 后）；scope 匹配 `^(session|node:<id>|branch:<id>)$`。
+
+两个工具都是描述性的：agent 完全可以不调用它们，cockpit 的派生逻辑会自行处理缺失的情况。`researcher`、`engineer`、`prover` 的 tools 白名单里包含这两个工具；只读型 agent（`librarian`、`verifier`、`reviewer`、`budgeter`）不包含。
+
+#### Settings 交互
+
+- `CockpitSettings.phase_strip_visible: bool = True` —— 用 `P` 切换。
+- `CockpitSettings.animations_enabled: bool = True` —— 用 `M` 切换；关闭后给 screen 加 `animations-off` CSS 类，为后续 TCSS `transition` 控制留接口。
+- 旧的 `focused_pane="events"` 在加载时自动修正为 `"activity"`，沿用 `app.py` 已有的 `LAYOUT_FOCUS → wide` 治愈模式。
+
+### 15. 各模块地图
 
 这份文档讨论的是**跨模块**契约。每个模块的 `__init__.py`（hooks 目录则是 `README.md`）里写有一份结构化地图，列出该模块的公开接口、自有表、关键不变量和"不要做"清单。在模块内部做改动之前请先阅读：
 

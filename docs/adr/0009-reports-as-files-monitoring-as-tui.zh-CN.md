@@ -56,8 +56,9 @@ reviewer agent 拿到一个可选的 `mcp__verify__export_report` 工具，调
 
 - cockpit 不用再硬撑它本来就不擅长显示的内容。长草稿、完整诊断清单、
   并排对比集都由用户自己选择的工具打开。
-- 报告可以共享。路径是稳定的，用户可以把它 commit 进仓库、附在 issue
-  里、或者直接转给协作者，不需要重跑 cockpit。
+- 报告可以共享。路径是稳定的，用户可以把它附在 issue 里、直接转给协作者，
+  或者在确认要公开时用 `git add -f reports/<file>` 显式加入 git，
+  不需要重跑 cockpit。
 - Reports 标签页提供所有已生成报告的统一索引；详情面板也会在对应节点
   下显示相关报告。
 - ADR 0003"不要 web UI"的立场不受影响。cockpit 仍然是纯 TUI，新文件
@@ -65,9 +66,11 @@ reviewer agent 拿到一个可选的 `mcp__verify__export_report` 工具，调
 
 ### 负面
 
-- `reports/` 目录由用户自己管理，文件不会自动清理。`cockpit_reports`
-  表在文件被删后仍然保留记录（标记为 `missing`），审计历史不会丢；但
-  磁盘清理需要用户手动做。
+- `reports/` 目录由用户自己管理，文件不会自动清理。该目录默认加入
+  `.gitignore`，因为报告可能含有私有结果、heldout-derived metrics 或
+  未发表草稿；需要分享时应显式指定某个文件，或使用
+  `git add -f reports/<file>`。`cockpit_reports` 表在文件被删后仍然保留
+  记录（标记为 `missing`），审计历史不会丢；但磁盘清理需要用户手动做。
 - 同一份证据会出现在两个地方：cockpit 的实时标签页和导出的报告文件。
   用户需要分清"实时监控"和"归档文件"的区别。这是拥有真正归档能力要付
   出的代价。

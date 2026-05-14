@@ -31,6 +31,35 @@ Screen {
     background: $surface;
 }
 
+/* ===== Activity Streaming v5.0 ============================================
+ * Phase strip is the second dock:top widget, sitting just below
+ * StatusBar. ``height: auto`` lets the strip shrink to one row on idle
+ * and grow to three rows when both focus + intent are populated. The
+ * ``phase-strip-hidden`` class is toggled by ``P`` (action_toggle_phase_strip)
+ * to give power users a way to reclaim the rows. ``.animations-off`` is
+ * applied to the Screen by ``M`` (action_toggle_animations) and lets
+ * future activity-pane transitions opt out via a single global selector.
+ */
+#phase-strip {
+    dock: top;
+    height: auto;
+    min-height: 1;
+    max-height: 3;
+    padding: 0 1;
+    color: $foreground;
+    background: $boost;
+}
+
+#phase-strip.phase-strip-hidden {
+    display: none;
+}
+
+Screen.animations-off * {
+    /* Reserved for future transition: / animate: rules on activity_pane.
+     * No-op today — the activity pane lands in Milestone B with concrete
+     * animations to suppress. */
+}
+
 #body-grid {
     layout: grid;
     height: 1fr;
@@ -38,12 +67,14 @@ Screen {
 }
 
 /* ===== layout-wide: 3 columns ============================================
- * Tree | Detail / Tabs (stacked) | Events
+ * Tree | Detail / Tabs (stacked) | Activity
  *
- * Compose order is Tree → Detail → Events → Tabs (see CockpitApp.compose
- * for the rationale). row-span on Tree and Events makes them fill the
- * side columns vertically. The auto-flow lands Tabs at (col=2, row=2)
- * underneath Detail. */
+ * v5.0 reshuffle: ActivityPane took EventStreamPane's column-3 slot;
+ * EventStreamPane now docks to the bottom of the screen as an "audit
+ * log". Compose order is Tree → Detail → Activity → Tabs (see
+ * CockpitApp.compose for the rationale). row-span on Tree and
+ * Activity makes them fill the side columns vertically. The auto-flow
+ * lands Tabs at (col=2, row=2) underneath Detail. */
 
 #body-grid.layout-wide {
     grid-size: 3 2;
@@ -77,7 +108,7 @@ Screen {
     row-span: 2;
 }
 
-#body-grid.layout-wide #events-pane {
+#body-grid.layout-wide #activity-pane {
     row-span: 2;
 }
 
@@ -127,8 +158,26 @@ Screen {
 
 #tree-pane,
 #detail-pane,
-#events-pane,
+#activity-pane,
 #tabs-pane {
+    height: 1fr;
+}
+
+/* v5.0 audit log: the original event stream is preserved but
+ * relocated to a collapsible bottom dock. The ``.audit-log`` class is
+ * applied in App.compose() so the existing #events-pane id keeps
+ * routing actions correctly (Ctrl+L clears it, ``w``/``t`` toggle
+ * wrap and timestamp mode). Default collapsed height is 6 lines;
+ * ``A`` adds .expanded for full-height inspection.
+ */
+#events-pane.audit-log {
+    dock: bottom;
+    height: 6;
+    border: round $panel;
+    margin: 0 1 0 1;
+}
+
+#events-pane.audit-log.expanded {
     height: 1fr;
 }
 

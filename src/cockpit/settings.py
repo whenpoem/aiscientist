@@ -105,6 +105,14 @@ class CockpitSettings:
     # to start over also brings Welcome back — matching the user's
     # mental model of "fresh slate".
     welcome_shown: bool = False
+    # v5.0 additions (Activity Streaming): phase_strip_visible toggles
+    # the top phase strip (key ``P``); animations_enabled toggles
+    # spinners / flashes / transitions on the activity pane (key ``m``)
+    # for SSH / tmux / screen-reader users. Both default ON for the
+    # vibecoding-style monitoring experience; the cockpit falls back
+    # cleanly when either is False.
+    phase_strip_visible: bool = True
+    animations_enabled: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "CockpitSettings":

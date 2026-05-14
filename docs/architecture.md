@@ -165,10 +165,20 @@ Hooks are the mechanical guarantees of the system. They run as short-lived subpr
 | `PreToolUse` (Write/Edit/Bash) | `leakage_guard.py` | Denies any tool call whose path resolves into a held-out directory |
 | `PreToolUse` (Bash) | `destructive_bash_guard.py` | Denies destructive commands unless the marker `# CONFIRM_DESTRUCTIVE` appears |
 | `PostToolUse` (Bash) | `provenance_log.py` | Extracts numeric tokens from stdout into `ver_provenance` |
-| `UserPromptSubmit` | `intervention_pump.py` | Drains `cockpit_interventions` into `additionalContext` |
+| `UserPromptSubmit` | `intervention_pump.py` | Drains `cockpit_interventions` into `additionalContext` for the next main-agent turn |
 | `Stop` | `intervention_pump.py` + `stop_flush.py` | Same drain, plus a `turn_end` event |
 
 Hooks must be idempotent and must degrade gracefully when the database is missing or malformed (typical case: first run, no DB yet). Missing state means "no intervention pending", not "crash".
+
+Cockpit interventions are not a live interrupt mechanism. If the main agent
+has already spawned a long-running subagent or tool call, an intervention
+entered in the TUI waits in `cockpit_interventions` until Claude Code fires
+the next `UserPromptSubmit` or `Stop` hook.
+
+`cockpit_events` is append-only during normal operation. Long-running
+sessions can prune old UI events explicitly with
+`uv run python -m cockpit.tui --prune-events 50000`, which preserves the
+newest N rows and leaves report files / report index rows untouched.
 
 ### 13. Core vs domain trunks (v4.0)
 
@@ -255,7 +265,109 @@ The proof trunk obeys the same `verify_mcp.budget_check` / `budget_consume` gati
 
 A `record_lean_attempt(status='timeout')` without a prior `budget_check` is an audit warning. Missing budget context does not invalidate the NL proof itself.
 
-### 14. Per-module maps
+### 14. Cockpit activity streaming (v5.0)
+
+v5.0 rearranges the cockpit's information surface so the primary read
+mode answers "what is the agent doing right now / does anything need
+my attention / what just changed" rather than "what atomic operation
+just fired". The change is presentation-only: the underlying `cockpit_events`
+table, its emission contract, and the per-MCP-server payload schemas are
+unchanged. See [ADR 0011](adr/0011-cockpit-activity-streaming.md) for
+the full rationale + alternatives.
+
+#### Five-layer surface
+
+| Layer | Source | Question it answers |
+|---|---|---|
+| Phase strip (top dock) | `cockpit.phase.derive_phase` over last 200 events | "What now?" |
+| Activity pane (grid main) | `cockpit.activity.aggregate` over last 30 min | "What just happened at the research level?" |
+| Focus tab (RightTabsPane, first tab) | `cockpit.panes.focus_pane.derive_focus` over last 2 min | "Which node is the agent working on?" |
+| Other tabs (Risks / Failures / Claims / Lit / Reports / Corpus / Diagnostics / Lean) | `cockpit.data` fetches | "What can I query?" |
+| Audit log (bottom dock, collapsed) | EventStreamPane verbatim | "What atomic operations fired?" |
+
+Each derivation is a pure function over `cockpit_events` rows. No new
+table is introduced — phase / focus / activity are recomputed every
+tick. This honors [ADR 0007](adr/0007-tools-skills-hooks-layering.md)'s
+"workflow state inferred from data, not stored" rule.
+
+#### Phase vocabulary
+
+Eight phases, ordered roughly by SOP progression:
+
+- `idle` — no activity in the window (default after 90 s silence)
+- `explore` — `graph_delta` / `literature_ingested` dominate
+- `select` — `judgement_recorded` / `bt_rating_updated` / `branch_*` dominate
+- `experiment` — `failure_added` / redirect-class `intervention`
+- `verify` — `seed_run_recorded` / `prereg_*` / `heldout_query_*` / `budget_exceeded` / `prov_dag_stale`
+- `prove` — `proof_*` / `lean_*`
+- `review` — `claim_pinned` / `report_generated` / `snapshot_created` / `replay_branch_created`
+- `narrate` — `agent_narration` without any of the above
+
+Explicit `phase_set` events (emitted by `cockpit__set_phase`) override
+derivation when present and recent.
+
+#### Activity card families
+
+| Family | Glyph | Kinds |
+|---|---|---|
+| graph | ◇ | `graph_delta`, `branch_paused`, `branch_pause_suggested`, `branch_promoted`, `auto_prune`, `literature_ingested` |
+| bt | ⚖ | `bt_rating_updated`, `judgement_recorded` |
+| verify | ✓ | `seed_run_recorded`, `prereg_*`, `heldout_query_*`, `claim_pinned`, `snapshot_created`, `report_generated`, `replay_branch_created` |
+| prove | ⊢ | `proof_*` |
+| lean | λ | `lean_proof_*` (kept separate for source-preview rendering) |
+| intervention | ! | `intervention`, `intervention_undone` |
+| narrate | " | `agent_narration`, `note`, `phase_set` |
+| risk | ▲ | `budget_exceeded`, `prov_dag_stale`, `failure_added` (singletons) |
+
+Cards group by `(family, focus_node_id)` when the payload names a node,
+or by `(family, 60-second bucket)` for high-volume kinds without a
+target (currently `proof_corpus_reindex_progress`). `budget_exceeded`,
+`prov_dag_stale`, `failure_added`, `agent_narration`, `phase_set`, and
+`note` are always singleton cards so individual signals never get
+swallowed by aggregation.
+
+#### Severity bands
+
+| Severity | Glyph | Kinds (default; payload-aware overrides apply) |
+|---|---|---|
+| critical | ■ | `budget_exceeded`, `prov_dag_stale` |
+| high | ▲ | `lean_proof_failed`, `branch_paused`, `failure_added`, `intervention.halt`, `prereg_resolved(unmet)`, `heldout_query_finished(failed)` |
+| medium | ● | `prereg_resolved`, `proof_diagnosis_recorded(is_flawed=True)`, `branch_pause_suggested`, `intervention*` |
+| low | · | `note`, `agent_narration`, `bt_rating_updated`, `proof_corpus_reindex_progress`, `report_generated`, `phase_set` |
+| info | (blank) | everything else |
+
+Cards display the maximum severity of their constituent events. The
+severity glyph plus colour give a redundant signal so red-green
+colour-blind users can still distinguish via shape.
+
+#### Cockpit MCP tools (v5.0 additions)
+
+Two new atomic verbs in `cockpit.mcp_server`:
+
+- `cockpit__set_phase(phase, focus_nodes, intent)` — writes one
+  `phase_set` event. Validates phase against the 8-name vocabulary;
+  caps `focus_nodes` to 8 entries each matching `^[a-z]+_[a-z0-9_]+$`;
+  truncates `intent` to 200 chars.
+- `cockpit__narrate(text, scope)` — writes one `agent_narration`
+  event. Text 1-500 chars after strip; scope matches `^(session|node:<id>|branch:<id>)$`.
+
+Both tools are descriptive: agents that never call them work
+identically; the cockpit's derivation handles the absence gracefully.
+Worker agents (`researcher`, `engineer`, `prover`) carry them in their
+`tools:` whitelist; query-only agents (`librarian`, `verifier`,
+`reviewer`, `budgeter`) do not.
+
+#### Settings interaction
+
+- `CockpitSettings.phase_strip_visible: bool = True` — toggled by `P`.
+- `CockpitSettings.animations_enabled: bool = True` — toggled by `M`;
+  adds an `animations-off` class to the screen for future TCSS
+  `transition` opt-outs.
+- Legacy `focused_pane="events"` from pre-v5 installs is healed to
+  `"activity"` at boot, matching the existing `LAYOUT_FOCUS → wide`
+  healing pattern in `app.py`.
+
+### 15. Per-module maps
 
 This document covers cross-module contracts. Each module's `__init__.py` (or `README.md`, for the hooks directory) carries a structured map of its public surface, owned tables, invariants, and "do not" rules. Read those before making non-trivial changes inside a module:
 

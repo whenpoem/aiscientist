@@ -8,6 +8,8 @@ from claudescientist.runtime import (
     apply_schema_migration,
     connect_existing_sqlite,
     connect_sqlite,
+    project_root,
+    state_db_path,
 )
 
 
@@ -108,3 +110,55 @@ def test_connect_existing_sqlite_uses_runtime_pragmas(tmp_path):
     finally:
         if con is not None:
             con.close()
+
+
+def test_project_root_prefers_claude_project_dir(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    nested = repo / "docs" / "adr"
+    nested.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    (repo / ".claude").mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+
+    assert project_root() == repo.resolve()
+
+
+def test_project_root_walks_up_when_env_missing(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    nested = repo / "docs" / "adr"
+    nested.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    (repo / ".claude").mkdir()
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    monkeypatch.chdir(nested)
+
+    assert project_root() == repo.resolve()
+
+
+def test_state_db_path_anchors_to_project_root_from_subdir(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    nested = repo / "docs"
+    nested.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    (repo / ".claude").mkdir()
+    monkeypatch.delenv("RESEARCH_AGENT_DB_PATH", raising=False)
+    monkeypatch.delenv("RESEARCH_AGENT_STATE_DIR", raising=False)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    monkeypatch.chdir(nested)
+
+    assert state_db_path() == repo.resolve() / ".research-agent" / "state.db"
+
+
+def test_state_db_env_overrides_still_win(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    (repo / ".claude").mkdir()
+    override = tmp_path / "custom" / "state.db"
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(repo))
+    monkeypatch.setenv("RESEARCH_AGENT_DB_PATH", str(override))
+
+    assert state_db_path() == override

@@ -1,4 +1,4 @@
-# MCP Tool Reference (v4.2.0)
+# MCP Tool Reference (v5.0.0)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -11,8 +11,8 @@
   - [Leakage](#leakage) · [Provenance](#provenance) · [Pinned metrics](#pinned-metrics) · [Seed and fairness](#seed-and-fairness) · [Held-out](#held-out) · [Preregistration](#preregistration) · [Resource budget](#resource-budget)
 - **prove MCP** *(v4.0)* — 18 tools for the proof trunk: corpus retrieval, NL workflow, Lean reinsurance
   - [Corpus + retrieval](#corpus-and-retrieval) · [Proof nodes](#proof-nodes) · [Segmentation + diagnosis](#segmentation-and-diagnosis) · [Correction](#correction) · [Lean reinsurance](#lean-reinsurance)
-- **cockpit MCP** — 3 tools that let Claude push to the cockpit
-  - [Cockpit bridge](#cockpit-bridge)
+- **cockpit MCP** — 5 tools that let Claude push to the cockpit
+  - [Cockpit bridge](#cockpit-bridge) · [Activity streaming (v5.0)](#activity-streaming-v50)
 
 ---
 
@@ -476,7 +476,7 @@ Browse Lean attempts.
 
 ## cockpit MCP
 
-A small stdio bridge that lets Claude push to the cockpit. Exposed via `mcp__cockpit__<name>`.
+A small stdio bridge that lets Claude push to the cockpit. Exposed via `mcp__cockpit__<name>`. v5.0 adds two descriptive tools (`set_phase`, `narrate`) for SOP-driven agents; worker agents (`researcher`, `engineer`, `prover`) carry them in their tool whitelist.
 
 ### Cockpit bridge
 
@@ -500,6 +500,22 @@ Append a free-form note to the cockpit event stream.
 **Returns**: `{"ok": True}`
 
 **When to use**: when Claude wants to leave a marker in the event log for later review.
+
+### Activity streaming (v5.0)
+
+#### `set_phase(phase, focus_nodes=[], intent="")`
+Write a `phase_set` event that overrides the cockpit's derived phase. `phase` must be one of the eight-phase vocabulary (`idle / explore / select / experiment / verify / prove / review / narrate`). `focus_nodes` is capped at 8 entries, each matching `^[a-z]+_[a-z0-9_]+$`. `intent` is truncated to 200 characters.
+
+**Returns**: `{"ok": True, "event_id": <int>}`
+
+**When to use**: at SOP branch points where the agent is choosing among competing paths and wants the cockpit's phase strip to reflect the transition explicitly. Entirely optional — the cockpit derives phase from events when this tool is not called.
+
+#### `narrate(text, scope="session")`
+Write an `agent_narration` event. `text` is 1–500 characters after stripping whitespace. `scope` matches `^(session|node:<id>|branch:<id>)$`.
+
+**Returns**: `{"ok": True, "event_id": <int>}`
+
+**When to use**: when the agent wants to surface decision reasoning (e.g. "chose skeleton B because it avoids the Kolmogorov bound") without changing the derived phase. The activity pane renders narration events as singleton cards. Entirely optional.
 
 ---
 

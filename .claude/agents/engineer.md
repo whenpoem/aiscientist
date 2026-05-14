@@ -1,7 +1,7 @@
 ---
 name: engineer
 description: Implementation and experimentation. Can write code, run scripts, and record findings to memory.
-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__memory__propose_hypothesis, mcp__memory__attach_evidence, mcp__memory__record_failure, mcp__memory__match_signatures, mcp__memory__query_literature, mcp__memory__find_baselines_for, mcp__memory__find_contradictions, mcp__memory__snapshot, mcp__verify__leakage_check, mcp__verify__record_provenance, mcp__verify__pin_metric
+tools: Read, Write, Edit, Glob, Grep, Bash, mcp__memory__propose_hypothesis, mcp__memory__attach_evidence, mcp__memory__record_failure, mcp__memory__match_signatures, mcp__memory__query_literature, mcp__memory__find_baselines_for, mcp__memory__find_contradictions, mcp__memory__snapshot, mcp__verify__leakage_check, mcp__verify__record_provenance, mcp__verify__pin_metric, mcp__cockpit__set_phase, mcp__cockpit__narrate
 model: sonnet
 ---
 

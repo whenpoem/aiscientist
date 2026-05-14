@@ -40,17 +40,18 @@ def test_events_pane_can_construct_unwrapped(workspace):
 
 @pytest.mark.asyncio
 async def test_w_key_toggles_event_wrap_and_persists(workspace):
-    """v4.2.0a1: ``w`` is pane-scoped to EventStreamPane. Focus the
-    events pane first so the binding fires; pressing ``w`` while the
-    tree pane has focus is intentionally a no-op (see
-    docs/cockpit-keys.md for the canonical scope map)."""
+    """v4.2.0a1: ``w`` is pane-scoped to EventStreamPane. v5.0 demoted
+    that widget to the bottom-docked audit log, so there is no numeric
+    shortcut to focus it directly; we call ``.focus()`` on the widget
+    handle to set up the same scope (see docs/cockpit-keys.md)."""
     app = CockpitApp()
     async with app.run_test() as pilot:
         assert app._settings.event_wrap is True
         assert app.events_pane.wrap_enabled is True
 
-        # Focus events pane so the EventStreamPane-scoped `w` fires.
-        await pilot.press("3")
+        # Focus the audit log (events_pane) so the pane-scoped `w` fires.
+        app.events_pane.focus()
+        await pilot.pause()
         await pilot.press("w")
         assert app._settings.event_wrap is False
         assert app.events_pane.wrap_enabled is False

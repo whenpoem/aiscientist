@@ -21,10 +21,17 @@ from cockpit.app import CockpitApp
 
 @pytest.mark.asyncio
 async def test_w_fires_in_events_pane(workspace):
-    """Pressing `w` while the events pane has focus toggles wrap."""
+    """Pressing `w` while the events pane (now audit log) has focus toggles wrap.
+
+    v5.0 demoted events_pane to a bottom-docked audit log, but the
+    pane-scoped ``w`` binding still travels with the widget. There is
+    no numeric shortcut to the audit log, so the test focuses it
+    directly via the widget handle.
+    """
     app = CockpitApp()
     async with app.run_test() as pilot:
-        await pilot.press("3")  # focus events
+        app.events_pane.focus()
+        await pilot.pause()
         before = app.events_pane.wrap_enabled
         await pilot.press("w")
         assert app.events_pane.wrap_enabled is (not before)
@@ -35,7 +42,9 @@ async def test_w_does_not_fire_from_tree_pane(workspace):
     """Pressing `w` while the tree pane has focus is a no-op now.
 
     v4.1 fired the wrap toggle regardless of focus through an
-    App-level priority binding. v4.2 scopes `w` to the events pane.
+    App-level priority binding. v4.2 scopes `w` to the events pane,
+    and v5.0 keeps that scope even after the events pane was
+    relocated to the bottom-docked audit log.
     """
     app = CockpitApp()
     async with app.run_test() as pilot:
@@ -58,10 +67,11 @@ async def test_i_fires_in_tree_pane(workspace):
 
 @pytest.mark.asyncio
 async def test_i_does_not_fire_from_events_pane(workspace):
-    """Pressing `i` while the events pane has focus is a no-op."""
+    """Pressing `i` while the events pane (audit log) has focus is a no-op."""
     app = CockpitApp()
     async with app.run_test() as pilot:
-        await pilot.press("3")  # focus events
+        app.events_pane.focus()
+        await pilot.pause()
         before = app.tree_pane._compact
         await pilot.press("i")
         assert app.tree_pane._compact is before

@@ -1,4 +1,4 @@
-# MCP 工具参考（v4.2.0）
+# MCP 工具参考（v5.0.0）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。
@@ -11,8 +11,8 @@
   - [泄漏检测](#泄漏检测) · [溯源](#溯源) · [指标 pin](#指标-pin) · [种子与公平性](#种子与公平性) · [Held-out](#held-out) · [预注册](#预注册) · [资源预算](#资源预算)
 - **prove MCP** *(v4.0)* — 18 个工具，覆盖证明主干：语料检索、NL 工作流、Lean 形式化保险层
   - [语料与检索](#语料与检索) · [证明节点](#证明节点) · [切片与诊断](#切片与诊断) · [修正](#修正) · [Lean 形式化保险层](#lean-形式化保险层)
-- **cockpit MCP** — 3 个工具，让 Claude 向 cockpit 推送
-  - [Cockpit 桥](#cockpit-桥)
+- **cockpit MCP** — 5 个工具，让 Claude 向 cockpit 推送
+  - [Cockpit 桥](#cockpit-桥) · [活动流式工具 (v5.0)](#活动流式工具v50)
 
 ---
 
@@ -319,11 +319,11 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 ### 预注册
 
 #### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bh")`
-**在任何实验开始之前**就锁定该假说的证伪目标。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bh`、`bonferroni`、`none`；当前 `bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的 v3.0 兼容别名。发出 `prereg_locked`。
+为确认性假说锁定证伪目标，避免把探索性结果直接提升为主结论。探索性运行可以先存在，但必须保持探索性标注。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bh`、`bonferroni`、`none`；当前 `bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的 v3.0 兼容别名。发出 `prereg_locked`。
 
 **返回**：`{"prereg_id": "prereg_...", "status": "open", ...}`
 
-**何时使用**：作为 BT 锦标赛与 engineer 子智能体之间的门禁。任何实验都不应在没有它的情况下启动。
+**何时使用**：当准备把某个 BT 赢家交给 confirmatory engineer run，或准备把探索性结果提升为主声明时使用；探索性实验不必因为没有预注册而卡住。
 
 #### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None)`
 拿 `observed_value` 与锁定的阈值和方向比对。如果给了 `observed_p_value`，就在所有当前打开的预注册上应用多重比较校正。发出 `prereg_resolved`。
@@ -476,7 +476,7 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ## cockpit MCP
 
-一个小型 stdio 桥，让 Claude 能向 cockpit 推送内容。通过 `mcp__cockpit__<name>` 暴露。
+一个小型 stdio 桥，让 Claude 能向 cockpit 推送内容。通过 `mcp__cockpit__<name>` 暴露。v5.0 新增两个描述性工具（`set_phase`、`narrate`），供 SOP 驱动的 agent 使用；`researcher`、`engineer`、`prover` 的工具白名单里已包含。
 
 ### Cockpit 桥
 
@@ -500,6 +500,22 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 **返回**：`{"ok": True}`
 
 **何时使用**：Claude 想在事件日志中留个标记供日后回看时。
+
+### 活动流式工具（v5.0）
+
+#### `set_phase(phase, focus_nodes=[], intent="")`
+写入一条 `phase_set` 事件，覆盖 cockpit 的派生阶段。`phase` 必须属于八阶段词汇（`idle / explore / select / experiment / verify / prove / review / narrate`）之一。`focus_nodes` 最多 8 条，每条匹配 `^[a-z]+_[a-z0-9_]+$`。`intent` 截断到 200 字符。
+
+**返回**：`{"ok": True, "event_id": <int>}`
+
+**何时使用**：在 SOP 分支点——agent 从多条路径中做出选择时，希望 cockpit 的阶段栏明确反映这次切换。完全可选；不调用时 cockpit 照样从事件自动派生阶段。
+
+#### `narrate(text, scope="session")`
+写入一条 `agent_narration` 事件。`text` 为 1–500 字符（strip 后）。`scope` 匹配 `^(session|node:<id>|branch:<id>)$`。
+
+**返回**：`{"ok": True, "event_id": <int>}`
+
+**何时使用**：agent 想把决策原因可视化（比如"选骨架 B 因为它避开了 Kolmogorov 界"）而又不想改变派生阶段时。活动面板会把 narration 事件渲染为单例卡片。完全可选。
 
 ---
 

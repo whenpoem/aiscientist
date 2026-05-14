@@ -142,9 +142,9 @@ async def test_focus_mode_swaps_active_pane_with_focus_change(workspace):
         await pilot.press("F")
         assert "layout-active" in app.tree_pane.classes
 
-        await pilot.press("3")  # focus events
-        assert app.focused_pane == "events"
-        assert "layout-active" in app.events_pane.classes
+        await pilot.press("3")  # focus activity (was events pre-v5)
+        assert app.focused_pane == "activity"
+        assert "layout-active" in app.activity_pane.classes
         assert "layout-active" not in app.tree_pane.classes
 
 
@@ -153,10 +153,11 @@ async def test_focus_mode_swaps_active_pane_with_focus_change(workspace):
 
 @pytest.mark.asyncio
 async def test_wide_layout_places_each_pane_in_expected_quadrant(workspace):
-    """Snapshot the wide layout's grid cells: Tree spans column 1, Events
-    spans column 3 (full height), Detail sits top-middle, Tabs sits
-    bottom-middle. Catches the v4.1.0a0 bug where compose order made
-    column-3-row-2 land empty.
+    """Snapshot the wide layout's grid cells: Tree spans column 1,
+    Activity spans column 3 (full height), Detail sits top-middle, Tabs
+    sits bottom-middle. The v5.0 layout reshuffle replaced the old
+    Events column-3 pane with ActivityPane; EventStreamPane is now
+    dock:bottom as an audit log (asserted at the bottom of the body).
 
     We assert by comparing each pane's region.x against thirds of the
     body-grid width and region.y against the midpoint, so the test stays
@@ -181,7 +182,7 @@ async def test_wide_layout_places_each_pane_in_expected_quadrant(workspace):
 
         tree = app.tree_pane.region
         detail = app.detail_pane.region
-        events = app.events_pane.region
+        activity = app.activity_pane.region
         tabs = app.tabs_pane.region
 
         # Tree: column 1, full height.
@@ -190,12 +191,12 @@ async def test_wide_layout_places_each_pane_in_expected_quadrant(workspace):
         )
         assert tree.height >= bh - 4, f"Tree.height={tree.height} should ~= bh={bh}"
 
-        # Events: column 3 (right of col2 boundary), full height.
-        assert events.x >= col2_end - 2, (
-            f"Events.x={events.x} not in column 3 (>= {col2_end - 2})"
+        # Activity: column 3 (right of col2 boundary), full height.
+        assert activity.x >= col2_end - 2, (
+            f"Activity.x={activity.x} not in column 3 (>= {col2_end - 2})"
         )
-        assert events.height >= bh - 4, (
-            f"Events.height={events.height} should ~= bh={bh}"
+        assert activity.height >= bh - 4, (
+            f"Activity.height={activity.height} should ~= bh={bh}"
         )
 
         # Detail: middle column (between col1 and col2 boundaries),

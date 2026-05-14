@@ -116,6 +116,22 @@ def test_probe_uv_fails_when_absent(monkeypatch):
     assert io.probe_uv().ok is False
 
 
+def test_probe_npx_is_soft_dependency_when_absent(monkeypatch):
+    monkeypatch.setattr(io.shutil, "which", lambda name: None)
+    result = io.probe_npx()
+    assert result.ok is False
+    assert "OpenAlex" in result.detail
+
+
+def test_probe_npx_finds_executable_when_present(monkeypatch, tmp_path):
+    fake = tmp_path / "npx.cmd"
+    fake.write_text("")
+    monkeypatch.setattr(io.shutil, "which", lambda name: str(fake) if name == "npx" else None)
+    result = io.probe_npx()
+    assert result.ok is True
+    assert result.detail == str(fake)
+
+
 def test_probe_lean_reports_missing_tools(monkeypatch):
     monkeypatch.setattr(io.shutil, "which", lambda name: None)
     ok, missing = io.probe_lean_toolchain()

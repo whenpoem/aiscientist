@@ -264,7 +264,7 @@ async def test_enter_on_events_pane_pushes_detail_screen(workspace):
 
     app = CockpitApp()
     async with app.run_test() as pilot:
-        await pilot.press("3")  # focus events
+        await pilot.press("3")  # focus activity (was events pre-v5)
         await pilot.press("enter")
         assert isinstance(app.screen_stack[-1], DetailScreen)
 
@@ -386,10 +386,11 @@ async def test_enter_uses_actual_widget_focus_not_stale_reactive(workspace):
 
     app = CockpitApp()
     async with app.run_test() as pilot:
-        # Stale-reactive setup: use keyboard to focus events, then move
-        # widget focus to tree without going through _set_focus.
+        # Stale-reactive setup: use keyboard to focus activity (was
+        # events pre-v5), then move widget focus to tree without
+        # going through _set_focus.
         await pilot.press("3")
-        assert app.focused_pane == "events"
+        assert app.focused_pane == "activity"
 
         # Simulate mouse focus on the tree pane: in Textual, mouse clicks
         # call widget.focus() directly which fires Focused but doesn't
@@ -397,8 +398,8 @@ async def test_enter_uses_actual_widget_focus_not_stale_reactive(workspace):
         app.tree_pane.focus()
         await pilot.pause()
 
-        # `focused_pane` reactive is still "events" (the pre-mouse value);
-        # the *actual* focused widget is the tree pane.
+        # `focused_pane` reactive is still "activity" (the pre-mouse
+        # value); the *actual* focused widget is the tree pane.
         # Pressing Enter must route to tree drill-in regardless.
         await pilot.press("enter")
 

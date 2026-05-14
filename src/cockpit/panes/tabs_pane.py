@@ -45,7 +45,11 @@ def _truncate(value: str, max_width: int) -> str:
 # routing, _filtered_rows keys); it is kept as the canonical flat list so
 # pre-grouping callers stay unchanged.
 TAB_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("cross", ("risks", "claims", "literature", "reports")),
+    # ``focus`` is the v5.0 leading tab: derived live from
+    # cockpit_events, populated by cockpit.panes.focus_pane.derive_focus.
+    # Listed first so a user pressing ``4`` lands on the most-relevant
+    # tab for "what is the agent doing right now".
+    ("cross", ("focus", "risks", "claims", "literature", "reports")),
     ("empirical", ("failures",)),
     ("proof", ("corpus", "diagnostics", "lean")),
 )
@@ -56,6 +60,7 @@ TAB_GROUP_OF: dict[str, str] = {
     name: group for group, names in TAB_GROUPS for name in names
 }
 TABLE_IDS = {
+    "focus": "focus-table",
     "risks": "risks-table",
     "failures": "failures-table",
     "claims": "claims-table",
@@ -133,8 +138,12 @@ class RightTabsPane(Container):
         self.id = "tabs-pane"
         self.classes = "pane"
         self.lang = "en"
-        self.active = "risks"
+        # v5.0: ``focus`` is the new leading tab and the safest default
+        # to land on — it's derived from cockpit_events so it always
+        # has something meaningful, even on a fresh DB (empty-state row).
+        self.active = "focus"
         self.border_title = t(self.lang, "tabs_title_all")
+        self.focus_rows: list[dict] = []
         self.risks_rows: list[dict] = []
         self.failures_rows: list[dict] = []
         self.claims_rows: list[dict] = []
@@ -170,6 +179,14 @@ class RightTabsPane(Container):
         self._refresh_group_bar()
 
     def _configure_tables(self) -> None:
+        focus = self.query_one(f"#{TABLE_IDS['focus']}", DataTable)
+        focus.clear(columns=True)
+        focus.add_columns(
+            t(self.lang, "focus_col_node"),
+            t(self.lang, "focus_col_score"),
+            t(self.lang, "focus_col_phase"),
+            t(self.lang, "focus_col_intent"),
+        )
         risks = self.query_one(f"#{TABLE_IDS['risks']}", DataTable)
         risks.clear(columns=True)
         risks.add_columns(
@@ -327,6 +344,7 @@ class RightTabsPane(Container):
 
     def _reload_tables(self) -> None:
         payloads = {
+            "focus": self.focus_rows,
             "risks": self.risks_rows,
             "failures": self.failures_rows,
             "claims": self.claims_rows,
@@ -339,6 +357,7 @@ class RightTabsPane(Container):
         self._filtered_rows = {
             name: self._filter_rows(rows) for name, rows in payloads.items()
         }
+        self._reload_focus_table()
         self._reload_risks_table()
         self._reload_failure_table()
         self._reload_claims_table()
@@ -349,6 +368,62 @@ class RightTabsPane(Container):
         self._reload_lean_table()
         self._sync_active_table()
         self._refresh_title()
+
+    def update_focus(self, state) -> None:
+        """v5.0: replace the Focus tab rows from a derived ``FocusState``.
+
+        Empties to a single hint row when ``state.nodes`` is empty so
+        the tab is never blank — users new to the cockpit see what the
+        tab is for. Each focused node becomes one row.
+        """
+        rows: list[dict] = []
+        nodes = list(getattr(state, "nodes", ()) or ())
+        scores = dict(getattr(state, "scores", {}) or {})
+        intent = str(getattr(state, "intent", "") or "")
+        is_divided = bool(getattr(state, "is_divided", False))
+        if not nodes:
+            rows = [
+                {
+                    "node": "-",
+                    "score": "-",
+                    "phase": "-",
+                    "intent": t(self.lang, "focus_empty"),
+                    "kind": "empty",
+                }
+            ]
+        else:
+            for i, node in enumerate(nodes):
+                rows.append(
+                    {
+                        "node": node,
+                        "score": f"{scores.get(node, 0.0):.2f}",
+                        "phase": (t(self.lang, "focus_divided") if is_divided else "-"),
+                        "intent": intent if i == 0 else "",
+                        "kind": "focus",
+                    }
+                )
+        self.focus_rows = rows
+        if self.is_mounted:
+            self._filtered_rows["focus"] = self._filter_rows(rows)
+            self._reload_focus_table()
+            if self.active == "focus":
+                self._sync_active_table()
+
+    def _reload_focus_table(self) -> None:
+        if not self.is_mounted:
+            return
+        table = self.query_one(f"#{TABLE_IDS['focus']}", DataTable)
+        table.clear()
+        for row in self._filtered_rows.get("focus", []):
+            kind = row.get("kind", "focus")
+            key = f"focus:{row.get('node')}" if kind == "focus" else "focus:empty"
+            table.add_row(
+                str(row.get("node", "-")),
+                str(row.get("score", "-")),
+                str(row.get("phase", "-")),
+                str(row.get("intent", "-")),
+                key=key,
+            )
 
     def _sync_active_table(self) -> None:
         active = self.active if self.active in TAB_ORDER else TAB_ORDER[0]
@@ -573,6 +648,7 @@ class RightTabsPane(Container):
         # empirical four use the short single-word keys (risks /
         # failures / claims / literature).
         title_key = {
+            "focus": "focus_title",
             "reports": "reports_title",
             "corpus": "corpus_title",
             "diagnostics": "diagnostics_title",

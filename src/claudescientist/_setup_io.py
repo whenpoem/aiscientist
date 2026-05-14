@@ -141,6 +141,14 @@ def probe_claude() -> ProbeResult:
     return ProbeResult(ok=False, detail="claude not on PATH (install Claude Code)")
 
 
+def probe_npx() -> ProbeResult:
+    """Soft probe for the OpenAlex literature MCP."""
+    path = shutil.which("npx")
+    if path:
+        return ProbeResult(ok=True, detail=path)
+    return ProbeResult(ok=False, detail="npx not on PATH (OpenAlex MCP disabled)")
+
+
 def probe_lean_toolchain() -> tuple[bool, list[str]]:
     """Returns ``(all_present, missing)`` for elan + lake + lean."""
     needed = ("elan", "lake", "lean")
@@ -355,6 +363,7 @@ __all__ = [
     "probe_python",
     "probe_uv",
     "probe_claude",
+    "probe_npx",
     "probe_hf_mirror",
     "probe_lean_toolchain",
     "probe_sentence_transformers",

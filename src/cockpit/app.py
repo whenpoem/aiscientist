@@ -17,6 +17,7 @@ from textual.reactive import reactive
 from textual.widgets import Input, Static
 
 from . import data
+from .activity import ActivityCard, aggregate_from_db
 from .bars import progress_bar
 from .commands import CockpitCommands, ThemeSwitcherCommands
 from .i18n import normalize_lang, t, toggle_lang
@@ -30,6 +31,10 @@ from .layout import (
 )
 from .modals import ConfirmModal, HelpScreen, PinMetricModal, TextInputModal
 from .panes import EventStreamPane, HypothesisTreePane, NodeDetailPane, RightTabsPane
+from .panes.activity_pane import ActivityPane
+from .panes.focus_pane import FocusState, derive_focus_from_db
+from .panes.phase_strip import PhaseStripPane
+from .phase import Phase, derive_phase_from_db
 from .row_detail import row_detail
 from .screens.splash import SplashScreen
 from .screens.welcome import WelcomeScreen
@@ -47,7 +52,11 @@ from .theme import (
     update_theme_vars,
 )
 
-FOCUS_ORDER = ("tree", "detail", "events", "tabs")
+# v5.0 Activity Streaming migrated the canonical "events" pane to
+# "activity" in the body grid; the original RichLog moved to a bottom-
+# docked "audit log". Settings persisted under the legacy name are healed
+# to the new name on load (see :func:`_normalize_focus_pane`).
+FOCUS_ORDER = ("tree", "detail", "activity", "tabs")
 
 
 class StatusBar(Static):
@@ -202,7 +211,7 @@ class CockpitApp(App[None]):
     BINDINGS = [
         Binding("1", "focus_tree", "Tree"),
         Binding("2", "focus_detail", "Detail"),
-        Binding("3", "focus_events", "Events"),
+        Binding("3", "focus_activity", "Activity"),
         Binding("4", "focus_tabs", "Tabs"),
         # priority=True so Tab fires the cockpit-wide pane cycle even
         # when a DataTable / Input has focus. Without priority, Textual's
@@ -255,6 +264,19 @@ class CockpitApp(App[None]):
         Binding("F", "toggle_focus", "Focus", priority=True),
         Binding("R", "force_refresh", "Refresh"),
         Binding("ctrl+l", "clear_event_log", "Clear Events"),
+        # v5.0 Activity Streaming. `P` toggles the top phase strip;
+        # `M` (capital) toggles the activity-pane animations for
+        # SSH / tmux / screen-reader users. priority=True so they
+        # fire even from inside a focused Input / DataTable, matching
+        # the L/T/F precedent above. Lower-case `m` is already taken
+        # by ``action_mark_refuted`` so we use the capital variant for
+        # mute — both work because Textual is case-sensitive on
+        # ``key`` matching.
+        Binding("P", "toggle_phase_strip", "Phase Strip", priority=True),
+        Binding("M", "toggle_animations", "Mute Animations", priority=True),
+        # `A` expands / collapses the bottom-docked audit log (formerly
+        # the events_pane). Default collapsed via TCSS height: 6.
+        Binding("A", "toggle_audit_log", "Audit Log", priority=True),
         # v4.1.0a4 display toggles. priority=True so that even when an
         # Input/DataTable has focus the keystroke still fires (matches the
         # L/T/F precedent above).
@@ -312,13 +334,21 @@ class CockpitApp(App[None]):
         # during mount and overwrite self._settings.focused_pane. on_mount
         # consumes this snapshot to restore the user's last focus.
         saved_focus = self._settings.focused_pane
+        # v5.0: heal legacy ``"events"`` → ``"activity"`` on load. Mirrors
+        # the LAYOUT_FOCUS → wide healing pattern below.
+        if saved_focus == "events":
+            saved_focus = "activity"
+            self._settings.focused_pane = "activity"
         self._initial_focus = saved_focus if saved_focus in FOCUS_ORDER else "tree"
         self._pre_focus_preset = self._settings.layout_preset or LAYOUT_WIDE
         self.graph = data.GraphSnapshot(nodes={})
         self.selected_node_id: str | None = None
         self._command_mode: str | None = None
         self._command_target = "tree"
-        self._pane_filters = {"tree": "", "events": "", "tabs": ""}
+        # v5.0: ``"events"`` filter survives under its legacy name and
+        # applies to the bottom-docked audit log; ``"activity"`` is the
+        # new card-pane filter; ``"tabs"`` is unchanged.
+        self._pane_filters = {"tree": "", "events": "", "activity": "", "tabs": ""}
         # Per-mode draft buffers for the bottom Input. The user can start
         # typing a `:` command, get distracted, press Esc, and the next `:`
         # restores their half-typed text. Filter mode is intentionally NOT
@@ -335,9 +365,17 @@ class CockpitApp(App[None]):
         self._last_intervention_target: str | None = None
         self._detail_override = False
         self._stop_event_worker = False
+        # v5.0: cached focus state for the cooldown / anti-flicker
+        # check in derive_focus_from_db(prev=...).
+        self._prev_focus_state: FocusState = FocusState()
 
     def compose(self) -> ComposeResult:
         yield StatusBar(lang=self.lang, theme=self._settings.theme)
+        # v5.0 Activity Streaming: PhaseStripPane is the second
+        # top-docked widget. Textual stacks ``dock: top`` widgets in
+        # compose order, so StatusBar stays on top and PhaseStripPane
+        # sits just below it, above the body grid.
+        yield PhaseStripPane()
         # Compose order is load-bearing for the grid auto-flow.
         #
         # Textual's grid placement is row-major (left-to-right, then next row),
@@ -345,23 +383,24 @@ class CockpitApp(App[None]):
         # (wide) / =3 (narrow), Tree consumes column 1 entirely; subsequent
         # widgets flow row-by-row across the remaining columns.
         #
-        # In the wide preset (3 cols × 2 rows) we want
-        #     Tree | Detail / Tabs stacked | Events spanning full height.
-        # That requires Events placed BEFORE Tabs in compose order so it
-        # lands at (col=3,row=1) and its row-span=2 reaches (col=3,row=2).
-        # If Tabs went first, it would steal (col=3,row=1) and Events would
-        # fall to (col=2,row=2) leaving (col=3,row=2) blank.
-        #
-        # In the narrow preset (2 cols × 3 rows) the same order yields
-        #     Tree | Detail / Events / Tabs stacked
-        # which keeps the most-frequently-changing pane (Events) right next
-        # to Detail and pushes the read-mostly Tabs to the bottom of the
-        # right column — also fine.
+        # v5.0 reshuffle: ActivityPane took EventStreamPane's grid slot
+        # (col=3 wide, row 2 narrow). The pre-v5 EventStreamPane now
+        # docks to the bottom of the screen as an "audit log" — yielded
+        # *after* the body grid and *before* the command-line / context
+        # bar so the dock:bottom stack reads (bottom-to-top):
+        # ContextBar → Input → AuditLog.
         with Container(id="body-grid", classes="layout-wide"):
             yield HypothesisTreePane(compact=self._settings.tree_compact)
             yield NodeDetailPane()
-            yield EventStreamPane(wrap=self._settings.event_wrap)
+            yield ActivityPane()
             yield RightTabsPane()
+        # Audit log: the EventStreamPane is preserved verbatim but
+        # demoted to a bottom dock with a collapsed default height. The
+        # TCSS rule `#events-pane.audit-log` and `.expanded` modifier
+        # handle the collapse/expand animation; ``A`` toggles between.
+        events = EventStreamPane(wrap=self._settings.event_wrap)
+        events.add_class("audit-log")
+        yield events
         yield Input(placeholder="command", id="command-line", classes="hidden")
         yield ContextBar(lang=self.lang)
 
@@ -380,7 +419,25 @@ class CockpitApp(App[None]):
             )
         except Exception:  # pragma: no cover - defensive
             pass
+        # Apply v5.0 persisted toggles: phase strip visibility +
+        # animation mute. Done before refresh_state so the first paint
+        # is consistent with saved preferences (no flash of visible).
+        try:
+            self.phase_strip.set_visible(self._settings.phase_strip_visible)
+        except NoMatches:  # pragma: no cover - defensive
+            pass
+        try:
+            if not self._settings.animations_enabled:
+                self.screen.add_class("animations-off")
+        except Exception:  # pragma: no cover - defensive
+            pass
         self.refresh_state(include_events=True)
+        # Seed v5.0 derived surfaces from whatever events already exist in
+        # state.db so the user sees meaningful content on the first frame
+        # rather than "idle" / empty briefly flickering.
+        self._refresh_phase()
+        self._refresh_activity()
+        self._refresh_focus()
         # Restore focus to the previously active pane. tree / detail /
         # events are plain widgets; calling .focus() synchronously is
         # safe and keeps key bindings working from the first keystroke
@@ -560,6 +617,10 @@ class CockpitApp(App[None]):
             "events": self.events_pane,
             "tabs": self.tabs_pane,
         }
+        try:
+            panes["activity"] = self.activity_pane
+        except NoMatches:  # pragma: no cover - defensive
+            pass
         for name, widget in panes.items():
             if active == "single" and name == self.focused_pane:
                 widget.add_class("layout-active")
@@ -774,6 +835,10 @@ class CockpitApp(App[None]):
         return self.query_one(StatusBar)
 
     @property
+    def phase_strip(self) -> PhaseStripPane:
+        return self.query_one(PhaseStripPane)
+
+    @property
     def tree_pane(self) -> HypothesisTreePane:
         return self.query_one(HypothesisTreePane)
 
@@ -784,6 +849,10 @@ class CockpitApp(App[None]):
     @property
     def events_pane(self) -> EventStreamPane:
         return self.query_one(EventStreamPane)
+
+    @property
+    def activity_pane(self) -> ActivityPane:
+        return self.query_one(ActivityPane)
 
     @property
     def tabs_pane(self) -> RightTabsPane:
@@ -890,7 +959,13 @@ class CockpitApp(App[None]):
         self._set_focus("detail")
 
     def action_focus_events(self) -> None:
-        self._set_focus("events")
+        """Backward-compat alias — settings or muscle memory may still
+        target ``events``. Translates to the new ``activity`` slot.
+        """
+        self._set_focus("activity")
+
+    def action_focus_activity(self) -> None:
+        self._set_focus("activity")
 
     def action_focus_tabs(self) -> None:
         self._set_focus("tabs")
@@ -1069,10 +1144,15 @@ class CockpitApp(App[None]):
         self._show_command_line("command", t(self.lang, "command_placeholder"))
 
     def action_open_filter(self) -> None:
-        target = self.focused_pane if self.focused_pane in {"tree", "events", "tabs"} else "tree"
+        target = (
+            self.focused_pane
+            if self.focused_pane in {"tree", "events", "activity", "tabs"}
+            else "tree"
+        )
         placeholder = {
             "tree": t(self.lang, "filter_tree"),
             "events": t(self.lang, "filter_events"),
+            "activity": t(self.lang, "filter_activity"),
             "tabs": t(self.lang, "filter_tabs"),
         }[target]
         self._show_command_line("filter", placeholder, target=target)
@@ -1150,6 +1230,116 @@ class CockpitApp(App[None]):
             t(self.lang, "event_wrap_on" if new_state else "event_wrap_off")
         )
         self._persist_settings()
+
+    def action_toggle_phase_strip(self) -> None:
+        """`P` — show/hide the v5.0 phase strip.
+
+        State persists via ``CockpitSettings.phase_strip_visible``. The
+        strip stays mounted; toggling adds/removes a CSS class so
+        Textual's `display: none` rule does the hiding (cheaper than
+        detach/re-attach).
+        """
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("P"):
+            return
+        new_state = not self._settings.phase_strip_visible
+        self._settings.phase_strip_visible = new_state
+        try:
+            self.phase_strip.set_visible(new_state)
+        except NoMatches:  # pragma: no cover - defensive (strip always mounted)
+            pass
+        self._persist_settings()
+
+    def action_toggle_animations(self) -> None:
+        """`M` — mute / unmute activity-pane animations.
+
+        Toggles ``animations_enabled`` and flips an ``animations-off``
+        class on the App root so TCSS rules can suppress transitions
+        globally without each widget reading the setting.
+        """
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("M"):
+            return
+        new_state = not self._settings.animations_enabled
+        self._settings.animations_enabled = new_state
+        try:
+            screen = self.screen
+            if new_state:
+                screen.remove_class("animations-off")
+            else:
+                screen.add_class("animations-off")
+        except Exception:  # pragma: no cover - defensive
+            pass
+        self.notify(
+            t(self.lang, "animations_enabled" if new_state else "animations_muted")
+        )
+        self._persist_settings()
+
+    def _refresh_phase(self) -> None:
+        """Recompute the current phase and push it to the phase strip.
+
+        Called on every events_worker tick that delivers new rows, and
+        once at mount time. Cheap (single SELECT against
+        ``cockpit_events`` with idx_cockpit_events_created_at + a pure
+        derivation), so we can run it without a guard.
+        """
+        try:
+            strip = self.phase_strip
+        except NoMatches:
+            return
+        try:
+            phase = derive_phase_from_db()
+        except Exception:  # pragma: no cover - defensive
+            phase = Phase(name="idle")
+        strip.update_phase(phase)
+
+    def _refresh_activity(self) -> None:
+        """Recompute Activity cards from cockpit_events and update the pane."""
+        try:
+            pane = self.activity_pane
+        except NoMatches:
+            return
+        try:
+            cards: list[ActivityCard] = aggregate_from_db()
+        except Exception:  # pragma: no cover - defensive
+            cards = []
+        try:
+            pane.set_cards(cards)
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+    def _refresh_focus(self) -> None:
+        """Recompute the focus state and push it to the tabs_pane focus tab."""
+        try:
+            tabs = self.tabs_pane
+        except NoMatches:
+            return
+        try:
+            state: FocusState = derive_focus_from_db(prev=self._prev_focus_state)
+        except Exception:  # pragma: no cover - defensive
+            state = FocusState()
+        self._prev_focus_state = state
+        try:
+            tabs.update_focus(state)
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+    def action_toggle_audit_log(self) -> None:
+        """`A` — expand / collapse the bottom-docked audit log."""
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("A"):
+            return
+        try:
+            pane = self.events_pane
+        except NoMatches:  # pragma: no cover - defensive
+            return
+        if pane.has_class("expanded"):
+            pane.remove_class("expanded")
+        else:
+            pane.add_class("expanded")
 
     def action_toggle_tree_compact(self) -> None:
         if self._priority_action_blocked_by_help():
@@ -1349,7 +1539,12 @@ class CockpitApp(App[None]):
             self._open_detail_for_tree()
         elif target == "tabs":
             self._open_detail_for_tabs()
-        elif target == "events":
+        elif target in {"events", "activity"}:
+            # v5.0: drill from activity reuses the events-rooted detail
+            # source because activity cards are aggregations of the
+            # same underlying events. A future milestone may add a
+            # dedicated ActivityDetailSource showing a single card's
+            # event lineage.
             self._open_detail_for_events()
         # detail pane drill-in is intentionally a no-op — there is
         # nothing deeper to drill into from a detail view.
@@ -1374,6 +1569,11 @@ class CockpitApp(App[None]):
                     return "detail"
                 if widget is self.events_pane:
                     return "events"
+                try:
+                    if widget is self.activity_pane:
+                        return "activity"
+                except NoMatches:  # pragma: no cover - defensive
+                    pass
                 if widget is self.tabs_pane:
                     return "tabs"
             except Exception:  # pragma: no cover
@@ -1424,6 +1624,13 @@ class CockpitApp(App[None]):
         active = self.tabs_pane.active or "risks"
         if active == "reports":
             self._open_report_file(row)
+            return
+        # v5.0 Focus tab: the "empty" placeholder row is purely
+        # informational. Pressing Enter on it should be silent
+        # (matches the behavior for risks/failures/etc. when those
+        # tabs are empty — see _open_detail_for_tabs's row is None
+        # branch above).
+        if active == "focus" and row.get("kind") == "empty":
             return
         from .screens import DetailScreen, TabRowDetailSource
 
@@ -1484,11 +1691,15 @@ class CockpitApp(App[None]):
             await asyncio.sleep(1.0)
 
     def _set_focus(self, pane_name: str) -> None:
+        # v5.0: "events" → "activity" alias for legacy settings / actions.
+        if pane_name == "events":
+            pane_name = "activity"
         self.focused_pane = pane_name
         target_map = {
             "tree": lambda: self.tree_pane,
             "detail": lambda: self.detail_pane,
-            "events": lambda: self.events_pane,
+            "events": lambda: self.events_pane,  # legacy alias kept for safety
+            "activity": lambda: self.activity_pane,
             "tabs": lambda: self.tabs_pane.current_table(),
         }
         target_factory = target_map.get(pane_name)
@@ -1512,6 +1723,14 @@ class CockpitApp(App[None]):
         self.detail_pane.set_language(self.lang)
         self.events_pane.set_language(self.lang)
         self.tabs_pane.set_language(self.lang)
+        try:
+            self.phase_strip.set_language(self.lang)
+        except NoMatches:  # pragma: no cover - defensive
+            pass
+        try:
+            self.activity_pane.set_language(self.lang)
+        except NoMatches:  # pragma: no cover - defensive
+            pass
         self.context_bar.set_pane(self.focused_pane)
         self._repaint_top_detail_screen()
 
@@ -1894,6 +2113,13 @@ class CockpitApp(App[None]):
             self._refresh_reports()
         self._refresh_counts()
         self._refresh_detail()
+        # v5.0 derived surfaces: phase, activity, focus all recompute
+        # from the same recent-events window on every dispatch. Each
+        # call is one SELECT + a pure function, so the cost is bounded
+        # even when many events fire in a tick.
+        self._refresh_phase()
+        self._refresh_activity()
+        self._refresh_focus()
 
     def _apply_filter(self, target: str, value: str) -> None:
         self._pane_filters[target] = value
@@ -1906,6 +2132,8 @@ class CockpitApp(App[None]):
             )
         elif target == "events":
             self.events_pane.set_filter_text(value)
+        elif target == "activity":
+            self.activity_pane.set_filter_text(value)
         else:
             self.tabs_pane.set_filter_text(value)
 

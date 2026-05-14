@@ -82,6 +82,48 @@ async def test_filter_escape_clears_active_tree_filter(workspace):
 
 
 @pytest.mark.asyncio
+async def test_filter_from_activity_pane_filters_activity_not_tree(workspace):
+    memory_impl = workspace["memory_mcp.impl"]
+    memory_impl.propose_hypothesis("Tune dropout for ViT")
+    memory_impl.propose_hypothesis("Increase batch size")
+    cockpit_data.record_event(
+        "seed_run_recorded",
+        {"node_id": "hyp_activity", "metric": "accuracy"},
+    )
+
+    app = CockpitApp()
+
+    async with app.run_test() as pilot:
+        tree = app.query_one(HypothesisTreePane)
+        await pilot.press("3")
+        await pilot.press("/")
+        await pilot.press(*list("accuracy"))
+        await pilot.press("enter")
+
+        assert app.focused_pane == "activity"
+        assert app._pane_filters["activity"] == "accuracy"
+        assert app.activity_pane._filter_text == "accuracy"  # type: ignore[attr-defined]
+        assert app._pane_filters["tree"] == ""
+        assert len(tree.visible_node_ids()) == 2
+
+
+@pytest.mark.asyncio
+async def test_phase_strip_renders_current_phase(workspace):
+    cockpit_data.record_event(
+        "phase_set",
+        {"phase": "verify", "intent": "checking provenance"},
+    )
+
+    app = CockpitApp(lang="en")
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        rendered = str(app.phase_strip.render())
+        assert "verify" in rendered.lower()
+        assert "checking provenance" in rendered
+
+
+@pytest.mark.asyncio
 async def test_language_toggle_localizes_core_tui_labels(workspace):
     memory_impl = workspace["memory_mcp.impl"]
     memory_impl.propose_hypothesis("Tune dropout for ViT")
@@ -151,20 +193,44 @@ async def test_focused_pane_restored_on_relaunch(workspace):
     memory_impl = workspace["memory_mcp.impl"]
     memory_impl.propose_hypothesis("Tune dropout for ViT")
 
-    # First session: focus events, then exit.
+    # First session: focus activity, then exit. v5.0 renamed
+    # ``events`` → ``activity``; ``3`` lands on the ActivityPane.
     app1 = CockpitApp()
     async with app1.run_test(size=(160, 40)) as pilot:
         await pilot.press("3")
-        assert app1.focused_pane == "events"
+        assert app1.focused_pane == "activity"
     saved = load_settings(config_path)
-    assert saved.focused_pane == "events"
+    assert saved.focused_pane == "activity"
 
-    # Second session: should boot with events focused.
+    # Second session: should boot with activity focused.
     app2 = CockpitApp()
     async with app2.run_test(size=(160, 40)):
-        assert app2.focused_pane == "events", (
+        assert app2.focused_pane == "activity", (
             f"focused_pane not restored from settings (got {app2.focused_pane!r})"
         )
+
+
+@pytest.mark.asyncio
+async def test_legacy_events_focused_pane_setting_heals_to_activity(workspace):
+    """v5.0 migration: a saved ``focused_pane="events"`` (pre-v5 cockpit)
+    should be silently healed to ``"activity"`` at boot rather than
+    refusing to load — mirrors the LAYOUT_FOCUS → wide healing pattern.
+    """
+    from cockpit.app import CockpitApp
+    from cockpit.settings import (
+        CockpitSettings,
+        default_config_path,
+        save_settings,
+    )
+
+    config_path = default_config_path()
+    settings = CockpitSettings(focused_pane="events")
+    save_settings(settings, config_path)
+
+    app = CockpitApp()
+    async with app.run_test(size=(160, 40)):
+        # On_mount must have remapped the legacy value.
+        assert app.focused_pane == "activity"
 
 
 @pytest.mark.asyncio

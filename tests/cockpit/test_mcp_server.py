@@ -24,7 +24,14 @@ async def test_cockpit_mcp_server_stdio_tools(workspace):
     async with Client(transport) as client:
         tools = await client.list_tools()
         tool_names = {tool.name for tool in tools}
-        assert {"push_graph_delta", "queue_intervention", "record_note"} <= tool_names
+        assert {
+            "push_graph_delta",
+            "queue_intervention",
+            "record_note",
+            # v5.0 Activity Streaming atomic tools.
+            "set_phase",
+            "narrate",
+        } <= tool_names
 
         pushed = await client.call_tool(
             "push_graph_delta",

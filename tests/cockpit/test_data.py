@@ -108,3 +108,29 @@ def test_fetch_new_events_bootstraps_recent_window(workspace):
     assert len(events) == 2000
     assert events[0]["payload"]["index"] == 505
     assert events[-1]["payload"]["index"] == 2504
+
+
+def test_prune_events_keeps_newest_window(workspace):
+    for index in range(8):
+        cockpit_data.record_event("note", {"index": index})
+
+    deleted = cockpit_data.prune_events(keep_last=3)
+    events = cockpit_data.fetch_new_events(0)
+
+    assert deleted == 5
+    assert [event["payload"]["index"] for event in events] == [5, 6, 7]
+
+
+def test_tui_prune_events_command(workspace, capsys):
+    from cockpit.tui import main
+
+    for index in range(5):
+        cockpit_data.record_event("note", {"index": index})
+
+    rc = main(["--prune-events", "2"])
+    events = cockpit_data.fetch_new_events(0)
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert "pruned 3" in captured.out
+    assert [event["payload"]["index"] for event in events] == [3, 4]

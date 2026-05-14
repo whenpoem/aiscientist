@@ -14,6 +14,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from claudescientist.runtime import project_root
+
 ENV_REPORTS_DIR = "RESEARCH_AGENT_REPORTS_DIR"
 DEFAULT_REPORTS_SUBDIR = "reports"
 
@@ -22,12 +24,16 @@ def reports_dir() -> Path:
     """Resolve the reports output directory.
 
     Honors ``RESEARCH_AGENT_REPORTS_DIR`` for tests / power users.
-    Falls back to ``<cwd>/reports`` so the file shows up next to the
-    project a researcher is already looking at.
+    Falls back to ``<repo-root>/reports`` so a Claude Code session launched
+    from a subdirectory still writes to the same report index the cockpit
+    will read. If repo-root detection fails, use cwd as a last resort.
     """
     override = os.environ.get(ENV_REPORTS_DIR)
     if override:
         return Path(override).resolve()
+    root = project_root()
+    if root is not None:
+        return root / DEFAULT_REPORTS_SUBDIR
     return Path.cwd() / DEFAULT_REPORTS_SUBDIR
 
 

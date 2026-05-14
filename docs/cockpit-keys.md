@@ -23,17 +23,21 @@ own bindings.
 | `H` | Halt the running agent turn |
 | `R` | Force-refresh the current state |
 | `N` | Jump to the next tab group (Cross → Empirical → Proof) |
+| `P` | Toggle phase strip visibility (v5.0) |
+| `M` | Mute / unmute activity-pane animations (v5.0) |
+| `A` | Expand / collapse the bottom audit log (v5.0) |
 | `u` | Undo the most recent intervention (only if undelivered) |
 | `<` / `>` | Nudge wide-layout tree column narrower / wider |
 | `q` | Quit the app (pops the current Screen first if one is open) |
 | `Esc` | Cancel the current context (close modal, exit filter, …) |
-| `Ctrl+L` | Clear the event log |
+| `Ctrl+L` | Clear the audit log (formerly the events pane) |
 | `Ctrl+P` | Open the command palette |
 
 A priority-binding helper inside the App ensures that capital-letter
 priority keys yield to any focused `Input` widget — typing literal `L`
 inside a modal field still types `L` rather than toggling language.
-The helper covers `L`, `T`, `F`, `H`, `R`, `N`, `u`, `<`, `>`.
+The helper covers `L`, `T`, `F`, `H`, `R`, `N`, `u`, `<`, `>`, plus
+the v5.0 additions `P`, `M`, `A`.
 
 ## Selection actions
 
@@ -61,7 +65,7 @@ row), but the bindings themselves are App-level.
 | `j` / `k` | Move down / up |
 | `h` / `l` | Collapse / expand or move left / right |
 | `g` / `G` | Jump to top / bottom |
-| `1` – `4` | Focus tree / detail / events / tabs pane |
+| `1` – `4` | Focus tree / detail / activity / tabs pane (`3` was `events` pre-v5; the rename is healed automatically on settings load) |
 | `Tab` / `Shift+Tab` | Cycle focus to next / previous pane |
 | `Enter` | Drill into the selected item |
 | `f` | Cycle to the next tab inside the current group |
@@ -75,7 +79,8 @@ pane.
 
 | Pane | Key | Action |
 |---|---|---|
-| Events | `w` | Toggle soft-wrap on event payloads |
+| Audit log (was Events) | `w` | Toggle soft-wrap on event payloads — the binding travels with the widget; focus the audit log via the mouse or after expanding it with `A` |
+| Audit log (was Events) | `t` | Toggle relative vs absolute timestamp rendering |
 | Tree | `i` | Toggle compact tree labels (show / hide BT + Elo) |
 
 ## Modal / filter input
