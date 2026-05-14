@@ -283,7 +283,7 @@ the full rationale + alternatives.
 | Activity pane (grid main) | `cockpit.activity.aggregate` over last 30 min | "What just happened at the research level?" |
 | Focus tab (RightTabsPane, first tab) | `cockpit.panes.focus_pane.derive_focus` over last 2 min | "Which node is the agent working on?" |
 | Other tabs (Risks / Failures / Claims / Lit / Reports / Corpus / Diagnostics / Lean) | `cockpit.data` fetches | "What can I query?" |
-| Audit log (bottom dock, collapsed) | EventStreamPane verbatim | "What atomic operations fired?" |
+| Audit log (bottom dock, hidden until `a` / `A`) | EventStreamPane verbatim | "What atomic operations fired?" |
 
 Each derivation is a pure function over `cockpit_events` rows. No new
 table is introduced — phase / focus / activity are recomputed every

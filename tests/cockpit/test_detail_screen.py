@@ -269,6 +269,41 @@ async def test_enter_on_events_pane_pushes_detail_screen(workspace):
         assert isinstance(app.screen_stack[-1], DetailScreen)
 
 
+@pytest.mark.asyncio
+async def test_hidden_audit_log_enter_is_silent_and_a_toggles_view(workspace):
+    cockpit_data.record_event("note", {"text": "audit note"})
+
+    app = CockpitApp()
+    async with app.run_test() as pilot:
+        assert not app.events_pane.has_class("expanded")
+
+        # Stale or mouse focus can still point at the hidden audit widget.
+        # Enter must not drill into an invisible drawer.
+        app.events_pane.focus()
+        await pilot.pause()
+        await pilot.press("enter")
+        assert len(app.screen_stack) == 1
+
+        # Lowercase is accepted in addition to Shift+A because users
+        # naturally press plain "a" for the audit-log toggle.
+        await pilot.press("a")
+        assert app.events_pane.has_class("expanded")
+        await pilot.press("enter")
+        assert isinstance(app.screen_stack[-1], DetailScreen)
+
+
+@pytest.mark.asyncio
+async def test_hiding_audit_log_moves_focus_back_to_activity(workspace):
+    app = CockpitApp()
+    async with app.run_test() as pilot:
+        await pilot.press("A")
+        assert app.events_pane.has_class("expanded")
+
+        await pilot.press("A")
+        assert not app.events_pane.has_class("expanded")
+        assert app.focused_pane == "activity"
+
+
 # ---------------------------------------------------------------------------
 # 3.6 tabs drill-in
 # ---------------------------------------------------------------------------

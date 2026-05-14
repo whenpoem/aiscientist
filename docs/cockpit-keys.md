@@ -25,7 +25,7 @@ own bindings.
 | `N` | Jump to the next tab group (Cross → Empirical → Proof) |
 | `P` | Toggle phase strip visibility (v5.0) |
 | `M` | Mute / unmute activity-pane animations (v5.0) |
-| `A` | Expand / collapse the bottom audit log (v5.0) |
+| `a` / `A` | Show / hide the audit log view (v5.0) |
 | `u` | Undo the most recent intervention (only if undelivered) |
 | `<` / `>` | Nudge wide-layout tree column narrower / wider |
 | `q` | Quit the app (pops the current Screen first if one is open) |
@@ -37,7 +37,7 @@ A priority-binding helper inside the App ensures that capital-letter
 priority keys yield to any focused `Input` widget — typing literal `L`
 inside a modal field still types `L` rather than toggling language.
 The helper covers `L`, `T`, `F`, `H`, `R`, `N`, `u`, `<`, `>`, plus
-the v5.0 additions `P`, `M`, `A`.
+the v5.0 additions `P`, `M`, `a`, `A`.
 
 ## Selection actions
 
@@ -79,7 +79,7 @@ pane.
 
 | Pane | Key | Action |
 |---|---|---|
-| Audit log (was Events) | `w` | Toggle soft-wrap on event payloads — the binding travels with the widget; focus the audit log via the mouse or after expanding it with `A` |
+| Audit log (was Events) | `w` | Toggle soft-wrap on event payloads — the binding travels with the widget; open/focus the audit log with `a` / `A` first |
 | Audit log (was Events) | `t` | Toggle relative vs absolute timestamp rendering |
 | Tree | `i` | Toggle compact tree labels (show / hide BT + Elo) |
 

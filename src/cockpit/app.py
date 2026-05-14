@@ -274,8 +274,10 @@ class CockpitApp(App[None]):
         # ``key`` matching.
         Binding("P", "toggle_phase_strip", "Phase Strip", priority=True),
         Binding("M", "toggle_animations", "Mute Animations", priority=True),
-        # `A` expands / collapses the bottom-docked audit log (formerly
-        # the events_pane). Default collapsed via TCSS height: 6.
+        # `a` / `A` toggles the bottom-docked audit log (formerly the
+        # events_pane). It is hidden by default; opening it gives the
+        # log focus as a deliberate inspection mode.
+        Binding("a", "toggle_audit_log_lower", "Audit Log", priority=True),
         Binding("A", "toggle_audit_log", "Audit Log", priority=True),
         # v4.1.0a4 display toggles. priority=True so that even when an
         # Input/DataTable has focus the keystroke still fires (matches the
@@ -395,9 +397,9 @@ class CockpitApp(App[None]):
             yield ActivityPane()
             yield RightTabsPane()
         # Audit log: the EventStreamPane is preserved verbatim but
-        # demoted to a bottom dock with a collapsed default height. The
-        # TCSS rule `#events-pane.audit-log` and `.expanded` modifier
-        # handle the collapse/expand animation; ``A`` toggles between.
+        # demoted to an opt-in bottom dock. It is fully hidden by default;
+        # `a` / `A` toggles a complete inspection view instead of leaving
+        # a half-clickable collapsed strip on screen.
         events = EventStreamPane(wrap=self._settings.event_wrap)
         events.add_class("audit-log")
         yield events
@@ -1327,19 +1329,39 @@ class CockpitApp(App[None]):
             pass
 
     def action_toggle_audit_log(self) -> None:
-        """`A` — expand / collapse the bottom-docked audit log."""
+        """`A` — show / hide the bottom-docked audit log."""
         if self._priority_action_blocked_by_help():
             return
         if self._yield_priority_letter_to_input("A"):
             return
+        self._toggle_audit_log_impl()
+
+    def action_toggle_audit_log_lower(self) -> None:
+        """`a` — show / hide the bottom-docked audit log."""
+        if self._priority_action_blocked_by_help():
+            return
+        if self._yield_priority_letter_to_input("a"):
+            return
+        self._toggle_audit_log_impl()
+
+    def _toggle_audit_log_impl(self) -> None:
         try:
             pane = self.events_pane
         except NoMatches:  # pragma: no cover - defensive
             return
         if pane.has_class("expanded"):
             pane.remove_class("expanded")
+            try:
+                if self._resolve_drill_pane() == "events":
+                    self._set_focus("activity")
+            except Exception:  # pragma: no cover - defensive
+                pass
         else:
             pane.add_class("expanded")
+            try:
+                pane.focus()
+            except Exception:  # pragma: no cover - defensive
+                pass
 
     def action_toggle_tree_compact(self) -> None:
         if self._priority_action_blocked_by_help():
@@ -1539,7 +1561,14 @@ class CockpitApp(App[None]):
             self._open_detail_for_tree()
         elif target == "tabs":
             self._open_detail_for_tabs()
-        elif target in {"events", "activity"}:
+        elif target == "events":
+            # Hidden audit log is not a list surface. If focus somehow
+            # remains there after a layout transition, Enter should stay
+            # silent until the log is explicitly visible.
+            if not self.events_pane.has_class("expanded"):
+                return
+            self._open_detail_for_events()
+        elif target == "activity":
             # v5.0: drill from activity reuses the events-rooted detail
             # source because activity cards are aggregations of the
             # same underlying events. A future milestone may add a

@@ -164,20 +164,22 @@ Screen.animations-off * {
 }
 
 /* v5.0 audit log: the original event stream is preserved but
- * relocated to a collapsible bottom dock. The ``.audit-log`` class is
+ * relocated to an opt-in bottom dock. The ``.audit-log`` class is
  * applied in App.compose() so the existing #events-pane id keeps
  * routing actions correctly (Ctrl+L clears it, ``w``/``t`` toggle
- * wrap and timestamp mode). Default collapsed height is 6 lines;
- * ``A`` adds .expanded for full-height inspection.
+ * wrap and timestamp mode). It is hidden by default; ``a`` / ``A``
+ * adds .expanded for full-height inspection.
  */
 #events-pane.audit-log {
     dock: bottom;
-    height: 6;
+    display: none;
+    height: 1fr;
     border: round $panel;
     margin: 0 1 0 1;
 }
 
 #events-pane.audit-log.expanded {
+    display: block;
     height: 1fr;
 }
 

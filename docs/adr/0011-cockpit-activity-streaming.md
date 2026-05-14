@@ -64,12 +64,12 @@ that emit descriptive (non-blocking) events.
    Scoring is exponential time-decay; cooldown prevents ±20 % score
    churn from flipping the top entry every tick.
 
-4. **Audit log** (bottom dock, collapsed): the original
-   EventStreamPane preserved verbatim, demoted to a 6-row strip
-   that expands to full height with ``A``. Power users keep their
-   chronological event view; the eleven previously-untyped event
-   kinds gain explicit formatters in
-   ``events_pane._summarize``.
+4. **Audit log** (bottom dock, hidden by default): the original
+   EventStreamPane preserved verbatim, available as a full inspection
+   view with ``a`` / ``A``. Power users keep their chronological event
+   view without leaving a half-clickable collapsed strip in the main
+   UI; the eleven previously-untyped event kinds gain explicit
+   formatters in ``events_pane._summarize``.
 
 5. **Two new MCP atomic tools** in the cockpit MCP server:
    - ``cockpit__set_phase(phase, focus_nodes, intent)`` — emits

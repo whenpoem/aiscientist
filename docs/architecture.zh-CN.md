@@ -275,7 +275,7 @@ v5.0 重新组织了 cockpit 的信息呈现方式。之前的主视图回答的
 | 活动面板（网格主区）| `cockpit.activity.aggregate`，读最近 30 分钟 | "研究层面刚发生了什么？" |
 | 焦点 tab（右侧标签页首位）| `cockpit.panes.focus_pane.derive_focus`，读最近 2 分钟 | "agent 盯着哪个节点？" |
 | 其他 tab（风险 / 失败 / 声明 / 文献 / 报告 / 语料 / 诊断 / Lean）| `cockpit.data` 查询 | "我能查什么？" |
-| 审计日志（底部停靠，默认折叠）| EventStreamPane 原样保留 | "哪些原子操作被触发了？" |
+| 审计日志（底部停靠，默认隐藏，`a` / `A` 打开）| EventStreamPane 原样保留 | "哪些原子操作被触发了？" |
 
 每个派生都是对 `cockpit_events` 行的纯函数。不引入新表——阶段、焦点、活动卡片每次 tick 都重新计算。这符合 [ADR 0007](adr/0007-tools-skills-hooks-layering.md) 的"工作流状态从数据推断，不做持久化"原则。
 

@@ -291,7 +291,7 @@ v5.0.0 把 cockpit 改造成研究动作监控，用活动级别的阅读视图�
   聚合成卡片，严重度从 critical 到 info 分五档。
 - 焦点 tab（跨主干标签页首位）：展示 agent 当前在做的节点，用
   指数时间衰减评分派生。
-- 审计日志：原 EventStreamPane 原样保留为底部可折叠窄条（`A` 展开）。
+- 审计日志：原 EventStreamPane 原样保留为底部完整检查视图，默认隐藏，用 `a` / `A` 打开。
   原来 11 个没有专用格式化器的事件类型全部补上了。
 - 两个新的可选 MCP 工具：`cockpit__set_phase` 和 `cockpit__narrate`，
   给 SOP 驱动的 agent 一个合规的分支点标注通道，不耦合渲染细节。
