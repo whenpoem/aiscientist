@@ -53,7 +53,7 @@ uv tool run lean-lsp-mcp --help
 `.research-agent/lean/` 下建一个专用 checkout：
 
 ```powershell
-cd D:\aiscientist\claudescientist
+# 在仓库根目录
 mkdir -Force .research-agent\lean
 cd .research-agent\lean
 lake new claudescientist-proofs math

@@ -72,12 +72,10 @@ uv run python scripts/seed_proof_failures.py
 运行——从仓库根目录打开两个终端：
 
 ```powershell
-# 终端 A: Claude Code
-cd D:\aiscientist\claudescientist
+# 终端 A: Claude Code（在仓库根目录）
 claude
 
-# 终端 B: cockpit TUI
-cd D:\aiscientist\claudescientist
+# 终端 B: cockpit TUI（在仓库根目录）
 uv run python -m cockpit.tui
 ```
 

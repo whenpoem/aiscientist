@@ -73,12 +73,10 @@ uv run python scripts/seed_proof_failures.py
 Run — open two terminals from the repo root:
 
 ```powershell
-# Terminal A: Claude Code
-cd D:\aiscientist\claudescientist
+# Terminal A: Claude Code (from the repo root)
 claude
 
-# Terminal B: cockpit TUI
-cd D:\aiscientist\claudescientist
+# Terminal B: cockpit TUI (from the repo root)
 uv run python -m cockpit.tui
 ```
 

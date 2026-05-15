@@ -49,7 +49,7 @@ If you get `command not found`, ensure `%USERPROFILE%\.local\bin` (or your platf
 The `prover` agent runs Lean inside a project that depends on mathlib4. Create a dedicated checkout under `.research-agent/lean/`:
 
 ```powershell
-cd D:\aiscientist\claudescientist
+# From the repo root
 mkdir -Force .research-agent\lean
 cd .research-agent\lean
 lake new claudescientist-proofs math

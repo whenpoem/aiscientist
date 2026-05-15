@@ -10,12 +10,10 @@
 从仓库根目录打开两个终端。
 
 ```powershell
-# 终端 A：Claude Code REPL
-cd D:\aiscientist\claudescientist
+# 终端 A：Claude Code REPL（在仓库根目录）
 claude
 
-# 终端 B：cockpit TUI
-cd D:\aiscientist\claudescientist
+# 终端 B：cockpit TUI（在仓库根目录）
 uv run python -m cockpit.tui
 ```
 

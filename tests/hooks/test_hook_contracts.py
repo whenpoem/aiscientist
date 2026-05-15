@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import importlib.util
 import io
@@ -103,7 +103,7 @@ def test_leakage_guard_returns_structured_pretooluse_deny(monkeypatch):
         module,
         {
             "tool_input": {
-                "path": r"C:\\Users\\whenpoem\\.research-agent\\held_out\\eval.csv",
+                "path": r"C:\\Users\\testuser\\.research-agent\\held_out\\eval.csv",
                 "content": "ignored",
             }
         },

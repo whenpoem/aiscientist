@@ -10,12 +10,10 @@ This walkthrough assumes you already have `uv sync` complete and the repository 
 Open two terminals from the repository root.
 
 ```powershell
-# Terminal A: the Claude Code REPL
-cd D:\aiscientist\claudescientist
+# Terminal A: the Claude Code REPL (from the repo root)
 claude
 
-# Terminal B: the cockpit TUI
-cd D:\aiscientist\claudescientist
+# Terminal B: the cockpit TUI (from the repo root)
 uv run python -m cockpit.tui
 ```
 
