@@ -1,3 +1,6 @@
+# Playwright MCP logs
+.playwright-mcp/
+
 # Python-generated files
 __pycache__/
 *.py[oc]

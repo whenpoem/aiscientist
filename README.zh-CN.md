@@ -19,7 +19,7 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 并排打开两个终端窗口，就是全部界面。
 
 <picture>
-  <img alt="Cockpit TUI 截图" src="docs/assets/image.png" width="800">
+  <img alt="Cockpit TUI 截图" src="docs/assets/image2.png" width="800">
 </picture>
 
 *Cockpit TUI —— 假说树、证据、评分、事件流，一个终端窗口搞定。*

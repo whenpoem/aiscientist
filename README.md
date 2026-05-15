@@ -19,7 +19,7 @@ You give Claude a research question. It generates hypotheses, ranks them in a to
 Open two terminals side by side. That's the whole UI.
 
 <picture>
-  <img alt="Cockpit TUI screenshot" src="docs/assets/image.png" width="800">
+  <img alt="Cockpit TUI screenshot" src="docs/assets/image2.png" width="800">
 </picture>
 
 *The cockpit TUI — hypothesis tree, evidence, ratings, and event stream in one terminal.*
