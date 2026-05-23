@@ -1,0 +1,522 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <!--
+    ClaudeScientist · Figure 1 (v8)
+    White background · dashed colored borders matching each container's accent.
+  -->
+
+  <defs>
+    <marker id="a-gray"   viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7C8694"/></marker>
+    <marker id="a-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B26A38"/></marker>
+    <marker id="a-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6B548A"/></marker>
+    <marker id="a-teal"   viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5A8C8C"/></marker>
+
+    <linearGradient id="tBlue"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3F6395" stop-opacity="0.07"/><stop offset="1" stop-color="#3F6395" stop-opacity="0.02"/></linearGradient>
+    <linearGradient id="tBlue2"  x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3F6395" stop-opacity="0.16"/><stop offset="1" stop-color="#3F6395" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="tPurp"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6B548A" stop-opacity="0.16"/><stop offset="1" stop-color="#6B548A" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="tTeal"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5A8C8C" stop-opacity="0.04"/><stop offset="1" stop-color="#5A8C8C" stop-opacity="0.01"/></linearGradient>
+    <linearGradient id="tOrange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B26A38" stop-opacity="0.18"/><stop offset="1" stop-color="#B26A38" stop-opacity="0.06"/></linearGradient>
+    <linearGradient id="tGray"   x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5B6370" stop-opacity="0.07"/><stop offset="1" stop-color="#5B6370" stop-opacity="0.02"/></linearGradient>
+    <linearGradient id="tSlate"  x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2F4256" stop-opacity="0.06"/><stop offset="1" stop-color="#2F4256" stop-opacity="0.025"/></linearGradient>
+    <linearGradient id="tTan"    x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8B7C5C" stop-opacity="0.10"/><stop offset="1" stop-color="#8B7C5C" stop-opacity="0.035"/></linearGradient>
+
+    <style>
+      .sect     { font-size: 10.5px; font-weight: 700; fill: #8A93A0; letter-spacing: 1.8px; }
+      .stnum    { font-size: 11px; font-weight: 700; fill: #FFFFFF; }
+      .l1-title { font-size: 15px; font-weight: 700; fill: #1F2A37; }
+      .l1-sub   { font-size: 10.5px; fill: #5B6370; }
+      .l2-title { font-size: 14px; font-weight: 700; fill: #1F2A37; }
+      .l2-sub   { font-size: 9.5px; fill: #5B6370; }
+      .label    { font-size: 10.5px; fill: #1F2A37; }
+      .micro    { font-size: 9px; fill: #6B7480; }
+      .mono     { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 9.5px; fill: #2A3340; }
+      .axis     { font-size: 8.5px; fill: #9099A4; }
+      .ok-tx    { fill: #4F7E5C; }
+
+      .flow       { stroke: #7C8694; stroke-width: 1.8; fill: none; }
+      .anc-orange { stroke: #B26A38; stroke-width: 2.4; fill: none; stroke-linejoin: round; }
+      .anc-purple { stroke: #6B548A; stroke-width: 2.4; fill: none; stroke-linejoin: round; }
+      .hitl       { stroke: #5A8C8C; stroke-width: 1.8; fill: none; stroke-dasharray: 5 4; opacity: 0.78; stroke-linejoin: round; }
+
+      /* container borders — all dashed in their accent colors */
+      .l1card     { fill: #FFFFFF; stroke: #3F6395; stroke-width: 0.9; stroke-dasharray: 4 3; stroke-opacity: 0.55; }
+      .l1gate     { fill: #FFFFFF; stroke: #B26A38; stroke-width: 2.0; stroke-dasharray: 6 4; }
+      .l2card-b   { fill: #FFFFFF; stroke: #3F6395; stroke-width: 0.8; stroke-dasharray: 3 2; stroke-opacity: 0.45; }
+      .l2card-p   { fill: #FFFFFF; stroke: #6B548A; stroke-width: 0.8; stroke-dasharray: 3 2; stroke-opacity: 0.5; }
+      .l3card     { fill: #FFFFFF; stroke: #8B7C5C; stroke-opacity: 0.55; stroke-width: 0.8; stroke-dasharray: 3 2; }
+      .chip       { fill: #FFFFFF; stroke: #C7CCD3; stroke-width: 0.5; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="720" fill="#FFFFFF"/>
+
+
+  <!-- =============================================================== -->
+  <!-- LAYER 1 · CLAIM LIFECYCLE                                        -->
+  <!-- =============================================================== -->
+  <text x="40" y="26" class="sect">1 · CLAIM LIFECYCLE</text>
+
+  <rect x="20" y="30" width="1360" height="154" rx="14" fill="url(#tBlue)" stroke="#3F6395" stroke-opacity="0.35" stroke-width="0.9" stroke-dasharray="6 4"/>
+
+  <!-- Stage 1: Research Question  (x=40..230, w=190) -->
+  <g id="s1" transform="translate(20,46)">
+    <rect width="185" height="120" rx="8" class="l1card"/>
+    <g><rect width="22" height="18" rx="4" fill="#3F6395"/><text x="11" y="13" text-anchor="middle" class="stnum">1</text></g>
+    <text x="30" y="14" class="l1-title">Research Question</text>
+    <text x="6"  y="40" class="l1-sub">claim seed · prior failures</text>
+    <g transform="translate(70,58)">
+      <path d="M0,16 Q0,0 18,0 L30,0 Q48,0 48,16 Q48,32 30,32 L20,32 L16,40 L16,32 Q0,32 0,16z" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.4"/>
+      <text x="24" y="22" text-anchor="middle" fill="#3F6395" font-size="16" font-weight="700">?</text>
+    </g>
+  </g>
+
+  <!-- Stage 2: Hypothesis Ranking  (x=266..466, w=200) -->
+  <g id="s2" transform="translate(225,46)">
+    <rect width="185" height="120" rx="8" class="l1card"/>
+    <g><rect width="22" height="18" rx="4" fill="#3F6395"/><text x="11" y="13" text-anchor="middle" class="stnum">2</text></g>
+    <text x="30" y="14" class="l1-title">Hypothesis Ranking</text>
+    <text x="6"  y="40" class="l1-sub">Bradley-Terry · LUCB intervals</text>
+    <g transform="translate(46,58)">
+      <line x1="0"  y1="6"  x2="86" y2="6"  stroke="#1F2A37" stroke-width="2.6"/><circle cx="64" cy="6" r="2.8" fill="#1F2A37"/>
+      <line x1="14" y1="18" x2="72" y2="18" stroke="#3F5972" stroke-width="2.2"/><circle cx="48" cy="18" r="2.4" fill="#3F5972"/>
+      <line x1="24" y1="30" x2="62" y2="30" stroke="#7A8392" stroke-width="2.0"/><circle cx="42" cy="30" r="2.0" fill="#7A8392"/>
+      <line x1="30" y1="42" x2="54" y2="42" stroke="#C7CCD3" stroke-width="1.8"/><circle cx="40" cy="42" r="1.8" fill="#C7CCD3"/>
+      <line x1="-2" y1="52" x2="92" y2="52" stroke="#C7CCD3"/>
+    </g>
+    <text x="138" y="100" class="micro">θ ± 1.96·√var</text>
+  </g>
+
+  <!-- Stage 3: Preregistration  (x=502..672, w=170) -->
+  <g id="s3" transform="translate(430,46)">
+    <rect width="150" height="120" rx="8" class="l1card"/>
+    <g><rect width="22" height="18" rx="4" fill="#3F6395"/><text x="11" y="13" text-anchor="middle" class="stnum">3</text></g>
+    <text x="30" y="14" class="l1-title">Preregistration</text>
+    <text x="6"  y="40" class="l1-sub">lock H₀ · threshold · α · BH</text>
+    <g transform="translate(63,58)">
+      <rect x="0" y="18" width="44" height="34" rx="6" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.7"/>
+      <path d="M7,18 V10 a15,10 0 0 1 30,0 V18" fill="none" stroke="#3F6395" stroke-width="1.7"/>
+      <text x="22" y="42" text-anchor="middle" font-size="13" fill="#3F6395" font-weight="700">H₀</text>
+    </g>
+  </g>
+
+  <!-- Stage 4: Verified Experiment  (x=708..938, w=230) -->
+  <g id="s4" transform="translate(600,46)">
+    <rect width="210" height="120" rx="8" class="l1card"/>
+    <g><rect width="22" height="18" rx="4" fill="#3F6395"/><text x="11" y="13" text-anchor="middle" class="stnum">4</text></g>
+    <text x="30" y="14" class="l1-title">Verified Experiment</text>
+    <text x="6"  y="40" class="l1-sub">guarded execution under prereg</text>
+    <g transform="translate(80,54)">
+      <path d="M34,0 L68,8 L68,36 Q68,52 34,60 Q0,52 0,36 L0,8 Z" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.6"/>
+      <circle cx="20" cy="26" r="3.0" fill="#3F6395"/>
+      <circle cx="48" cy="26" r="3.0" fill="#3F6395"/>
+      <circle cx="20" cy="42" r="3.0" fill="#3F6395"/>
+      <circle cx="48" cy="42" r="3.0" fill="#3F6395"/>
+      <text x="34" y="16" text-anchor="middle" font-size="9" fill="#3F6395" font-weight="700">4 anchors</text>
+    </g>
+  </g>
+
+  <!-- Stage 5: Reviewer Gate (CORE) (x=974..1284, w=310) -->
+  <g id="s5" transform="translate(830,38)">
+    <rect width="290" height="136" rx="10" class="l1gate" fill="url(#tOrange)"/>
+    <g><rect width="22" height="18" rx="4" fill="#B26A38"/><text x="11" y="13" text-anchor="middle" class="stnum">5</text></g>
+    <text x="30" y="14" class="l1-title" fill="#7A4A28">Reviewer Gate</text>
+    <text x="6"  y="40" class="l1-sub" fill="#7A4A28">trace every claim → required anchors</text>
+
+    <g transform="translate(20,62)">
+      <g transform="translate(0,10)">
+        <rect width="62" height="24" rx="12" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.4"/>
+        <text x="31" y="16" text-anchor="middle" font-size="11" fill="#3F6395" font-weight="700">empirical</text>
+      </g>
+      <g transform="translate(0,42)">
+        <rect width="62" height="24" rx="12" fill="#FFFFFF" stroke="#6B548A" stroke-width="1.4"/>
+        <text x="31" y="16" text-anchor="middle" font-size="11" fill="#6B548A" font-weight="700">proof</text>
+      </g>
+      <path d="M66,22 L100,34" stroke="#3F6395" stroke-width="1.6" fill="none" marker-end="url(#a-orange)"/>
+      <path d="M66,52 L100,40" stroke="#6B548A" stroke-width="1.6" fill="none" marker-end="url(#a-purple)"/>
+      <g transform="translate(106,12)">
+        <rect width="100" height="50" rx="12" fill="#FFFFFF" stroke="#B26A38" stroke-width="1.8"/>
+        <text x="50" y="22" text-anchor="middle" font-size="12" font-weight="700" fill="#7A4A28">claim gate</text>
+        <text x="50" y="40" text-anchor="middle" font-size="10" fill="#7A4A28">accept / block</text>
+      </g>
+      <path d="M208,36 L246,36" class="anc-orange" marker-end="url(#a-orange)"/>
+      <text x="216" y="26" font-size="10" fill="#7A4A28" font-weight="700">accept</text>
+    </g>
+  </g>
+
+  <!-- Stage 6: Anchored Manuscript (x=1320..1560, w=240) -->
+  <g id="s6" transform="translate(1140,46)">
+    <rect width="240" height="120" rx="8" class="l1card"/>
+    <g><rect width="22" height="18" rx="4" fill="#5B6370"/><text x="11" y="13" text-anchor="middle" class="stnum">6</text></g>
+    <text x="30" y="14" class="l1-title">Anchored Manuscript</text>
+
+    <g transform="translate(8,32)" font-size="10">
+      <!-- Row 1 · empirical -->
+      <g>
+        <circle cx="8" cy="11" r="7" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.2"/>
+        <text x="8" y="14" text-anchor="middle" font-size="9" fill="#3F6395" font-weight="700">①</text>
+        <text x="20" y="14" font-size="10" fill="#5B6370">empirical</text>
+        <g transform="translate(68,4)">
+          <g><rect width="28" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="14" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">pin</text></g>
+          <g transform="translate(32,0)"><rect width="28" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="14" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">seed</text></g>
+          <g transform="translate(64,0)"><rect width="36" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="18" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">prereg</text></g>
+          <g transform="translate(104,0)"><rect width="32" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="16" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">prov</text></g>
+        </g>
+      </g>
+      <!-- Row 2 · theorem -->
+      <g transform="translate(0,22)">
+        <circle cx="8" cy="11" r="7" fill="#FFFFFF" stroke="#6B548A" stroke-width="1.2"/>
+        <text x="8" y="14" text-anchor="middle" font-size="9" fill="#6B548A" font-weight="700">②</text>
+        <text x="20" y="14" font-size="10" fill="#5B6370">theorem</text>
+        <g transform="translate(68,4)">
+          <g><rect width="42" height="14" rx="6" fill="#6B548A" fill-opacity="0.12" stroke="#6B548A" stroke-width="0.7"/><text x="21" y="10" text-anchor="middle" font-size="8" fill="#6B548A" font-weight="700">∅ diag</text></g>
+          <g transform="translate(46,0)"><rect width="32" height="14" rx="6" fill="#6B548A" fill-opacity="0.12" stroke="#6B548A" stroke-width="0.7"/><text x="16" y="10" text-anchor="middle" font-size="8" fill="#6B548A" font-weight="700">Lean</text></g>
+        </g>
+      </g>
+      <!-- Row 3 · mixed -->
+      <g transform="translate(0,44)">
+        <circle cx="8" cy="11" r="7" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.2"/>
+        <text x="8" y="14" text-anchor="middle" font-size="9" fill="#1F2A37" font-weight="700">③</text>
+        <text x="20" y="14" font-size="10" fill="#5B6370">mixed</text>
+        <g transform="translate(68,4)">
+          <g><rect width="22" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="11" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">pin</text></g>
+          <g transform="translate(26,0)"><rect width="28" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="14" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">seed</text></g>
+          <g transform="translate(58,0)"><rect width="34" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="17" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">prereg</text></g>
+          <g transform="translate(96,0)"><rect width="28" height="14" rx="6" fill="#3F6395" fill-opacity="0.12" stroke="#3F6395" stroke-width="0.7"/><text x="14" y="10" text-anchor="middle" font-size="8" fill="#3F6395" font-weight="700">prov</text></g>
+          <g transform="translate(128,0)"><rect width="28" height="14" rx="6" fill="#6B548A" fill-opacity="0.12" stroke="#6B548A" stroke-width="0.7"/><text x="14" y="10" text-anchor="middle" font-size="8" fill="#6B548A" font-weight="700">Lean</text></g>
+        </g>
+      </g>
+    </g>
+
+    <!-- anchored stamp · bottom-right -->
+    <g transform="translate(186,100)">
+      <rect width="50" height="18" rx="3" fill="none" stroke="#B26A38" stroke-width="1.2" opacity="0.85"/>
+      <text x="25" y="12" text-anchor="middle" font-size="10" fill="#B26A38" font-weight="700" opacity="0.85">anchored</text>
+    </g>
+  </g>
+
+  <!-- L1 horizontal flow arrows -->
+  <g class="flow">
+    <path d="M205,106 L225,106" marker-end="url(#a-gray)"/>
+    <path d="M410,106 L430,106" marker-end="url(#a-gray)"/>
+    <path d="M580,106 L600,106" marker-end="url(#a-gray)"/>
+    <path d="M810,106 L830,106" marker-end="url(#a-gray)"/>
+    <path d="M1120,106 L1140,106" stroke="#B26A38" stroke-width="2.0" marker-end="url(#a-orange)"/>
+  </g>
+
+
+  <!-- =============================================================== -->
+  <!-- LAYER 2 · VERIFICATION MECHANISMS                                -->
+  <!-- =============================================================== -->
+  <text x="40" y="206" class="sect">2 · VERIFICATION  MECHANISMS</text>
+
+  <!-- Pillar A · Human-in-the-loop gates (TEAL, dashed) -->
+  <g id="pA">
+    <rect x="20" y="214" width="240" height="262" rx="10" fill="url(#tTeal)" stroke="#5A8C8C" stroke-opacity="0.4" stroke-width="0.9" stroke-dasharray="5 4"/>
+    <g transform="translate(30,228)">
+      <rect width="6" height="6" fill="#5A8C8C"/>
+      <text x="14" y="6" class="l2-title">Human-in-the-loop gates</text>
+    </g>
+    <text x="30" y="256" class="l2-sub">audited interventions</text>
+
+    <g transform="translate(30,282)">
+      <circle cx="14" cy="14" r="11" fill="#FFFFFF" stroke="#5A8C8C" stroke-width="1.4"/>
+      <path d="M-2,40 Q14,22 30,40" fill="#FFFFFF" stroke="#5A8C8C" stroke-width="1.4"/>
+    </g>
+
+    <g transform="translate(80,284)" font-size="11">
+      <g>
+        <circle cx="0" cy="9" r="3.5" fill="#5A8C8C"/>
+        <text x="10" y="12" fill="#1F2A37" font-weight="600">reject a hypothesis</text>
+        <text x="10" y="25" fill="#5B6370" font-size="9">→ Hypothesis Ranking</text>
+      </g>
+      <g transform="translate(0,44)">
+        <circle cx="0" cy="9" r="3.5" fill="#5A8C8C"/>
+        <text x="10" y="12" fill="#1F2A37" font-weight="600">redirect a run</text>
+        <text x="10" y="25" fill="#5B6370" font-size="9">→ Verified Experiment</text>
+      </g>
+      <g transform="translate(0,88)">
+        <circle cx="0" cy="9" r="3.5" fill="#5A8C8C"/>
+        <text x="10" y="12" fill="#1F2A37" font-weight="600">approve / challenge verdict</text>
+        <text x="10" y="25" fill="#5B6370" font-size="9">→ Reviewer Gate</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Pillar B · Empirical Anchors (BLUE, dashed) -->
+  <g id="pB">
+    <rect x="280" y="214" width="400" height="262" rx="10" fill="url(#tBlue2)" stroke="#3F6395" stroke-opacity="0.6" stroke-width="1.1" stroke-dasharray="5 4"/>
+    <g transform="translate(290,228)">
+      <rect width="6" height="6" fill="#3F6395"/>
+      <text x="14" y="6" class="l2-title">Empirical Anchors</text>
+    </g>
+    <text x="290" y="256" class="l2-sub">four guarantees</text>
+
+    <g transform="translate(290,274)">
+      <g>
+        <rect width="185" height="92" rx="6" class="l2card-b"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#3F6395">pinned metric</text>
+        <text x="10" y="30" class="micro">value · run · timestamp</text>
+        <g transform="translate(76,44)">
+          <rect width="40" height="32" rx="3" fill="#F5F7FA" stroke="#C7CCD3" stroke-width="0.6"/>
+          <polyline points="6,22  14,18  22,10  30,14  34,8" fill="none" stroke="#3F6395" stroke-width="1.4"/>
+          <circle cx="34" cy="8" r="2.5" fill="#3F6395"/>
+          <circle cx="38" cy="4" r="3" fill="#3F6395"/>
+          <line x1="38" y1="7" x2="38" y2="14" stroke="#3F6395" stroke-width="1.0"/>
+        </g>
+      </g>
+      <g transform="translate(195,0)">
+        <rect width="185" height="92" rx="6" class="l2card-b"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#3F6395">seed stability</text>
+        <text x="10" y="30" class="micro">multi-seed · stable verdict</text>
+        <g transform="translate(10,46)">
+          <line x1="0" y1="20" x2="170" y2="20" stroke="#C7CCD3"/>
+          <g stroke="#3F6395" stroke-width="0.9" fill="#3F6395">
+            <line x1="22"  y1="10" x2="38" y2="10"/><circle cx="30" cy="10" r="1.8"/>
+            <line x1="44"  y1="16" x2="62" y2="16"/><circle cx="53" cy="16" r="1.8"/>
+            <line x1="68"  y1="6"  x2="86" y2="6"/><circle cx="77" cy="6"  r="1.8"/>
+            <line x1="92"  y1="18" x2="110" y2="18"/><circle cx="101" cy="18" r="1.8"/>
+            <line x1="114" y1="14" x2="138" y2="14"/><circle cx="126" cy="14" r="1.8"/>
+          </g>
+          <line x1="0" y1="12" x2="170" y2="12" stroke="#3F6395" stroke-width="0.9" stroke-dasharray="3 2"/>
+        </g>
+      </g>
+      <g transform="translate(0,102)">
+        <rect width="185" height="92" rx="6" class="l2card-b"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#3F6395">preregistration met</text>
+        <text x="10" y="30" class="micro">BH-corrected p &lt; α</text>
+        <g transform="translate(76,42)">
+          <rect x="0" y="14" width="32" height="24" rx="4" fill="#F5F7FA" stroke="#3F6395" stroke-width="1.2"/>
+          <path d="M5,14 V8 a11,7 0 0 1 22,0 V14" fill="none" stroke="#3F6395" stroke-width="1.2"/>
+          <path d="M9,26 L14,30 L24,20" fill="none" stroke="#4F7E5C" stroke-width="2.4"/>
+        </g>
+      </g>
+      <g transform="translate(195,102)">
+        <rect width="185" height="92" rx="6" class="l2card-b"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#3F6395">fresh provenance</text>
+        <text x="10" y="30" class="micro">hash-chained inputs</text>
+        <g transform="translate(46,46)">
+          <circle cx="0"   cy="20" r="6" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.0"/>
+          <circle cx="30"  cy="10" r="6" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.0"/>
+          <circle cx="30"  cy="30" r="6" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.0"/>
+          <circle cx="60"  cy="20" r="6" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.0"/>
+          <circle cx="90"  cy="20" r="6" fill="#FFFFFF" stroke="#3F6395" stroke-width="1.0"/>
+          <path d="M6,18  L25,12" stroke="#7C8694" stroke-width="0.8"/>
+          <path d="M6,22  L25,30" stroke="#7C8694" stroke-width="0.8"/>
+          <path d="M35,12 L55,18" stroke="#7C8694" stroke-width="0.8"/>
+          <path d="M35,28 L55,22" stroke="#7C8694" stroke-width="0.8"/>
+          <path d="M66,20 L84,20" stroke="#7C8694" stroke-width="0.8"/>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- Pillar C · Proof Anchors (PURPLE, dashed) -->
+  <g id="pC">
+    <rect x="700" y="214" width="440" height="262" rx="10" fill="url(#tPurp)" stroke="#6B548A" stroke-opacity="0.6" stroke-width="1.1" stroke-dasharray="5 4"/>
+    <g transform="translate(710,228)">
+      <rect width="6" height="6" fill="#6B548A"/>
+      <text x="14" y="6" class="l2-title">Proof Anchors</text>
+    </g>
+    <text x="710" y="256" class="l2-sub">for theorem-shaped claims</text>
+
+    <g transform="translate(710,274)">
+      <g>
+        <rect width="130" height="194" rx="6" class="l2card-p"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#6B548A">skeleton retrieval</text>
+        <text x="10" y="30" class="micro">typed lemma corpus</text>
+        <g transform="translate(10,42)">
+          <rect width="120" height="60" rx="4" fill="#F8F5FA"/>
+          <g fill="#6B548A" fill-opacity="0.35">
+            <circle cx="14" cy="14" r="1.6"/><circle cx="34" cy="20" r="1.6"/><circle cx="54" cy="10" r="1.6"/>
+            <circle cx="80" cy="18" r="1.6"/><circle cx="100" cy="28" r="1.6"/>
+            <circle cx="24" cy="40" r="1.6"/><circle cx="58" cy="48" r="1.6"/><circle cx="92" cy="42" r="1.6"/>
+          </g>
+          <circle cx="34" cy="20" r="4.5" fill="none" stroke="#B26A38" stroke-width="1.2"/>
+          <circle cx="80" cy="18" r="4.5" fill="none" stroke="#B26A38" stroke-width="1.2"/>
+        </g>
+        <text x="10" y="120" class="micro">templates retrieved</text>
+        <g transform="translate(10,128)" font-size="9">
+          <g><rect width="120" height="16" rx="3" class="chip"/><text x="6" y="11" class="mono">Cauchy-Schwarz</text></g>
+          <g transform="translate(0,20)"><rect width="120" height="16" rx="3" class="chip"/><text x="6" y="11" class="mono">Chebyshev</text></g>
+        </g>
+      </g>
+      <path d="M138,100 L152,100" class="flow" marker-end="url(#a-gray)"/>
+
+      <g transform="translate(160,0)">
+        <rect width="130" height="194" rx="6" class="l2card-p"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#6B548A">diagnostic check</text>
+        <text x="10" y="30" class="micro">snippet-level patterns</text>
+        <g transform="translate(10,42)">
+          <g><rect width="120" height="22" rx="3" class="chip"/><text x="8" y="14" class="mono">step ①</text><text x="100" y="14" class="micro ok-tx" font-weight="700">✓</text></g>
+          <g transform="translate(0,28)"><rect width="120" height="22" rx="3" class="chip"/><text x="8" y="14" class="mono">step ②</text><text x="100" y="14" class="micro" fill="#B26A38" font-weight="700">⚠</text></g>
+          <g transform="translate(0,56)"><rect width="120" height="22" rx="3" class="chip"/><text x="8" y="14" class="mono">step ③</text><text x="100" y="14" class="micro ok-tx" font-weight="700">✓</text></g>
+        </g>
+        <g transform="translate(10,144)">
+          <rect width="120" height="22" rx="11" fill="#6B548A" fill-opacity="0.15" stroke="#6B548A" stroke-width="0.7"/>
+          <text x="60" y="14" text-anchor="middle" class="label" font-weight="700" fill="#503867">manifest = ∅</text>
+        </g>
+      </g>
+      <path d="M298,100 L312,100" class="flow" marker-end="url(#a-gray)"/>
+
+      <g transform="translate(320,0)">
+        <rect width="100" height="194" rx="6" class="l2card-p"/>
+        <text x="10" y="16" class="label" font-weight="700" fill="#6B548A">Lean 4 check</text>
+        <text x="10" y="30" class="micro">type-checked proof</text>
+        <g transform="translate(10,42)">
+          <rect width="80" height="96" rx="6" fill="#FBF7FD" stroke="#6B548A" stroke-width="0.8" stroke-opacity="0.45"/>
+          <text x="40" y="68" text-anchor="middle" font-size="52" font-weight="700" fill="#6B548A" font-family="Georgia, 'Times New Roman', serif">λ</text>
+          <text x="40" y="86" text-anchor="middle" font-size="9" fill="#6B548A" font-weight="700">Lean 4</text>
+        </g>
+        <g transform="translate(10,148)">
+          <rect width="80" height="22" rx="11" fill="#4F7E5C" fill-opacity="0.18" stroke="#4F7E5C" stroke-width="0.7"/>
+          <text x="40" y="15" text-anchor="middle" class="label" font-weight="700" fill="#3C6648">verified ✓</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- Pillar D · Counterfactual Replay (GRAY, dashed) -->
+  <g id="pD">
+    <rect x="1160" y="214" width="220" height="262" rx="10" fill="url(#tGray)" stroke="#5B6370" stroke-opacity="0.45" stroke-width="0.9" stroke-dasharray="5 4"/>
+    <g transform="translate(1170,228)">
+      <rect width="6" height="6" fill="#5B6370"/>
+      <text x="14" y="6" class="l2-title">Counterfactual Replay</text>
+    </g>
+    <text x="1170" y="256" class="l2-sub">read-only replay</text>
+
+    <g transform="translate(1170,294)">
+      <line x1="0" y1="20" x2="200" y2="20" stroke="#1F2A37" stroke-width="1.4"/>
+      <circle cx="16"  cy="20" r="5" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.2"/>
+      <circle cx="66"  cy="20" r="5" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.2"/>
+      <circle cx="118" cy="20" r="5" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.2"/>
+      <circle cx="184" cy="20" r="5" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.2"/>
+      <text x="0"   y="10" class="micro" fill="#1F2A37">main timeline</text>
+
+      <path d="M66,20 C88,20 100,60 124,60 L196,60" stroke="#5B6370" stroke-width="1.4" fill="none" stroke-dasharray="3 2"/>
+      <circle cx="124" cy="60" r="5" fill="#FFFFFF" stroke="#5B6370" stroke-dasharray="2 1"/>
+      <circle cx="196" cy="60" r="5" fill="#FFFFFF" stroke="#5B6370" stroke-dasharray="2 1"/>
+      <text x="0"   y="76" class="micro" fill="#5B6370">replay branch</text>
+    </g>
+    <text x="1170" y="430" class="micro" font-style="italic" fill="#5B6370">"what if a paused branch had won?"</text>
+  </g>
+
+
+  <!-- =================== L2 → L1 connectors =================== -->
+  <g class="hitl"><path d="M80,212 H293.5 Q317.5,212 317.5,196 V166" marker-end="url(#a-teal)"/></g>
+  <g class="hitl"><path d="M140,212 H681 Q705,212 705,196 V166" marker-end="url(#a-teal)"/></g>
+  <g class="hitl"><path d="M200,212 H986 Q1010,212 1010,196 V174" marker-end="url(#a-teal)"/></g>
+  <g class="anc-orange"><path d="M480,212 H851 Q875,212 875,196 V174" marker-end="url(#a-orange)"/></g>
+  <g class="anc-purple"><path d="M850,212 H896 Q920,212 920,196 V174" marker-end="url(#a-purple)"/></g>
+
+
+  <!-- =============================================================== -->
+  <!-- LAYER 3 · SHARED STATE BACKBONE                                  -->
+  <!-- =============================================================== -->
+  <text x="40" y="500" class="sect">3 · SHARED  STATE  BACKBONE</text>
+
+  <g id="L3">
+    <rect x="20" y="510" width="1360" height="210" rx="14" fill="url(#tTan)" stroke="#8B7C5C" stroke-opacity="0.55" stroke-width="0.9" stroke-dasharray="6 4"/>
+
+    <g transform="translate(40,544)">
+      <ellipse cx="14" cy="6" rx="14" ry="4.6" fill="#2F4256"/>
+      <rect x="0" y="6" width="28" height="26" fill="#2F4256"/>
+      <ellipse cx="14" cy="32" rx="14" ry="4.6" fill="#2F4256"/>
+      <ellipse cx="14" cy="19" rx="14" ry="4.6" fill="none" stroke="#FFFFFF" stroke-width="0.8"/>
+      <text x="44" y="24" class="l2-title">single SQLite state</text>
+    </g>
+
+    <line x1="240" y1="586" x2="1360" y2="586" stroke="#A89D87" stroke-width="1.6"/>
+    <circle cx="1360" cy="586" r="3" fill="#A89D87"/>
+    <line x1="68" y1="563" x2="240" y2="586" stroke="#A89D87" stroke-width="1.4"/>
+
+    <g transform="translate(0,586)">
+      <g transform="translate(240,0)">
+        <line x1="100" y1="0" x2="100" y2="14" stroke="#A89D87" stroke-width="1.0"/>
+        <g transform="translate(0,14)">
+          <rect width="200" height="116" rx="8" class="l3card"/>
+          <text x="10" y="18" class="label" font-weight="700" fill="#2F4256">Failure memory</text>
+          <text x="10" y="32" class="micro">searchable by signature</text>
+          <g transform="translate(10,42)">
+            <g><rect width="180" height="16" rx="3" class="chip"/><text x="6" y="11" class="mono">off-by-one in seed split</text></g>
+            <g transform="translate(0,22)"><rect width="180" height="16" rx="3" class="chip"/><text x="6" y="11" class="mono">dataloader fork-vs-spawn</text></g>
+            <g transform="translate(0,44)"><rect width="180" height="16" rx="3" class="chip"/><text x="6" y="11" class="mono">measure-zero in Jensen</text></g>
+          </g>
+        </g>
+      </g>
+
+      <g transform="translate(470,0)">
+        <line x1="100" y1="0" x2="100" y2="14" stroke="#A89D87" stroke-width="1.0"/>
+        <g transform="translate(0,14)">
+          <rect width="200" height="116" rx="8" class="l3card"/>
+          <text x="10" y="18" class="label" font-weight="700" fill="#2F4256">Bradley-Terry ratings</text>
+          <text x="10" y="32" class="micro">strength + 95% LUCB</text>
+          <g transform="translate(20,52)">
+            <line x1="0"  y1="6"  x2="80" y2="6"  stroke="#1F2A37" stroke-width="2.2"/><circle cx="60" cy="6" r="2.4" fill="#1F2A37"/>
+            <line x1="14" y1="18" x2="68" y2="18" stroke="#3F5972" stroke-width="2.0"/><circle cx="46" cy="18" r="2.2" fill="#3F5972"/>
+            <line x1="24" y1="30" x2="58" y2="30" stroke="#7A8392" stroke-width="1.8"/><circle cx="42" cy="30" r="2.0" fill="#7A8392"/>
+            <line x1="0"  y1="42" x2="170" y2="42" stroke="#C7CCD3"/>
+            <text x="170" y="42" class="axis">θ</text>
+          </g>
+        </g>
+      </g>
+
+      <g transform="translate(700,0)">
+        <line x1="100" y1="0" x2="100" y2="14" stroke="#A89D87" stroke-width="1.0"/>
+        <g transform="translate(0,14)">
+          <rect width="200" height="116" rx="8" class="l3card"/>
+          <text x="10" y="18" class="label" font-weight="700" fill="#2F4256">Preregistration registry</text>
+          <text x="10" y="32" class="micro">locked H₀ · threshold · α · BH</text>
+          <g transform="translate(38,52)" fill="none" stroke="#3F6395" stroke-width="1.4">
+            <g><rect x="0" y="10" width="20" height="16" rx="3"/><path d="M4,10 V6 a6,4 0 0 1 12,0 V10"/></g>
+            <g opacity="0.6" transform="translate(40,0)"><rect x="0" y="10" width="20" height="16" rx="3"/><path d="M4,10 V6 a6,4 0 0 1 12,0 V10"/></g>
+            <g opacity="0.6" transform="translate(80,0)"><rect x="0" y="10" width="20" height="16" rx="3"/><path d="M4,10 V6 a6,4 0 0 1 12,0 V10"/></g>
+            <g opacity="0.6" transform="translate(120,0)"><rect x="0" y="10" width="20" height="16" rx="3"/><path d="M4,10 V6 a6,4 0 0 1 12,0 V10"/></g>
+          </g>
+        </g>
+      </g>
+
+      <g transform="translate(930,0)">
+        <line x1="100" y1="0" x2="100" y2="14" stroke="#A89D87" stroke-width="1.0"/>
+        <g transform="translate(0,14)">
+          <rect width="200" height="116" rx="8" class="l3card"/>
+          <text x="10" y="18" class="label" font-weight="700" fill="#2F4256">Provenance DAG</text>
+          <text x="10" y="32" class="micro">hash-chained inputs · drift-detected</text>
+          <g transform="translate(40,56)">
+            <circle cx="0"   cy="14" r="6" fill="#FFFFFF" stroke="#2F4256" stroke-width="1.1"/>
+            <circle cx="32"  cy="4"  r="6" fill="#FFFFFF" stroke="#2F4256" stroke-width="1.1"/>
+            <circle cx="32"  cy="24" r="6" fill="#FFFFFF" stroke="#2F4256" stroke-width="1.1"/>
+            <circle cx="64"  cy="14" r="6" fill="#FFFFFF" stroke="#2F4256" stroke-width="1.1"/>
+            <circle cx="96"  cy="14" r="6" fill="#FFFFFF" stroke="#2F4256" stroke-width="1.1"/>
+            <circle cx="128" cy="14" r="6" fill="#FFFFFF" stroke="#2F4256" stroke-width="1.1"/>
+            <path d="M6,12  L26,6"  stroke="#7C8694" stroke-width="0.9"/>
+            <path d="M6,16  L26,22" stroke="#7C8694" stroke-width="0.9"/>
+            <path d="M38,6  L58,12" stroke="#7C8694" stroke-width="0.9"/>
+            <path d="M38,22 L58,16" stroke="#7C8694" stroke-width="0.9"/>
+            <path d="M70,14 L90,14" stroke="#7C8694" stroke-width="0.9"/>
+            <path d="M102,14 L122,14" stroke="#7C8694" stroke-width="0.9"/>
+          </g>
+        </g>
+      </g>
+
+      <g transform="translate(1160,0)">
+        <line x1="100" y1="0" x2="100" y2="14" stroke="#A89D87" stroke-width="1.0"/>
+        <g transform="translate(0,14)">
+          <rect width="200" height="116" rx="8" class="l3card"/>
+          <text x="10" y="18" class="label" font-weight="700" fill="#2F4256">Replay branches</text>
+          <text x="10" y="32" class="micro">snapshot-replay, no main mutation</text>
+          <g transform="translate(20,54)">
+            <line x1="0" y1="10" x2="170" y2="10" stroke="#1F2A37" stroke-width="1.4"/>
+            <circle cx="16"  cy="10" r="4" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.0"/>
+            <circle cx="58"  cy="10" r="4" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.0"/>
+            <circle cx="112" cy="10" r="4" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.0"/>
+            <circle cx="160" cy="10" r="4" fill="#FFFFFF" stroke="#1F2A37" stroke-width="1.0"/>
+            <path d="M58,10 C80,10 90,28 110,28 L162,28" stroke="#5B6370" stroke-width="1.1" fill="none" stroke-dasharray="3 2"/>
+            <circle cx="110" cy="28" r="4" fill="#FFFFFF" stroke="#5B6370" stroke-dasharray="2 1"/>
+            <circle cx="162" cy="28" r="4" fill="#FFFFFF" stroke="#5B6370" stroke-dasharray="2 1"/>
+          </g>
+        </g>
+      </g>
+
+    </g>
+  </g>
+</svg>
