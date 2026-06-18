@@ -6,9 +6,9 @@
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
-ClaudeScientist plugs into Claude Code and adds what most AI scientist systems leave out: it remembers what you've tried, verifies your numbers before you publish them, and gives you a live terminal dashboard where you can watch the research unfold and step in at any time.
+ClaudeScientist plugs into Claude Code or Codex and adds what most AI scientist systems leave out: it remembers what you've tried, verifies your numbers before you publish them, and gives you a live terminal dashboard where you can watch the research unfold and step in at any time.
 
-You give Claude a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
+You give the agent a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
 **Current version**: v5.0.0 — the cockpit is now an "activity streaming" research monitor. The top of the screen shows a **phase strip** (`idle / explore / select / experiment / verify / prove / review / narrate`) derived live from `cockpit_events`; the main pane shows **activity cards** (one card per research action — a BT tournament, a proof diagnose loop, a Lean attempt) instead of a flat event firehose; a new **Focus tab** lists the node(s) the agent is working on right now. The original event stream is preserved as a collapsible audit log at the bottom (toggle with `A`). Two new optional MCP atomic tools — `cockpit__set_phase` and `cockpit__narrate` — let SOP-driven agents annotate decisions without coupling to the cockpit's rendering. No schema migration: phase / focus / activity are pure functions over the existing `cockpit_events` table, per [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md) and [architecture.md §14](docs/architecture.md#14-cockpit-activity-streaming-v50).
 
@@ -28,8 +28,8 @@ The two terminals don't talk to each other directly — they both read and write
 
 | Role | Where | What it does |
 |---|---|---|
-| **Claude Code** | Terminal A | Drives the research: understands your question, calls tools, writes and runs code |
-| **MCP servers** | Background | Provide the tools Claude calls — memory, verification, literature search, proof generation |
+| **Claude Code / Codex** | Terminal A | Drives the research: understands your question, calls tools, writes and runs code |
+| **MCP servers** | Background | Provide the tools the agent calls — memory, verification, literature search, proof generation |
 | **Hooks** | Auto-loaded at startup | Run safety checks before/after every tool call (block data leaks, log provenance) |
 | **Cockpit TUI** | Terminal B | Shows live state; lets you approve, reject, or redirect hypotheses |
 | **SQLite** | `.research-agent/state.db` | The single file that holds all state: hypotheses, evidence, ratings, metrics, events |
@@ -53,7 +53,15 @@ uv sync
 uv run python -m claudescientist.setup
 ```
 
-The wizard walks you through embedding backend, proof corpus seeding, held-out directory, Lean toolchain, and auto-prune — all in one pass. Run it again any time; it skips steps that are already done.
+The wizard walks you through agent-host selection (`claude`, `codex`, or
+`both`), embedding backend, proof corpus seeding, held-out directory, Lean
+toolchain, and auto-prune — all in one pass. Run it again any time; it skips
+steps that are already done.
+
+For non-interactive setup, set `CLAUDESCIENTIST_SETUP_AGENT_HOST=codex` or
+`CLAUDESCIENTIST_SETUP_AGENT_HOST=both`. Codex support is project-local: setup
+generates `.codex/config.toml`, `.codex/agents/*.toml`, and repo skills under
+`.agents/skills/` from the existing Claude Code assets.
 
 Literature search uses two external MCPs. arXiv is launched through
 `uv tool run arxiv-mcp-server`; OpenAlex is launched through
@@ -75,6 +83,9 @@ Run — open two terminals from the repo root:
 ```powershell
 # Terminal A: Claude Code (from the repo root)
 claude
+
+# Or Terminal A: Codex (after choosing codex/both in setup)
+codex
 
 # Terminal B: cockpit TUI (from the repo root)
 uv run python -m cockpit.tui

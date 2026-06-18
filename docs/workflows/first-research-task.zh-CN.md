@@ -10,8 +10,10 @@
 从仓库根目录打开两个终端。
 
 ```powershell
-# 终端 A：Claude Code REPL（在仓库根目录）
+# 终端 A：选择好的 agent host（在仓库根目录）
 claude
+# 如果 setup 选择了 codex/both，也可以用：
+codex
 
 # 终端 B：cockpit TUI（在仓库根目录）
 uv run python -m cockpit.tui

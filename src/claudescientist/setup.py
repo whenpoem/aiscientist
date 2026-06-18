@@ -1,20 +1,20 @@
 """Interactive setup wizard for a fresh claudescientist clone.
 
-Walks the user through 7 install-time decisions that the README otherwise
+Walks the user through 8 install-time decisions that the README otherwise
 scatters across multiple sections:
 
     1. Sanity checks (python ≥ 3.11, ``uv`` on PATH, ``claude`` on PATH)
     2. Repo root detection (the wizard must be in the right tree)
-    3. Embedding backend choice (mock | local | openai)
-    4. Proof corpus seeding (calls ``scripts/seed_proof_*.py``)
-    5. Held-out dataset directory (writes ``RESEARCH_AGENT_HELDOUT_DIR``)
-    6. Lean toolchain detection (probes elan / lake / lean; never auto-installs)
-    7. Auto-prune flag (``RESEARCH_AGENT_AUTO_PRUNE``)
+    3. Agent host choice (claude | codex | both)
+    4. Embedding backend choice (mock | local | openai)
+    5. Proof corpus seeding (calls ``scripts/seed_proof_*.py``)
+    6. Held-out dataset directory (writes ``RESEARCH_AGENT_HELDOUT_DIR``)
+    7. Lean toolchain detection (probes elan / lake / lean; never auto-installs)
+    8. Auto-prune flag (``RESEARCH_AGENT_AUTO_PRUNE``)
 
-Output is a project-local ``.env`` file. The wizard does NOT modify
-``.claude/settings.json``, the user's shell rc, or any global config —
-``.env`` is the single artifact written so a re-run can see what setup
-already decided.
+Output is a project-local ``.env`` file plus optional project-local Codex
+adapter files when the selected host is ``codex`` or ``both``. The wizard does
+NOT modify ``.claude/settings.json``, the user's shell rc, or any global config.
 
 Usage:
     uv run python -m claudescientist.setup
@@ -22,6 +22,7 @@ Usage:
     uv run python -m claudescientist.setup --reset
 
 Non-interactive mode reads answers from these env vars:
+    CLAUDESCIENTIST_SETUP_AGENT_HOST    claude | codex | both (default: claude)
     CLAUDESCIENTIST_SETUP_BACKEND       mock | local | openai (default: local)
     CLAUDESCIENTIST_SETUP_HELDOUT_DIR   absolute path        (default: $HOME)
     CLAUDESCIENTIST_SETUP_AUTO_PRUNE    0 | 1                (default: 0)
@@ -49,6 +50,7 @@ from rich.table import Table
 from rich.text import Text
 
 from . import _setup_io as io
+from . import agent_hosts
 
 
 def _can_render_unicode() -> bool:
@@ -167,9 +169,9 @@ def _print_banner() -> None:
         Panel.fit(
             Text.assemble(
                 ("claudescientist setup\n", "bold"),
-                "Configure embed backend, held-out paths, proof corpus, and Lean reinsurance.\n",
+                "Configure agent host, embed backend, held-out paths, proof corpus, and Lean.\n",
                 ("Output: ", "dim"),
-                (".env at the repo root.", "dim italic"),
+                (".env plus optional Codex adapter files.", "dim italic"),
             ),
             border_style="cyan",
             box=_BOX_STYLE,
@@ -183,6 +185,21 @@ _DEFAULT_HELDOUT_DIR = Path.home() / ".research-agent" / "heldout"
 
 
 def _print_cheatsheet(state: SetupState) -> None:
+    host = agent_hosts.normalize_agent_host(
+        state.env_updates.get(
+            "CLAUDESCIENTIST_AGENT_HOST",
+            io.read_env_file(state.env_path).get("CLAUDESCIENTIST_AGENT_HOST"),
+        )
+    )
+    if host == agent_hosts.HOST_CODEX:
+        restart_line = "  1. Restart Codex; uv run will pick the values up.\n"
+        terminal_a = "codex"
+    elif host == agent_hosts.HOST_BOTH:
+        restart_line = "  1. Restart Claude Code / Codex; uv run will pick the values up.\n"
+        terminal_a = "claude  (or: codex)"
+    else:
+        restart_line = "  1. Restart Claude Code; uv run will pick the values up.\n"
+        terminal_a = "claude"
     _console.print()
     _console.print(
         Panel.fit(
@@ -191,7 +208,7 @@ def _print_cheatsheet(state: SetupState) -> None:
                 ("Wrote: ", "dim"),
                 (f"{state.env_path}\n\n", ""),
                 ("Two ways to activate the .env:\n", "bold"),
-                "  1. Restart Claude Code; uv run will pick the values up.\n",
+                restart_line,
                 "  2. ",
                 ("uv run --env-file .env python -m cockpit.tui", "cyan"),
                 "\n  3. ",
@@ -199,7 +216,7 @@ def _print_cheatsheet(state: SetupState) -> None:
                 ("  (bash/zsh, current shell)\n\n", "dim"),
                 ("Two terminals to start a session:\n", "bold"),
                 "  Terminal A: ",
-                ("claude", "cyan"),
+                (terminal_a, "cyan"),
                 "\n",
                 "  Terminal B: ",
                 ("uv run python -m cockpit.tui", "cyan"),
@@ -337,16 +354,18 @@ def _env_flag(name: str, default: str) -> str:
 
 
 def step_sanity(state: SetupState) -> bool:
-    _heading(1, 7, "Sanity checks")
+    _heading(1, 8, "Sanity checks")
     py = io.probe_python()
     uv = io.probe_uv()
     claude = io.probe_claude()
+    codex = io.probe_codex()
     npx = io.probe_npx()
     _check_table(
         [
             (py.ok, ("python " + (">=" if not _UNICODE_OK else "≥") + " 3.11"), py.detail),
             (uv.ok, "uv on PATH", uv.detail),
-            (claude.ok, "claude on PATH (recommended)", claude.detail),
+            (claude.ok, "claude on PATH (Claude Code host)", claude.detail),
+            (codex.ok, "codex on PATH (Codex host)", codex.detail),
             (npx.ok, "npx on PATH (OpenAlex MCP)", npx.detail),
         ]
     )
@@ -358,8 +377,13 @@ def step_sanity(state: SetupState) -> bool:
         return False
     if not claude.ok:
         _console.print(
-            "[yellow]claude not found — the cockpit and MCP servers run "
-            "without it, but you'll need it to drive a research session.[/yellow]"
+            "[yellow]claude not found; choose Codex or install Claude Code "
+            "before driving a Claude-hosted research session.[/yellow]"
+        )
+    if not codex.ok:
+        _console.print(
+            "[yellow]codex not found; choose Claude Code or install Codex "
+            "before driving a Codex-hosted research session.[/yellow]"
         )
     if not npx.ok:
         _console.print(
@@ -376,7 +400,7 @@ def step_sanity(state: SetupState) -> bool:
 
 
 def step_repo_root(state: SetupState) -> bool:
-    _heading(2, 7, "Repo root")
+    _heading(2, 8, "Repo root")
     _console.print(f"  using {state.repo_root}")
     pyproject = state.repo_root / "pyproject.toml"
     claude_dir = state.repo_root / ".claude"
@@ -390,7 +414,64 @@ def step_repo_root(state: SetupState) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 3 — embedding backend
+# Step 3 - agent host
+# ---------------------------------------------------------------------------
+
+
+def step_agent_host(state: SetupState) -> bool:
+    _heading(3, 8, "Agent host")
+    existing = io.read_env_file(state.env_path).get("CLAUDESCIENTIST_AGENT_HOST", "claude")
+    if state.non_interactive:
+        host = _env_flag("CLAUDESCIENTIST_SETUP_AGENT_HOST", existing)
+    else:
+        _console.print(
+            "  claude: use the checked-in .claude settings.\n"
+            "  codex: generate project-local .codex config, agents, and skills.\n"
+            "  both: keep Claude Code support and add the Codex adapter."
+        )
+        host = _ask_select(
+            state,
+            "which agent host should drive ClaudeScientist?",
+            list(agent_hosts.HOST_CHOICES),
+            default=(
+                existing
+                if existing in agent_hosts.HOST_CHOICES
+                else agent_hosts.HOST_CLAUDE
+            ),
+        )
+        if state.aborted:
+            return False
+    normalized = agent_hosts.normalize_agent_host(host)
+    if normalized != host:
+        _console.print(f"  normalized agent host {host!r} -> {normalized!r}.")
+    state.env_updates["CLAUDESCIENTIST_AGENT_HOST"] = normalized
+
+    if normalized in {agent_hosts.HOST_CLAUDE, agent_hosts.HOST_BOTH}:
+        result = agent_hosts.check_claude_support(state.repo_root)
+        missing = [path for path in result.checked if not path.exists()]
+        if missing:
+            _console.print(
+                "[yellow]Claude Code support files missing: "
+                + ", ".join(str(path) for path in missing)
+                + "[/yellow]"
+            )
+        else:
+            _console.print("  Claude Code support files present.")
+
+    if normalized in {agent_hosts.HOST_CODEX, agent_hosts.HOST_BOTH}:
+        result = agent_hosts.ensure_codex_support(state.repo_root)
+        if result.written:
+            changed = "\n  - ".join(
+                str(path.relative_to(state.repo_root)) for path in result.written
+            )
+            _console.print("  wrote Codex adapter files:\n  - " + changed)
+        else:
+            _console.print("  Codex adapter files already up to date.")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Step 4 - embedding backend
 # ---------------------------------------------------------------------------
 
 
@@ -400,7 +481,7 @@ _LOCAL_LEGACY_MODEL = "all-MiniLM-L6-v2"
 
 
 def step_embed_backend(state: SetupState) -> bool:
-    _heading(3, 7, "Embedding backend (proof trunk)")
+    _heading(4, 8, "Embedding backend (proof trunk)")
     current = io.read_env_file(state.env_path).get(
         "RESEARCH_AGENT_EMBED_BACKEND", "local"
     )
@@ -628,12 +709,12 @@ def _looks_like_hf_model(model_name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 4 — proof corpus seed
+# Step 5 - proof corpus seed
 # ---------------------------------------------------------------------------
 
 
 def step_seed_corpus(state: SetupState) -> bool:
-    _heading(4, 7, "Proof corpus seed")
+    _heading(5, 8, "Proof corpus seed")
     backend = state.env_updates.get(
         "RESEARCH_AGENT_EMBED_BACKEND",
         io.read_env_file(state.env_path).get("RESEARCH_AGENT_EMBED_BACKEND", "local"),
@@ -684,12 +765,12 @@ def step_seed_corpus(state: SetupState) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 5 — held-out dir
+# Step 6 - held-out dir
 # ---------------------------------------------------------------------------
 
 
 def step_heldout_dir(state: SetupState) -> bool:
-    _heading(5, 7, "Held-out dataset directory")
+    _heading(6, 8, "Held-out dataset directory")
     home = str(Path.home())
     current = io.read_env_file(state.env_path).get(
         "RESEARCH_AGENT_HELDOUT_DIR", str(_DEFAULT_HELDOUT_DIR)
@@ -738,12 +819,12 @@ def step_heldout_dir(state: SetupState) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 6 — Lean detection
+# Step 7 - Lean detection
 # ---------------------------------------------------------------------------
 
 
 def step_lean(state: SetupState) -> bool:
-    _heading(6, 7, "Lean reinsurance (optional)")
+    _heading(7, 8, "Lean reinsurance (optional)")
     ok, missing = io.probe_lean_toolchain()
     if ok:
         _console.print(
@@ -760,12 +841,12 @@ def step_lean(state: SetupState) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 7 — auto-prune
+# Step 8 - auto-prune
 # ---------------------------------------------------------------------------
 
 
 def step_auto_prune(state: SetupState) -> bool:
-    _heading(7, 7, "Auto-prune (suggest_pause_low_strength)")
+    _heading(8, 8, "Auto-prune (suggest_pause_low_strength)")
     _console.print(
         "  By default, low-strength branches are SUGGESTED for pause but\n"
         "  not actually paused. Set RESEARCH_AGENT_AUTO_PRUNE=1 to let the\n"
@@ -796,6 +877,7 @@ def run_wizard(state: SetupState) -> int:
     steps = [
         step_sanity,
         step_repo_root,
+        step_agent_host,
         step_embed_backend,
         step_seed_corpus,
         step_heldout_dir,

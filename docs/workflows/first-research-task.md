@@ -10,8 +10,10 @@ This walkthrough assumes you already have `uv sync` complete and the repository 
 Open two terminals from the repository root.
 
 ```powershell
-# Terminal A: the Claude Code REPL (from the repo root)
+# Terminal A: the selected agent host (from the repo root)
 claude
+# Or, if setup selected codex/both:
+codex
 
 # Terminal B: the cockpit TUI (from the repo root)
 uv run python -m cockpit.tui

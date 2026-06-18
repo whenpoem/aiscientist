@@ -8,6 +8,7 @@ state machine. Step probes are unit-tested directly via ``_setup_io``.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from claudescientist.setup import (
     SetupState,
     main,
     run_wizard,
+    step_agent_host,
     step_auto_prune,
     step_embed_backend,
     step_heldout_dir,
@@ -132,6 +134,15 @@ def test_probe_npx_finds_executable_when_present(monkeypatch, tmp_path):
     assert result.detail == str(fake)
 
 
+def test_probe_codex_finds_executable_when_present(monkeypatch, tmp_path):
+    fake = tmp_path / "codex.exe"
+    fake.write_text("")
+    monkeypatch.setattr(io.shutil, "which", lambda name: str(fake) if name == "codex" else None)
+    result = io.probe_codex()
+    assert result.ok is True
+    assert result.detail == str(fake)
+
+
 def test_probe_lean_reports_missing_tools(monkeypatch):
     monkeypatch.setattr(io.shutil, "which", lambda name: None)
     ok, missing = io.probe_lean_toolchain()
@@ -217,6 +228,37 @@ def test_step_repo_root_fails_without_claude_dir(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     state = _make_state(tmp_path)
     assert step_repo_root(state) is False
+
+
+def test_step_agent_host_defaults_to_claude(fake_repo, monkeypatch):
+    monkeypatch.delenv("CLAUDESCIENTIST_SETUP_AGENT_HOST", raising=False)
+    state = _make_state(fake_repo)
+    assert step_agent_host(state) is True
+    assert state.env_updates["CLAUDESCIENTIST_AGENT_HOST"] == "claude"
+
+
+def test_step_agent_host_codex_generates_project_adapter(fake_repo, monkeypatch):
+    agents = fake_repo / ".claude" / "agents"
+    skills = fake_repo / ".claude" / "skills" / "demo"
+    agents.mkdir(parents=True)
+    skills.mkdir(parents=True)
+    (agents / "researcher.md").write_text(
+        "---\nname: researcher\ndescription: Research helper.\n---\n\nRead only.\n",
+        encoding="utf-8",
+    )
+    (skills / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Demo skill.\n---\n\nRun demo.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAUDESCIENTIST_SETUP_AGENT_HOST", "codex")
+    state = _make_state(fake_repo)
+
+    assert step_agent_host(state) is True
+    assert state.env_updates["CLAUDESCIENTIST_AGENT_HOST"] == "codex"
+    codex_config = tomllib.loads((fake_repo / ".codex" / "config.toml").read_text())
+    assert "memory" in codex_config["mcp_servers"]
+    assert (fake_repo / ".codex" / "agents" / "researcher.toml").exists()
+    assert (fake_repo / ".agents" / "skills" / "demo" / "SKILL.md").exists()
 
 
 def test_step_embed_backend_writes_env_update_for_default(fake_repo, monkeypatch):
@@ -502,7 +544,7 @@ def test_step_auto_prune_on_via_env(fake_repo, monkeypatch):
 
 
 def test_run_wizard_writes_env_with_all_defaults(fake_repo, monkeypatch):
-    """The non-interactive happy path should leave a .env with the four
+    """The non-interactive happy path should leave a .env with setup-owned
     keys setup owns, all populated from defaults."""
     monkeypatch.delenv("CLAUDESCIENTIST_SETUP_BACKEND", raising=False)
     monkeypatch.setenv("CLAUDESCIENTIST_SETUP_BACKEND", "mock")
@@ -512,6 +554,7 @@ def test_run_wizard_writes_env_with_all_defaults(fake_repo, monkeypatch):
     rc = run_wizard(state)
     assert rc == 0
     env = io.read_env_file(state.env_path)
+    assert env.get("CLAUDESCIENTIST_AGENT_HOST") == "claude"
     assert env.get("RESEARCH_AGENT_EMBED_BACKEND") == "mock"
     assert "RESEARCH_AGENT_HELDOUT_DIR" in env
 

@@ -141,6 +141,14 @@ def probe_claude() -> ProbeResult:
     return ProbeResult(ok=False, detail="claude not on PATH (install Claude Code)")
 
 
+def probe_codex() -> ProbeResult:
+    """Soft probe for the Codex CLI host."""
+    path = shutil.which("codex")
+    if path:
+        return ProbeResult(ok=True, detail=path)
+    return ProbeResult(ok=False, detail="codex not on PATH (install Codex)")
+
+
 def probe_npx() -> ProbeResult:
     """Soft probe for the OpenAlex literature MCP."""
     path = shutil.which("npx")
@@ -363,6 +371,7 @@ __all__ = [
     "probe_python",
     "probe_uv",
     "probe_claude",
+    "probe_codex",
     "probe_npx",
     "probe_hf_mirror",
     "probe_lean_toolchain",

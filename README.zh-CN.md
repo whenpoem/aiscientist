@@ -6,9 +6,9 @@
 
 > English version: [README.md](README.md)
 
-ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样东西：记住你试过什么、验证你的数字是否靠谱、给你一个终端仪表盘让你实时盯着研究进展、随时插手。
+ClaudeScientist 给 Claude Code 或 Codex 装上了 AI 科研系统普遍缺少的几样东西：记住你试过什么、验证你的数字是否靠谱、给你一个终端仪表盘让你实时盯着研究进展、随时插手。
 
-你丢给 Claude 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
+你丢给 agent 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
 
 **当前版本**：v5.0.0 —— 仪表盘变成「活动流式」研究监控。屏幕顶部是**阶段栏**（`idle / explore / select / experiment / verify / prove / review / narrate` 八态),从 `cockpit_events` 实时推断;主面板是**活动卡**(一张卡 = 一个研究动作——一次 BT 锦标赛、一次证明诊断、一次 Lean 尝试),取代原来的事件流水;新的 **Focus tab** 列出 agent 当下在搞的节点。原有事件流被保留为底部可折叠的**审计日志**(`A` 切换)。新增两个可选 MCP 原子工具:`cockpit__set_phase` 和 `cockpit__narrate`,让 SOP 驱动的 agent 在分支点显式标注上下文,而不耦合到 cockpit 的渲染细节。**无 schema 迁移**——阶段 / 焦点 / 活动卡都是 `cockpit_events` 之上的纯函数派生。详见 [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md) 和 [architecture.zh-CN.md §14](docs/architecture.zh-CN.md#14-cockpit-activity-streaming-v50)。
 
@@ -28,8 +28,8 @@ ClaudeScientist 给 Claude Code 装上了 AI 科研系统普遍缺少的几样�
 
 | 角色 | 在哪里 | 干什么 |
 |---|---|---|
-| **Claude Code** | 终端 A | 研究主力：理解你的问题，调工具，写代码跑实验 |
-| **MCP 服务器** | 后台进程 | 给 Claude 提供工具——记忆、验证、文献检索、证明生成 |
+| **Claude Code / Codex** | 终端 A | 研究主力：理解你的问题，调工具，写代码跑实验 |
+| **MCP 服务器** | 后台进程 | 给 agent 提供工具——记忆、验证、文献检索、证明生成 |
 | **Hooks** | 启动时自动加载 | 每次工具调用前后自动跑安全检查（拦截数据泄漏、记录溯源） |
 | **Cockpit TUI** | 终端 B | 实时显示状态；你可以在这里批准、否决、改方向 |
 | **SQLite** | `.research-agent/state.db` | 所有状态都在这一个文件里：假说、证据、评分、指标、事件 |
@@ -53,7 +53,12 @@ uv sync
 uv run python -m claudescientist.setup
 ```
 
-向导会一步步引导你完成 embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
+向导会一步步引导你完成 agent host 选择（`claude`、`codex` 或 `both`）、embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
+
+非交互式设置可以指定 `CLAUDESCIENTIST_SETUP_AGENT_HOST=codex` 或
+`CLAUDESCIENTIST_SETUP_AGENT_HOST=both`。Codex 适配是项目本地的：setup
+会从现有 Claude Code 资产生成 `.codex/config.toml`、`.codex/agents/*.toml`
+以及 `.agents/skills/` 下的仓库技能。
 
 文献检索依赖两个外部 MCP。arXiv 通过 `uv tool run arxiv-mcp-server`
 启动；OpenAlex 通过 `npx -y openalex-research-mcp` 启动，所以如果要用
@@ -74,6 +79,9 @@ uv run python scripts/seed_proof_failures.py
 ```powershell
 # 终端 A: Claude Code（在仓库根目录）
 claude
+
+# 或终端 A: Codex（setup 选择 codex/both 后）
+codex
 
 # 终端 B: cockpit TUI（在仓库根目录）
 uv run python -m cockpit.tui
