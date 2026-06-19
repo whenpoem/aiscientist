@@ -79,7 +79,7 @@ class CockpitSettings:
     reduced_motion: bool = False
     # v4.1.0a4 additions: per-pane display preferences. event_wrap controls
     # whether the event RichLog soft-wraps long payloads (True = readable
-    # default, False = legacy single-line). tree_compact strips BT/Elo from
+    # default, False = legacy single-line). tree_compact strips BT from
     # tree labels so node text gets the column width — power users can flip
     # back with `i`. wide_subpreset is a -1/0/+1 nudge on the wide-layout
     # tree column ratio: 0 keeps the v4.1.0a0 default (1:2:2), -1 narrows

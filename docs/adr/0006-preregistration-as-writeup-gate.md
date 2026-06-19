@@ -26,13 +26,13 @@ needed the same mechanical guarantee for trustworthy numeric claims.
 Introduce a preregistration mechanism with the following rules:
 
 - `preregister(hypothesis_id, metric_name, direction, threshold,
-  mc_correction='bh', alpha=0.05, ...)` writes a row to
+  mc_correction='bonferroni', alpha=0.05, ...)` writes a row to
   `ver_preregistrations` with `status='open'`. This must happen **before**
   the experiment runs.
 - `resolve_preregistration(prereg_id, observed_value, observed_p_value)`
   freezes the verdict (`met` or `missed`). Multiple-comparison correction
   applies based on the count of *currently open* prereg rows:
-  - `bh`: accepted for v3.0 compatibility, but currently an alias for the
+  - `bh`: accepted for old v3.0 rows and callers, then treated as the
     Bonferroni-style calculation below. It is **not** rank-based
     Benjamini-Hochberg.
   - `bonferroni`: alpha / max(1, open_count); raw p multiplied by

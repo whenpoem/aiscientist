@@ -132,7 +132,7 @@ Fetch the canonical comparison prompt for a pair of hypotheses. Does not perform
 **When to use**: as the first half of a BT comparison, paired with `record_judgement`.
 
 #### `record_judgement(a_node_id, b_node_id, winner_node_id, reason="", k_factor=32.0, weight=1.0, source="llm_judge")`
-Record a comparison and **dual-write**: it updates the legacy Elo on `mem_nodes.elo_score`, appends to `mem_judgements`, and applies an online BT update on `mem_bt_ratings`. Emits `bt_rating_updated`.
+Record a comparison and update the BT leaderboard. For old database readers it also keeps the legacy Elo/judgement rows in sync. Emits `bt_rating_updated`.
 
 **Returns**: `{"judgement_id": <int>, "elo": {...}, "bt": {...}}`
 
@@ -318,8 +318,8 @@ The only legitimate access path to held-out data. Reserves budget *before* execu
 
 ### Preregistration
 
-#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bh")`
-Lock the falsification target for a confirmatory hypothesis before promoting results to main claims. Exploratory runs may exist before this, but they must stay labelled exploratory. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bh`, `bonferroni`, `none`; current `bh` and `bonferroni` modes are v3.0-compatible aliases for the same Bonferroni-style calculation. Emits `prereg_locked`.
+#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bonferroni")`
+Lock the falsification target for a confirmatory hypothesis before promoting results to main claims. Exploratory runs may exist before this, but they must stay labelled exploratory. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bonferroni`, `none`, or the legacy alias `bh`; new `bh` inputs are stored as `bonferroni`, and existing `bh` rows resolve through the same Bonferroni-style calculation. Emits `prereg_locked`.
 
 **Returns**: `{"prereg_id": "prereg_...", "status": "open", ...}`
 

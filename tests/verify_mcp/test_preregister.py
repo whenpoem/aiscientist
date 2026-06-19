@@ -11,7 +11,6 @@ def test_preregister_locks_and_lists(workspace):
         threshold=0.85,
         seed_count=3,
         alpha=0.05,
-        mc_correction="bh",
     )
     assert result["status"] == "open"
     assert result["prereg_id"].startswith("prereg_")
@@ -20,6 +19,7 @@ def test_preregister_locks_and_lists(workspace):
     assert len(rows) == 1
     assert rows[0]["status"] == "open"
     assert rows[0]["metric_name"] == "acc"  # normalized
+    assert rows[0]["mc_correction"] == "bonferroni"
 
 
 def test_preregister_validates_inputs(workspace):
@@ -105,7 +105,7 @@ def test_resolve_marks_missed_when_below_threshold(workspace):
     assert resolved["status"] == "missed"
 
 
-def test_bh_alias_tightens_alpha_with_more_open_rows(workspace):
+def test_bonferroni_tightens_alpha_with_more_open_rows(workspace):
     impl = workspace["verify_mcp.impl"]
 
     locked = []
@@ -117,7 +117,7 @@ def test_bh_alias_tightens_alpha_with_more_open_rows(workspace):
                 direction="higher_better",
                 threshold=0.5,
                 alpha=0.05,
-                mc_correction="bh",
+                mc_correction="bonferroni",
             )
         )
 
@@ -126,7 +126,7 @@ def test_bh_alias_tightens_alpha_with_more_open_rows(workspace):
         observed_value=0.6,
         observed_p_value=0.04,
     )
-    # The v3.0-compatible "bh" alias uses 0.05/4 = 0.0125 here.
+    # Four open rows tighten alpha to 0.05/4 = 0.0125 here.
     assert first["status"] == "missed"
     assert first["adjusted_p_value"] == 0.16
     assert first["adjusted_alpha"] <= 0.05 / 4 + 1e-9
@@ -138,6 +138,50 @@ def test_bh_alias_tightens_alpha_with_more_open_rows(workspace):
     )
     # 3 open rows now (we just resolved one), so alpha is 0.05/3.
     assert last["status"] == "met"
+
+
+def test_legacy_bh_alias_canonicalizes_for_new_rows(workspace):
+    impl = workspace["verify_mcp.impl"]
+
+    locked = impl.preregister(
+        hypothesis_id="hyp_old",
+        metric_name="acc",
+        direction="higher_better",
+        threshold=0.5,
+        mc_correction="bh",
+    )
+    row = impl.list_preregistrations()[0]
+    assert row["prereg_id"] == locked["prereg_id"]
+    assert row["mc_correction"] == "bonferroni"
+
+
+def test_legacy_bh_rows_still_resolve(workspace):
+    impl = workspace["verify_mcp.impl"]
+    db = workspace["verify_mcp.db"]
+
+    locked = impl.preregister(
+        hypothesis_id="hyp_old_db",
+        metric_name="acc",
+        direction="higher_better",
+        threshold=0.5,
+    )
+    con = db._connect()
+    try:
+        con.execute(
+            "UPDATE ver_preregistrations SET mc_correction = 'bh' WHERE prereg_id = ?",
+            (locked["prereg_id"],),
+        )
+    finally:
+        con.close()
+
+    resolved = impl.resolve_preregistration(
+        prereg_id=locked["prereg_id"],
+        observed_value=0.6,
+        observed_p_value=0.01,
+    )
+    assert resolved["ok"] is True
+    assert resolved["status"] == "met"
+    assert resolved["mc_correction"] == "bh"
 
 
 def test_double_resolve_returns_already_resolved(workspace):

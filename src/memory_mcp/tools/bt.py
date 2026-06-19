@@ -210,7 +210,7 @@ def judge_hypotheses(
     hypothesis_b_id: str,
     criteria: list[str] | None = None,
 ) -> dict:
-    """Build a pairwise judging prompt for Elo-based hypothesis selection."""
+    """Build a pairwise judging prompt for BT hypothesis selection."""
     criteria = criteria or ["novelty", "feasibility", "falsifiability"]
     con = _connect()
     try:
@@ -248,7 +248,7 @@ def record_judgement(
     reason: str = "",
     k_factor: float = 32.0,
 ) -> dict:
-    """Store a pairwise judgement and update Elo scores.
+    """Store a pairwise judgement and update ranking scores.
 
     Dual-writes to the legacy Elo column (`mem_nodes.elo_score`) AND the
     new BT ledger via `_bt_apply_comparison`. New code should prefer

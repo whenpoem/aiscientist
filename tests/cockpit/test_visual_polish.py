@@ -116,7 +116,7 @@ def test_tree_prefix_uses_kind_icon_lookup(workspace):
 # ---------------------------------------------------------------------------
 
 
-def test_tree_compact_label_omits_bt_and_elo(workspace):
+def test_tree_compact_label_omits_bt(workspace):
     from cockpit.data import GraphNode
 
     pane = HypothesisTreePane(compact=True)
@@ -139,7 +139,7 @@ def test_tree_compact_label_omits_bt_and_elo(workspace):
     assert "Tune dropout" in label
 
 
-def test_tree_detailed_label_includes_bt_and_elo(workspace):
+def test_tree_detailed_label_includes_bt_only(workspace):
     from cockpit.data import GraphNode
 
     pane = HypothesisTreePane(compact=False)
@@ -157,7 +157,7 @@ def test_tree_detailed_label_includes_bt_and_elo(workspace):
         bt_n_comparisons=12,
     )
     label = pane._label_for(node).plain
-    assert "elo" in label.lower()
+    assert "elo" not in label.lower()
     assert "bt" in label.lower()
 
 

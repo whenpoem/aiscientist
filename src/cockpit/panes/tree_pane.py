@@ -33,7 +33,7 @@ class HypothesisTreePane(Tree[str]):
         self.auto_expand = False
         self.node_lookup: dict[str, object] = {}
         self._visible_ids: list[str] = []
-        # When True, _label_for omits BT/Elo suffix so node text owns the
+        # When True, _label_for omits the BT suffix so node text owns the
         # column. The detail pane still shows the full stats so nothing is
         # hidden — it's a relocation, not a removal.
         self._compact = compact
@@ -88,7 +88,7 @@ class HypothesisTreePane(Tree[str]):
             cursor.collapse()
 
     def set_compact(self, compact: bool) -> None:
-        """Toggle BT/Elo suffix in tree labels. Triggers a full reload so
+        """Toggle BT suffix in tree labels. Triggers a full reload so
         existing rows redraw with the new style; relies on the caller to
         pass the current GraphSnapshot via load_graph afterwards."""
         self._compact = bool(compact)
@@ -261,13 +261,12 @@ class HypothesisTreePane(Tree[str]):
         title.append(self._short_id(node.node_id), style=self._style_for(node))
         title.append(" ")
         title.append(node.text)
-        # In compact mode (default) the BT/Elo numerics live in the detail
-        # pane, freeing column width for node text. The `i` key flips this
-        # back for power-user scanning.
+        # In compact mode (default) BT numerics live in the detail pane,
+        # freeing column width for node text. The `i` key flips this back
+        # for power-user scanning.
         if not self._compact:
             if node.kind == "hypothesis":
                 title.append(self._bt_suffix(node), style="dim")
-                title.append(f"  elo {node.elo_score:.0f}", style="dim")
             elif node.kind == "proof_skeleton":
                 title.append(self._bt_suffix(node), style="dim")
         if node.bt_status == "paused":

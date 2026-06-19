@@ -25,7 +25,7 @@ def test_full_prereg_flow_smoke(workspace):
         threshold=0.85,
         seed_count=3,
         alpha=0.05,
-        mc_correction="bh",
+        mc_correction="bonferroni",
     )
     assert locked["status"] == "open"
 

@@ -23,7 +23,7 @@ This skill supports "decide before observing" for confirmatory claims. Explorato
 | `threshold` | number that separates `met` from `missed` | `0.85` |
 | `seed_count` | how many seeds the seed_perturb call must use | `5` |
 | `alpha` | nominal Type-I error rate | `0.05` |
-| `mc_correction` | `bh` (Benjamini-Hochberg, default), `bonferroni`, or `none` | `bh` |
+| `mc_correction` | `bonferroni` (default), `none`, or legacy alias `bh` | `bonferroni` |
 | `heldout_dataset` | optional dataset name to be queried via query_heldout | `mnist-test` |
 
 ## Workflow
@@ -37,7 +37,7 @@ This skill supports "decide before observing" for confirmatory claims. Explorato
 
 The engineer or verifier later calls `mcp__verify__resolve_preregistration(prereg_id, observed_value, observed_p_value)`. The verdict is **frozen** at that point and:
 
-- BH / Bonferroni correction is applied across all currently-open rows (so locking many preregs at once intentionally tightens alpha).
+- Bonferroni correction is applied across all currently-open rows (so locking many preregs at once intentionally tightens alpha). The old `bh` value is accepted as a compatibility alias for existing workflows.
 - `prereg_resolved` events fire into the cockpit.
 - The `reviewer` agent later treats confirmatory manuscript claims with status != `met` as blockers. Exploratory claims must be labelled as exploratory in the manuscript.
 

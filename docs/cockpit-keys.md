@@ -83,7 +83,7 @@ pane.
 |---|---|---|
 | Audit log (was Events) | `w` | Toggle soft-wrap on event payloads — the binding travels with the widget; open/focus the audit log with `a` / `A` first |
 | Audit log (was Events) | `t` | Toggle relative vs absolute timestamp rendering |
-| Tree | `i` | Toggle compact tree labels (show / hide BT + Elo) |
+| Tree | `i` | Toggle compact tree labels (show / hide BT stats) |
 
 ## Modal / filter input
 

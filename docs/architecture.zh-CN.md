@@ -118,7 +118,7 @@ cockpit 始终允许手动刷新，但常规工作流不应当依赖手动刷新
 替换了 v0.2 Elo 层的假说排名系统。
 
 - **`mem_bt_ratings` 是假说排名的权威来源。** 优先使用 `strength`、`strength_var`、`n_comparisons` 三列。
-- **`mem_nodes.elo_score` 仅作为向后兼容保留。** 已有的 v0.2 读者（以及树形面板末尾的展示）仍然可以读取它，但任何新功能都不应依赖它。
+- **`mem_nodes.elo_score` 仅作为向后兼容保留。** 已有的 v0.2 读者仍然可以读取它，但 cockpit 不再展示它，任何新功能都不应依赖它。
 - **`record_judgement` 是唯一进行双写的工具**——它同时写入旧的 `mem_judgements` 和新的 `mem_bt_comparisons`。`update_bt_rating` 只写新表，但接受更广泛的来源类型：`llm_judge`、`metric_diff`、`user_intervention`、`reviewer_critic`。
 - **`suggest_pause_low_strength` 默认是 dry-run。** 环境变量 `RESEARCH_AGENT_AUTO_PRUNE=1` 是唯一能把 `mem_bt_ratings.status` 改为 `paused` 的方式。`resume_branch` 是唯一允许的反向操作。
 - **`replay_counterfactual` 不得修改 `mem_nodes` 或 `mem_bt_ratings`。** 它只向 `mem_replay_branches` 写入一行。
@@ -146,7 +146,7 @@ var_j := 1 / (1/var_j + fisher)
 
 - **发布级核心数值声明要可追溯**到 pin 过的 provenance、稳定的 seed 证据，以及 confirmatory 声明的 `ver_preregistrations.prereg_id`（其 `status='met'`）。探索性结果必须标注为探索性，而非静默提升为主结论。`reviewer` 子智能体在写作阶段会强制执行这条规则。
 - **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希。** `refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。stale provenance 会阻断发布级核心声明；没有 DAG 的记录会作为 unchecked 审计信息暴露出来，不能自动当成 freshness 证明。
-- **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正。** 一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。当前 v3.0 兼容实现中，`bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的别名。
+- **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正。** 一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。新的预注册行使用 `bonferroni`；旧的 `bh` 行仍作为同一套 Bonferroni-style 计算的兼容别名被接受。
 
 ### 11. 资源账本（v3.0）
 

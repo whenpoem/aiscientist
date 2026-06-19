@@ -52,10 +52,10 @@ Critical invariants
 - ``refresh_claim`` re-hashes input files and emits ``prov_dag_stale``
   events; stale provenance is a publication blocker, while missing DAG rows are
   surfaced as unchecked audit context rather than silently treated as proof.
-- ``bh`` and ``bonferroni`` currently share the same Bonferroni-style
-  correction in ``resolve_preregistration``; it runs against the count of
-  *currently open* prereg rows, so the more open at once, the stricter the
-  alpha each one must clear.
+- New preregistration rows use ``bonferroni`` by default. Old ``bh`` rows
+  remain readable and resolve through the same Bonferroni-style correction;
+  it runs against the count of *currently open* prereg rows, so the more
+  open at once, the stricter the alpha each one must clear.
 - ``budget_consume`` is the only writer of ``res_budget_ledger``;
   ``budget_check`` is read-only and must address the same
   ``(scope, resource, window)`` triple that consume writes.

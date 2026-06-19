@@ -155,10 +155,7 @@ def node_detail_sections(
 
     # ---- overview ------------------------------------------------------
     overview_lines = [
-        (
-            f"{t(lang, 'status')}: {state_label(lang, node.state)}  "
-            f"{t(lang, 'elo')}: {node.elo_score:.1f}"
-        ),
+        f"{t(lang, 'status')}: {state_label(lang, node.state)}",
         t(
             lang,
             "support_refute",

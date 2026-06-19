@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS ver_preregistrations (
   heldout_dataset TEXT,
   seed_count INTEGER NOT NULL DEFAULT 5,
   alpha REAL NOT NULL DEFAULT 0.05,
-  mc_correction TEXT NOT NULL DEFAULT 'bh'
+  mc_correction TEXT NOT NULL DEFAULT 'bonferroni'
     CHECK(mc_correction IN ('bh', 'bonferroni', 'none')),
   observed_value REAL,
   observed_p_value REAL,

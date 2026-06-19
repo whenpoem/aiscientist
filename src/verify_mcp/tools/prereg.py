@@ -17,8 +17,15 @@ def _new_prereg_id() -> str:
     return f"prereg_{uuid4().hex[:12]}"
 
 
+def _canonical_mc_correction(mc_correction: str) -> str:
+    """Store new prereg rows with the current correction name."""
+    if mc_correction == "bh":
+        return "bonferroni"
+    return mc_correction
+
+
 def _bonferroni_style_threshold(open_count: int, alpha: float) -> float:
-    """Return the v3.0-compatible per-open-prereg alpha threshold."""
+    """Return the per-open-prereg Bonferroni alpha threshold."""
     return float(alpha) / max(1, int(open_count))
 
 
@@ -51,7 +58,7 @@ def preregister(
     heldout_dataset: str | None = None,
     seed_count: int = 5,
     alpha: float = 0.05,
-    mc_correction: str = "bh",
+    mc_correction: str = "bonferroni",
 ) -> dict:
     """Lock a falsification target for a hypothesis before running experiments."""
     if direction not in VALID_DIRECTIONS:
@@ -60,6 +67,7 @@ def preregister(
         raise ValueError(
             f"mc_correction must be one of {sorted(VALID_MC_CORRECTIONS)}"
         )
+    stored_mc_correction = _canonical_mc_correction(mc_correction)
     if seed_count <= 0:
         raise ValueError("seed_count must be positive")
     if not (0.0 < float(alpha) < 1.0):
@@ -83,7 +91,7 @@ def preregister(
                 heldout_dataset,
                 int(seed_count),
                 float(alpha),
-                mc_correction,
+                stored_mc_correction,
             ),
         )
         _emit_event(
@@ -96,7 +104,7 @@ def preregister(
                 "direction": direction,
                 "threshold": threshold,
                 "alpha": alpha,
-                "mc_correction": mc_correction,
+                "mc_correction": stored_mc_correction,
             },
         )
     return {
@@ -116,9 +124,10 @@ def resolve_preregistration(
 ) -> dict:
     """Compare a locked prereg against observed evidence and freeze its verdict.
 
-    The current ``bh`` and ``bonferroni`` modes are v3.0-compatible aliases:
-    both operate on the count of *currently open* prereg rows so each new
-    resolve sees a stricter alpha until the open queue drains.
+    ``bonferroni`` operates on the count of *currently open* prereg rows
+    so each resolve sees a stricter alpha until the open queue drains.
+    Old rows may still contain ``bh``; that legacy value resolves through
+    the same Bonferroni-style path.
     ``observed_p_value`` is optional; when it is not supplied the verdict only
     uses the threshold.
     """
@@ -151,9 +160,7 @@ def resolve_preregistration(
         alpha = float(row["alpha"])
         mc_correction = row["mc_correction"]
 
-        if mc_correction == "bonferroni":
-            adjusted_alpha = _bonferroni_style_threshold(open_count, alpha)
-        elif mc_correction == "bh":
+        if mc_correction in {"bonferroni", "bh"}:
             adjusted_alpha = _bonferroni_style_threshold(open_count, alpha)
         else:
             adjusted_alpha = alpha

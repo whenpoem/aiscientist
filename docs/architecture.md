@@ -118,7 +118,7 @@ The cockpit can always be manually refreshed, but normal workflows should not de
 The hypothesis-ranking system that replaced the v0.2 Elo layer.
 
 - **`mem_bt_ratings` is the canonical hypothesis ranking.** Prefer `strength`, `strength_var`, and `n_comparisons`.
-- **`mem_nodes.elo_score` is kept only for backwards compatibility.** Existing v0.2 readers (and the tree pane's trailing display) can still read it, but no new feature should depend on it.
+- **`mem_nodes.elo_score` is kept only for backwards compatibility.** Existing v0.2 readers can still read it, but the cockpit no longer displays it and no new feature should depend on it.
 - **`record_judgement` is the only tool that dual-writes** to both the legacy `mem_judgements` ledger and the new `mem_bt_comparisons` ledger. `update_bt_rating` writes only to the new ledger but accepts a broader source set: `llm_judge`, `metric_diff`, `user_intervention`, `reviewer_critic`.
 - **`suggest_pause_low_strength` is dry-run by default.** The env var `RESEARCH_AGENT_AUTO_PRUNE=1` is the only way to flip `mem_bt_ratings.status` to `paused`. `resume_branch` is the only allowed reversal path.
 - **`replay_counterfactual` must not mutate `mem_nodes` or `mem_bt_ratings`.** It only writes a row to `mem_replay_branches`.
@@ -146,7 +146,7 @@ These two mechanisms together enforce trustworthy numeric claims.
 
 - **Publication-critical numeric claims should trace** to pinned provenance, stable seed evidence, and, when the claim is confirmatory, a `ver_preregistrations.prereg_id` whose `status='met'`. Exploratory results must be labelled as exploratory instead of being silently promoted to main claims.
 - **`ver_provenance_dag.input_hashes` records the sha256 of every cited input file at record time.** `refresh_claim` re-hashes and emits `prov_dag_stale` events on drift. Stale provenance blocks publication-critical claims; missing DAG rows are reported as unchecked audit context rather than proof of freshness.
-- **`resolve_preregistration` computes correction against the count of currently-open prereg rows.** Locking many preregs at once intentionally tightens alpha, which is conservative multiple-comparison behavior. In the current v3.0-compatible implementation, `bh` and `bonferroni` are aliases for the same Bonferroni-style calculation.
+- **`resolve_preregistration` computes correction against the count of currently-open prereg rows.** Locking many preregs at once intentionally tightens alpha, which is conservative multiple-comparison behavior. New prereg rows use `bonferroni`; old `bh` rows remain accepted as a compatibility alias for the same Bonferroni-style calculation.
 
 ### 11. Resource ledger (v3.0)
 

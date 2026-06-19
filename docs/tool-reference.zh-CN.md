@@ -132,7 +132,7 @@
 **何时使用**：作为 BT 比较的前半段，与 `record_judgement` 配对使用。
 
 #### `record_judgement(a_node_id, b_node_id, winner_node_id, reason="", k_factor=32.0, weight=1.0, source="llm_judge")`
-记录一次比较，并执行**双写**：更新 `mem_nodes.elo_score` 上的旧 Elo、追加到 `mem_judgements`、对 `mem_bt_ratings` 应用一次在线 BT 更新。发出 `bt_rating_updated` 事件。
+记录一次比较，并更新 BT 排行榜。为了照顾旧数据库读者，它也会同步维护旧 Elo / judgement 行。发出 `bt_rating_updated` 事件。
 
 **返回**：`{"judgement_id": <int>, "elo": {...}, "bt": {...}}`
 
@@ -318,8 +318,8 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ### 预注册
 
-#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bh")`
-为确认性假说锁定证伪目标，避免把探索性结果直接提升为主结论。探索性运行可以先存在，但必须保持探索性标注。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bh`、`bonferroni`、`none`；当前 `bh` 和 `bonferroni` 是同一套 Bonferroni-style 计算的 v3.0 兼容别名。发出 `prereg_locked`。
+#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bonferroni")`
+为确认性假说锁定证伪目标，避免把探索性结果直接提升为主结论。探索性运行可以先存在，但必须保持探索性标注。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bonferroni`、`none`，或旧别名 `bh`；新的 `bh` 输入会按 `bonferroni` 存储，已有 `bh` 行仍按同一套 Bonferroni-style 计算解析。发出 `prereg_locked`。
 
 **返回**：`{"prereg_id": "prereg_...", "status": "open", ...}`
 

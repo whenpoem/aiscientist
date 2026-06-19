@@ -51,8 +51,7 @@ def test_node_detail_text_includes_kind_status_and_text():
     assert "H_a3f1" in title
     assert "Tune dropout for ViT" in body.plain
     assert "active" in body.plain
-    # Elo line is always present.
-    assert "Elo" in body.plain or "elo" in body.plain.lower()
+    assert "Elo" not in body.plain
 
 
 def test_node_detail_text_unknown_id_returns_hint():

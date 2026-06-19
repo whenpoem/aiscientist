@@ -1703,8 +1703,8 @@ class CockpitApp(App[None]):
         new_state = not self._settings.tree_compact
         self._settings.tree_compact = new_state
         self.tree_pane.set_compact(new_state)
-        # Reload labels so the BT/Elo suffix appears or disappears
-        # immediately. We pass the cached graph + current filter through
+        # Reload labels so the BT suffix appears or disappears immediately.
+        # We pass the cached graph + current filter through
         # the canonical entry point so node selection is preserved.
         self.selected_node_id = self.tree_pane.load_graph(
             self.graph,
