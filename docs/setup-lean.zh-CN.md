@@ -67,9 +67,9 @@ lake build
 
 ## 4. 启用 lean MCP 服务器
 
-**不用改 settings.json**。`.claude/settings.json` 里已经登记了一个 `lean`
-mcpServer，命令是 `scripts/lean_mcp_or_noop.py`。这个 wrapper 启动时检测
-PATH 上是否有 `lake` 和 `lean`：
+如果用 Claude Code，**不用改 settings.json**。`.claude/settings.json`
+里已经登记了一个 `lean` mcpServer，命令是 `scripts/lean_mcp_or_noop.py`。
+这个 wrapper 启动时检测 PATH 上是否有 `lake` 和 `lean`：
 
 - 工具链已装 → wrapper 把 stdio 透传给真正的 `lean-lsp-mcp`
 - 工具链未装 → wrapper 干净退出（exit 0）+ 一行 stderr 说明；
@@ -78,6 +78,23 @@ PATH 上是否有 `lake` 和 `lean`：
 所以做完 1-3 节后**直接重启 Claude Code 就行**，lean MCP 自动上线。
 不需要手改 JSON、不需要重命名。以后哪天卸了 elan / mathlib，wrapper
 自动回退，不用做任何撤销。
+
+如果用 Codex，setup 也会把 Lean MCP 写进 `.codex/config.toml`，但默认
+保持关闭，避免没装 Lean 时 Codex 启动报错。做完 1-3 节后，把：
+
+```toml
+[mcp_servers.lean]
+enabled = false
+```
+
+改成：
+
+```toml
+[mcp_servers.lean]
+enabled = true
+```
+
+然后从仓库根目录重启 Codex。
 
 ## 4b. 预先放入 spike 模板
 

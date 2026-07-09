@@ -108,7 +108,8 @@ $research-sop 研究 per-head dropout 是否有助于 ViT 扩展
 如果看不到 `$research-sop`，先确认 `.agents/skills/research-sop/SKILL.md`
 已经生成，然后重启 Codex，并从仓库根目录启动。
 
-Lean 形式化验证需要单独安装——见 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md)。
+Lean 形式化验证需要单独安装。Codex 生成的 Lean MCP 默认是关闭的，等你按文档
+装好后再打开。见 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md)。
 
 ## 接下来读什么
 

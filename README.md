@@ -112,7 +112,9 @@ In Codex, do not type `/research-sop`; that form is for Claude Code.
 If `$research-sop` does not appear, check that `.agents/skills/research-sop/SKILL.md`
 exists, restart Codex, and start it from the repository root.
 
-Lean formal verification is a separate opt-in setup — see [`docs/setup-lean.md`](docs/setup-lean.md).
+Lean formal verification is a separate opt-in setup. In Codex, the generated
+Lean MCP server is disabled until you finish that setup. See
+[`docs/setup-lean.md`](docs/setup-lean.md).
 
 ## Where to go next
 

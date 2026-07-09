@@ -63,12 +63,34 @@ The cache fetch is the long step. It only happens once per Lean toolchain versio
 
 ## 4. Activate the lean MCP server
 
-**No settings.json edit needed.** `.claude/settings.json` already registers a `lean` mcpServer that runs `scripts/lean_mcp_or_noop.py`. That wrapper checks at startup whether `lake` and `lean` are on PATH:
+For Claude Code, **no settings.json edit is needed.** `.claude/settings.json`
+already registers a `lean` mcpServer that runs `scripts/lean_mcp_or_noop.py`.
+That wrapper checks at startup whether `lake` and `lean` are on PATH:
 
 - toolchain present → wrapper forwards stdio to the real `lean-lsp-mcp`
 - toolchain absent → wrapper exits 0 with a clear stderr note; the prover agent sees no `mcp__lean__*` tools and aborts cleanly
 
-So once sections 1-3 are done, **just restart the Claude Code session** and the lean MCP comes online automatically. No JSON edits, no rename. If you ever uninstall elan / mathlib, the wrapper auto-falls-back; nothing to undo.
+So once sections 1-3 are done, **just restart the Claude Code session** and the
+lean MCP comes online automatically. No JSON edits, no rename. If you ever
+uninstall elan / mathlib, the wrapper auto-falls-back; nothing to undo.
+
+For Codex, setup writes the same Lean MCP entry to `.codex/config.toml`, but
+keeps it disabled by default so a missing Lean install does not break Codex
+startup. After sections 1-3 are done, change:
+
+```toml
+[mcp_servers.lean]
+enabled = false
+```
+
+to:
+
+```toml
+[mcp_servers.lean]
+enabled = true
+```
+
+Then restart Codex from the repository root.
 
 ## 4b. Pre-load the spike templates
 

@@ -54,6 +54,8 @@ _MCP_SERVERS: tuple[tuple[str, str, list[str], dict[str, str]], ...] = (
     ("openalex", "npx", ["-y", "openalex-research-mcp"], {}),
 )
 
+_CODEX_DISABLED_MCP_SERVERS = {"lean"}
+
 _HOOKS: tuple[tuple[str, str | None, str, str], ...] = (
     (
         "PreToolUse",
@@ -160,7 +162,16 @@ def build_codex_config(repo_root: Path) -> str:
         "",
     ]
     for name, command, args, env in _MCP_SERVERS:
-        blocks.extend(_mcp_server_block(name, command, args, env, cwd))
+        blocks.extend(
+            _mcp_server_block(
+                name,
+                command,
+                args,
+                env,
+                cwd,
+                enabled=name not in _CODEX_DISABLED_MCP_SERVERS,
+            )
+        )
     for event, matcher, hook_name, status in _HOOKS:
         blocks.extend(_hook_block(event, matcher, hook_name, status))
     return "\n".join(blocks).rstrip() + "\n"
@@ -172,15 +183,22 @@ def _mcp_server_block(
     args: list[str],
     env: dict[str, str],
     cwd: str,
+    *,
+    enabled: bool,
 ) -> list[str]:
-    lines = [
-        f"[mcp_servers.{name}]",
-        'enabled = true',
-        f"command = {_toml_string(command)}",
-        f"args = {_toml_string_list(args)}",
-        f"cwd = {_toml_string(cwd)}",
-        "startup_timeout_sec = 30.0",
-    ]
+    lines: list[str] = []
+    if name == "lean":
+        lines.append("# Lean is optional. Enable this after completing docs/setup-lean.md.")
+    lines.extend(
+        [
+            f"[mcp_servers.{name}]",
+            f"enabled = {_toml_bool(enabled)}",
+            f"command = {_toml_string(command)}",
+            f"args = {_toml_string_list(args)}",
+            f"cwd = {_toml_string(cwd)}",
+            "startup_timeout_sec = 30.0",
+        ]
+    )
     if env:
         lines.append(f"env = {_toml_inline_table(env)}")
     lines.append("")
@@ -322,6 +340,10 @@ def _toml_string_list(values: list[str]) -> str:
 def _toml_inline_table(values: dict[str, str]) -> str:
     parts = [f"{key} = {_toml_string(value)}" for key, value in sorted(values.items())]
     return "{ " + ", ".join(parts) + " }"
+
+
+def _toml_bool(value: bool) -> str:
+    return "true" if value else "false"
 
 
 def _toml_multiline_literal(value: str) -> str:

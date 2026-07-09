@@ -30,6 +30,7 @@ def test_build_codex_config_is_valid_toml(tmp_path):
     ]
     assert config["mcp_servers"]["memory"]["cwd"] == str(repo.resolve())
     assert config["mcp_servers"]["lean"]["cwd"] == str(repo.resolve())
+    assert config["mcp_servers"]["lean"]["enabled"] is False
     assert config["mcp_servers"]["openalex"]["command"] == "npx"
     pre_tool_hooks = config["hooks"]["PreToolUse"]
     assert any("leakage_guard" in item["hooks"][0]["command"] for item in pre_tool_hooks)
@@ -61,6 +62,7 @@ def test_ensure_codex_support_syncs_agents_and_skills(tmp_path):
     assert repo / ".codex" / "config.toml" in result.written
     codex_config = tomllib.loads((repo / ".codex" / "config.toml").read_text())
     assert codex_config["mcp_servers"]["memory"]["cwd"] == str(repo.resolve())
+    assert codex_config["mcp_servers"]["lean"]["enabled"] is False
     agent_text = (repo / ".codex" / "agents" / "researcher.toml").read_text(
         encoding="utf-8"
     )
