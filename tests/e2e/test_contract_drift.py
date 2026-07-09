@@ -96,6 +96,22 @@ def test_external_mcp_optional_edges_are_documented():
     assert "arxiv-mcp-server" in readme
 
 
+def test_fastmcp_stdio_entrypoints_keep_startup_output_quiet():
+    repo = _repo_root()
+    entrypoints = [
+        "src/memory_mcp/dev_server.py",
+        "src/memory_mcp/server.py",
+        "src/verify_mcp/dev_server.py",
+        "src/verify_mcp/server.py",
+        "src/prove_mcp/dev_server.py",
+        "src/prove_mcp/server.py",
+    ]
+
+    for rel_path in entrypoints:
+        text = (repo / rel_path).read_text(encoding="utf-8")
+        assert 'mcp.run(show_banner=False, log_level="ERROR")' in text
+
+
 def test_reports_directory_is_gitignored_by_default():
     repo = _repo_root()
     gitignore = (repo / ".gitignore").read_text(encoding="utf-8")
