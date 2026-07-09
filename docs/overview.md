@@ -15,10 +15,10 @@ Open two terminal windows side by side:
 
 ```
 ┌─────────────────────────┐  ┌─────────────────────────┐
-│  Terminal A: Claude     │  │  Terminal B: Cockpit    │
-│  Code (chat with AI)    │  │  TUI (monitor/intervene)│
+│  Terminal A: Agent CLI  │  │  Terminal B: Cockpit    │
+│  Claude Code or Codex   │  │  TUI (monitor/intervene)│
 │                         │  │                         │
-│  > /research-sop ...    │  │  ┌─ Hypothesis tree ┐   │
+│  > /research-sop or $.. │  │  ┌─ Hypothesis tree ┐   │
 │  AI thinks, calls tools │  │  │ ▾ Q ViT scale    │   │
 │  AI writes/runs code    │  │  │   ▸ H_07 ...     │   │
 │                         │  │  │   ▸ H_08 ...     │   │
@@ -40,14 +40,14 @@ is doing" — but they answer different questions on different time
 scales. Knowing which to look at where keeps the dual-view from
 feeling redundant.
 
-| Aspect | Terminal A (Claude Code) | Terminal B (Cockpit) |
+| Aspect | Terminal A (Claude Code / Codex) | Terminal B (Cockpit) |
 |---|---|---|
 | Granularity | Each tool call, each thinking block | Research-phase, focus node, activity card |
 | Time scale | Real-time token-by-token | Last 30 minutes, phase-by-phase |
 | What it shows | Claude's natural-language response + tool I/O | Derived state: phase strip + activity cards + focus tab |
 | What it does NOT show | Cross-trunk current focus, recent reject/redirect interventions | Claude's specific thinking text, file diffs |
 | What you do here | Reply to Claude, Ctrl-C to halt | Reject / approve / inject note / queue intervention |
-| Storage | Claude Code session (.claude.json) | `.research-agent/state.db` (single SQLite) |
+| Storage | Agent-host session state | `.research-agent/state.db` (single SQLite) |
 | User posture | Conversation partner | Research lead — eyes-up monitor |
 
 If Terminal A is what the AI just *did*, Terminal B is what's *true*
@@ -67,7 +67,10 @@ about the research right now. Both are useful; they don't overlap.
 
 ## 4. End-to-end flow of a research task
 
-Suppose you type into Terminal A: `/research-sop investigate whether dropout affects ViT scaling`
+In Codex, suppose you type into Terminal A:
+`$research-sop investigate whether dropout affects ViT scaling`.
+In Claude Code, use `/research-sop investigate whether dropout affects ViT scaling`
+for the same workflow.
 
 ```mermaid
 sequenceDiagram

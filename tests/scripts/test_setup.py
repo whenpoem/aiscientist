@@ -16,6 +16,7 @@ import pytest
 from claudescientist import _setup_io as io
 from claudescientist.setup import (
     SetupState,
+    _print_cheatsheet,
     main,
     run_wizard,
     step_agent_host,
@@ -259,6 +260,42 @@ def test_step_agent_host_codex_generates_project_adapter(fake_repo, monkeypatch)
     assert "memory" in codex_config["mcp_servers"]
     assert (fake_repo / ".codex" / "agents" / "researcher.toml").exists()
     assert (fake_repo / ".agents" / "skills" / "demo" / "SKILL.md").exists()
+
+
+def test_codex_cheatsheet_explains_skill_invocation(fake_repo, capsys):
+    state = _make_state(fake_repo)
+    state.env_updates["CLAUDESCIENTIST_AGENT_HOST"] = "codex"
+
+    _print_cheatsheet(state)
+
+    captured = capsys.readouterr().out
+    assert "codex -C ." in captured
+    assert "/skills" in captured
+    assert "$research-sop" in captured
+    assert "/research-sop" in captured
+    assert ".agents/skills/research-sop/SKILL.md" in captured
+
+
+def test_user_facing_docs_explain_host_specific_skill_invocation():
+    repo = Path(__file__).resolve().parents[2]
+    for relative in (
+        "README.md",
+        "README.zh-CN.md",
+        "docs/workflows/first-research-task.md",
+        "docs/workflows/first-research-task.zh-CN.md",
+        "docs/overview.md",
+        "docs/overview.zh-CN.md",
+        "src/cockpit/i18n.py",
+    ):
+        text = (repo / relative).read_text(encoding="utf-8")
+        assert "$research-sop" in text
+    for relative in (
+        "docs/workflows/first-research-task.md",
+        "docs/workflows/first-research-task.zh-CN.md",
+        "src/cockpit/i18n.py",
+    ):
+        text = (repo / relative).read_text(encoding="utf-8")
+        assert "/research-sop" in text
 
 
 def test_step_embed_backend_writes_env_update_for_default(fake_repo, monkeypatch):

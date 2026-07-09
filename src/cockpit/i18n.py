@@ -54,14 +54,18 @@ TEXT: dict[str, dict[str, str]] = {
         "welcome_body": (
             "This cockpit shows live research state. It is empty right now\n"
             "because no research session has run yet.\n\n"
-            "To get started, in another terminal:\n\n"
+            "To get started, in another terminal from this repo:\n\n"
             "  >  claude\n\n"
-            "Then ask Claude to run a research task, for example:\n\n"
+            "Or, if you selected Codex during setup:\n\n"
+            "  >  codex -C .\n\n"
+            "Then start a research task. In Claude Code, use:\n\n"
             "  >  /research-sop investigate whether dropout affects ViT scaling\n\n"
+            "In Codex, use:\n\n"
+            "  >  $research-sop investigate whether dropout affects ViT scaling\n\n"
             "This cockpit fills in as the agent works."
         ),
         "welcome_hint": "[ Enter ] continue  ·  [ ? ] open walkthrough  ·  [ q ] quit",
-        "no_hypotheses": "No hypotheses yet. Trigger a research session in Claude Code.",
+        "no_hypotheses": "No hypotheses yet. Trigger a research session in the agent terminal.",
         "select_hint": "Select a hypothesis with j/k or click.",
         "no_events": "No events yet.",
         "risks": "Risks",
@@ -473,15 +477,19 @@ TEXT: dict[str, dict[str, str]] = {
         "welcome_title": "欢迎使用 ClaudeScientist",
         "welcome_body": (
             "这里是实时研究状态视图。当前为空，因为还没跑过研究会话。\n\n"
-            "要开始，在另一个终端里：\n\n"
+            "要开始，在这个仓库的另一个终端里：\n\n"
             "  >  claude\n\n"
-            "让 Claude 跑一个研究任务，例如：\n\n"
+            "如果 setup 选择的是 Codex，则用：\n\n"
+            "  >  codex -C .\n\n"
+            "然后启动研究任务。Claude Code 里使用：\n\n"
             "  >  /research-sop 调查 dropout 是否影响 ViT 的 scaling\n\n"
+            "Codex 里使用：\n\n"
+            "  >  $research-sop 调查 dropout 是否影响 ViT 的 scaling\n\n"
             "agent 工作的过程中，这里会陆续被填满。"
         ),
         "welcome_hint": "[ Enter ] 继续  ·  [ ? ] 打开教程  ·  [ q ] 退出",
         "filter_suffix": "过滤: {value}",
-        "no_hypotheses": "还没有假设。请先在 Claude Code 中启动研究任务。",
+        "no_hypotheses": "还没有假设。请先在 agent 终端中启动研究任务。",
         "select_hint": "用 j/k 或鼠标选择一个假设。",
         "no_events": "暂无事件。",
         "risks": "风险",

@@ -85,7 +85,7 @@ Run — open two terminals from the repo root:
 claude
 
 # Or Terminal A: Codex (after choosing codex/both in setup)
-codex
+codex -C .
 
 # Terminal B: cockpit TUI (from the repo root)
 uv run python -m cockpit.tui
@@ -100,6 +100,18 @@ uv run python -m cockpit.tui --lang zh
 ```
 
 Press `L` inside the TUI to toggle English / Chinese labels.
+
+In Codex, invoke ClaudeScientist skills with `/skills` or by mentioning the
+skill with `$`, for example:
+
+```text
+$research-sop investigate whether per-head dropout helps ViT scaling
+```
+
+Do not type `/research-sop`; `/...` is the Codex slash-command namespace.
+Claude Code users should continue to use the existing `/research-sop` shortcut.
+If `$research-sop` does not appear, verify that `.agents/skills/research-sop/SKILL.md`
+exists, restart Codex, and launch it from the repository root.
 
 Lean formal verification is a separate opt-in setup — see [`docs/setup-lean.md`](docs/setup-lean.md).
 

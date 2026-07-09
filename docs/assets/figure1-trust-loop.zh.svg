@@ -1,0 +1,549 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 800"
+     font-family="Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Hiragino Sans GB', sans-serif">
+  <!--
+    ClaudeScientist · Figure 1 (中文版,黑板架构)
+
+    一句话回答:
+      ClaudeScientist 怎么在「不强加流水线」的前提下,跑出一个可信的研究闭环?
+
+    读图顺序:
+      1. state.db 是中心 —— 一块共享的 SQLite 黑板
+      2. 几个 MCP 模块 + reviewer agent 是「兄弟」,不是「先后步骤」 ——
+         每个模块只跟 state.db 通信,模块之间从不互相直接调用
+      3. 「研究流程」(explore→select→...→review)是建议顺序,不是强制 ——
+         驾驶舱里的人可以随时打断、重定向、replay
+
+    颜色编码(模块 ↔ state.db 中对应的 swim lane):
+      memory_mcp     · 钢蓝
+      verify_mcp     · 森林绿
+      prove_mcp      · 梅子紫(可选,v4.0+)
+      cockpit+hooks  · 琥珀
+      res_* 基础设施 · 中性灰
+  -->
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#324a66"/>
+    </marker>
+    <marker id="arrIn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a7da3" fill-opacity="0.85"/>
+    </marker>
+    <marker id="arrAmb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b06520"/>
+    </marker>
+    <marker id="arrGrn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f7a4a"/>
+    </marker>
+    <marker id="arrRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a83a3a"/>
+    </marker>
+    <marker id="arrPur" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b548a"/>
+    </marker>
+
+    <symbol id="human" viewBox="0 0 26 34" overflow="visible">
+      <circle cx="13" cy="6" r="4.5" fill="#ffffff" stroke="#b06520" stroke-width="1.5"/>
+      <line x1="13" y1="10.5" x2="13" y2="24" stroke="#b06520" stroke-width="1.5"/>
+      <path d="M 13 14 L 5 19 M 13 14 L 21 5" fill="none" stroke="#b06520" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M 13 24 L 6 33 M 13 24 L 20 33" fill="none" stroke="#b06520" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+
+    <symbol id="eye" viewBox="0 0 26 16" overflow="visible">
+      <path d="M 1 8 Q 13 0 25 8 Q 13 16 1 8 z" fill="#ffffff" stroke="#b06520" stroke-width="1.4"/>
+      <circle cx="13" cy="8" r="3.2" fill="#b06520"/>
+    </symbol>
+
+    <symbol id="doc" viewBox="0 0 16 20" overflow="visible">
+      <path d="M 0 0 L 11 0 L 16 5 L 16 20 L 0 20 z M 11 0 L 11 5 L 16 5" fill="#ffffff" stroke="currentColor" stroke-width="1"/>
+      <line x1="3" y1="9"  x2="13" y2="9"  stroke="currentColor" stroke-width="0.7"/>
+      <line x1="3" y1="12" x2="13" y2="12" stroke="currentColor" stroke-width="0.7"/>
+      <line x1="3" y1="15" x2="9"  y2="15" stroke="currentColor" stroke-width="0.7"/>
+    </symbol>
+
+    <symbol id="db" viewBox="0 0 30 32" overflow="visible">
+      <ellipse cx="15" cy="4" rx="13" ry="3.5" fill="#ffffff" stroke="#3d5471" stroke-width="1.4"/>
+      <path d="M 2 4 L 2 27 Q 2 31 15 31 Q 28 31 28 27 L 28 4" fill="#ffffff" stroke="#3d5471" stroke-width="1.4"/>
+      <ellipse cx="15" cy="11" rx="13" ry="3.5" fill="none" stroke="#3d5471" stroke-width="0.9" stroke-opacity="0.6"/>
+      <ellipse cx="15" cy="20" rx="13" ry="3.5" fill="none" stroke="#3d5471" stroke-width="0.9" stroke-opacity="0.6"/>
+    </symbol>
+
+    <symbol id="lock" viewBox="0 0 18 22" overflow="visible">
+      <path d="M 4 10 L 4 6 Q 4 1 9 1 Q 14 1 14 6 L 14 10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <rect x="2" y="10" width="14" height="11" rx="2" fill="currentColor" fill-opacity="0.15" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="9" cy="15.5" r="1.4" fill="currentColor"/>
+    </symbol>
+
+    <symbol id="shield" viewBox="0 0 20 24" overflow="visible">
+      <path d="M 10 1 L 18 4 L 18 12 Q 18 19 10 23 Q 2 19 2 12 L 2 4 z" fill="currentColor" fill-opacity="0.15" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M 6 12 L 9 15 L 14 9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    </symbol>
+
+    <symbol id="check" viewBox="0 0 18 18" overflow="visible">
+      <circle cx="9" cy="9" r="8" fill="#3a7d54" fill-opacity="0.18" stroke="#3a7d54" stroke-width="1.4"/>
+      <path d="M 5 9 L 8 12 L 13 6" fill="none" stroke="#3a7d54" stroke-width="1.8"/>
+    </symbol>
+
+    <symbol id="xmark" viewBox="0 0 18 18" overflow="visible">
+      <circle cx="9" cy="9" r="8" fill="#b04545" fill-opacity="0.18" stroke="#b04545" stroke-width="1.4"/>
+      <path d="M 5.5 5.5 L 12.5 12.5 M 12.5 5.5 L 5.5 12.5" fill="none" stroke="#b04545" stroke-width="1.8"/>
+    </symbol>
+
+    <symbol id="scales" viewBox="0 0 32 30" overflow="visible">
+      <line x1="16" y1="3" x2="16" y2="23" stroke="currentColor" stroke-width="1.7"/>
+      <line x1="3"  y1="7" x2="29" y2="7" stroke="currentColor" stroke-width="1.7"/>
+      <path d="M 1 7 L 9 7 L 5 15 z"    fill="#3a7d54" fill-opacity="0.22" stroke="#3a7d54" stroke-width="1.4"/>
+      <path d="M 23 7 L 31 7 L 27 15 z" fill="#b04545" fill-opacity="0.22" stroke="#b04545" stroke-width="1.4"/>
+      <line x1="10" y1="23" x2="22" y2="23" stroke="currentColor" stroke-width="1.7"/>
+      <line x1="14" y1="23" x2="14" y2="28" stroke="currentColor" stroke-width="1.7"/>
+      <line x1="18" y1="23" x2="18" y2="28" stroke="currentColor" stroke-width="1.7"/>
+    </symbol>
+
+    <symbol id="tree-small" viewBox="0 0 60 38" overflow="visible">
+      <line x1="30" y1="10" x2="10" y2="32" stroke="currentColor" stroke-width="1.1"/>
+      <line x1="30" y1="10" x2="22" y2="32" stroke="currentColor" stroke-width="1.1"/>
+      <line x1="30" y1="10" x2="38" y2="32" stroke="currentColor" stroke-width="1.1"/>
+      <line x1="30" y1="10" x2="50" y2="32" stroke="currentColor" stroke-width="1.1"/>
+      <circle cx="30" cy="7"  r="4.5" fill="#ffffff" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="10" cy="34" r="3.5" fill="#ffffff" stroke="currentColor" stroke-width="1.1"/>
+      <circle cx="22" cy="34" r="3.5" fill="#ffffff" stroke="currentColor" stroke-width="1.1"/>
+      <circle cx="38" cy="34" r="3.5" fill="#ffffff" stroke="currentColor" stroke-width="1.1"/>
+      <circle cx="50" cy="34" r="3.5" fill="#ffffff" stroke="currentColor" stroke-width="1.1"/>
+    </symbol>
+  </defs>
+
+  <rect width="1500" height="800" fill="#ffffff"/>
+
+  <!-- ====================================================================
+       驾驶舱
+       ==================================================================== -->
+  <g id="cockpit">
+    <rect x="30" y="14" width="1440" height="64" rx="12"
+          fill="#e89a52" fill-opacity="0.055"
+          stroke="#c97f3a" stroke-opacity="0.65" stroke-width="1.3"
+          stroke-dasharray="6 4"/>
+
+    <use href="#human" x="48" y="22" width="20" height="30"/>
+    <use href="#eye"   x="76" y="34" width="22" height="14"/>
+    <text x="108" y="34" font-size="11" font-weight="700" fill="#b06520" letter-spacing="0.6">驾驶舱</text>
+    <text x="108" y="50" font-size="9.5" fill="#9a6a40" opacity="0.9">监控 · 操纵</text>
+
+    <line x1="240" y1="24" x2="240" y2="68" stroke="#c97f3a" stroke-opacity="0.32" stroke-width="1"/>
+
+    <g transform="translate(258, 32)">
+      <text x="0" y="0" font-size="9" font-weight="700" fill="#b06520" letter-spacing="0.5">当前阶段</text>
+      <text x="0" y="14" font-size="8.5" fill="#9a6a40" opacity="0.75">由 cockpit_events 派生</text>
+
+      <rect x="0" y="22" width="76" height="22" rx="11" fill="#d68943"/>
+      <text x="38" y="37" text-anchor="middle" font-size="11" font-weight="700" fill="#ffffff">select</text>
+      <text x="86" y="37" font-size="10" fill="#9a6a40" opacity="0.85">8 个阶段中第 3 个 · 可循环、可重定向</text>
+    </g>
+
+    <line x1="800" y1="24" x2="800" y2="68" stroke="#c97f3a" stroke-opacity="0.32" stroke-width="1"/>
+
+    <g transform="translate(820, 32)">
+      <text x="0" y="0" font-size="9" font-weight="700" fill="#b06520" letter-spacing="0.5">焦点节点</text>
+      <text x="0" y="16" font-size="11" font-weight="600" fill="#5b3a1c">BT 锦标  ·  H₃ 领先</text>
+      <text x="0" y="30" font-size="9" fill="#7a5436" opacity="0.85">12 / 15 场  ·  θ = 1.04 ± 0.31</text>
+    </g>
+
+    <line x1="1235" y1="24" x2="1235" y2="68" stroke="#c97f3a" stroke-opacity="0.32" stroke-width="1"/>
+
+    <g transform="translate(1255, 32)">
+      <text x="0" y="0" font-size="9" font-weight="700" fill="#b06520" letter-spacing="0.5">介入</text>
+      <text x="0" y="14" font-size="8" fill="#9a6a40" opacity="0.75">写入 cockpit_interventions</text>
+
+      <rect x="0"  y="20" width="26" height="22" rx="5" fill="#ffffff" stroke="#c97f3a" stroke-opacity="0.75" stroke-width="1.2"/>
+      <text x="13" y="35" text-anchor="middle" font-weight="700" font-size="11" fill="#b06520">N</text>
+      <text x="32" y="35" font-size="10" fill="#7a5436">拒绝</text>
+
+      <rect x="100" y="20" width="26" height="22" rx="5" fill="#ffffff" stroke="#c97f3a" stroke-opacity="0.75" stroke-width="1.2"/>
+      <text x="113" y="35" text-anchor="middle" font-weight="700" font-size="11" fill="#b06520">Y</text>
+      <text x="132" y="35" font-size="10" fill="#7a5436">通过</text>
+    </g>
+  </g>
+
+  <!-- ====================================================================
+       MCP 模块行(互为兄弟,颜色编码)
+       ==================================================================== -->
+
+  <g id="mod-memory" transform="translate(30, 92)">
+    <rect x="0" y="0" width="350" height="310" rx="12"
+          fill="#ffffff"
+          stroke="#4a6b8a" stroke-opacity="0.65" stroke-width="1.4"/>
+    <path d="M 0 12 Q 0 0 12 0 L 338 0 Q 350 0 350 12 L 350 40 L 0 40 z"
+          fill="#4a6b8a"/>
+    <text x="16" y="26" font-size="13" font-weight="700" fill="#ffffff" font-family="ui-monospace, Consolas, monospace">memory_mcp</text>
+    <text x="334" y="26" text-anchor="end" font-size="9" font-weight="600" fill="#ffffff" fill-opacity="0.75" letter-spacing="0.4">检索 · 提议 · 排序</text>
+
+    <g transform="translate(14, 50)">
+      <rect x="0" y="0" width="322" height="36" rx="5"
+            fill="#b06520" fill-opacity="0.06"
+            stroke="#b06520" stroke-opacity="0.4" stroke-width="0.9"
+            stroke-dasharray="3 2"/>
+      <text x="10" y="14" font-size="9" font-weight="700" fill="#b06520" letter-spacing="0.5">Q  ·  研究问题</text>
+      <text x="10" y="29" font-size="10" font-style="italic" fill="#5b3a1c">"Dropout 能改善 ViT 的 scaling laws 吗?"</text>
+    </g>
+
+    <line x1="14" y1="94" x2="336" y2="94" stroke="#4a6b8a" stroke-opacity="0.18" stroke-width="0.7" stroke-dasharray="3 3"/>
+
+    <g transform="translate(16, 102)" color="#4a6b8a">
+      <use href="#xmark" x="0" y="0" width="16" height="16"/>
+      <text x="24" y="8" font-size="10.5" font-weight="700" fill="#3d5471">失败记忆</text>
+      <text x="24" y="20" font-size="9" fill="#3d5471" opacity="0.85">按签名匹配到 3 次历史失败</text>
+    </g>
+
+    <g transform="translate(16, 140)" color="#4a6b8a">
+      <use href="#doc" x="0" y="0" width="14" height="18"/>
+      <text x="24" y="8" font-size="10.5" font-weight="700" fill="#3d5471">文献索引</text>
+      <text x="24" y="20" font-size="9" fill="#3d5471" opacity="0.85">检索到 2 篇  ·  arXiv + OpenAlex</text>
+    </g>
+
+    <g transform="translate(16, 178)" color="#4a6b8a">
+      <use href="#tree-small" x="0" y="-2" width="44" height="26"/>
+      <text x="52" y="8" font-size="10.5" font-weight="700" fill="#3d5471">假设树</text>
+      <text x="52" y="20" font-size="9" fill="#3d5471" opacity="0.85">派生 5 个假设</text>
+    </g>
+
+    <g transform="translate(16, 220)">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#3d5471">Bradley–Terry 锦标</text>
+      <g transform="translate(0, 8)">
+        <text x="0"  y="10" font-size="9" fill="#3d5471" font-family="ui-monospace, Consolas, monospace">H₃</text>
+        <rect x="18" y="3" width="80" height="8" fill="#d68943" fill-opacity="0.75"/>
+        <line x1="60" y1="1" x2="60" y2="13" stroke="#b06520" stroke-width="1"/>
+        <line x1="98" y1="1" x2="98" y2="13" stroke="#b06520" stroke-width="1"/>
+
+        <text x="0"  y="26" font-size="9" fill="#3d5471" font-family="ui-monospace, Consolas, monospace">H₁</text>
+        <rect x="18" y="19" width="40" height="8" fill="#4a6b8a" fill-opacity="0.55"/>
+        <line x1="22" y1="17" x2="22" y2="29" stroke="#3d5471" stroke-width="1"/>
+        <line x1="58" y1="17" x2="58" y2="29" stroke="#3d5471" stroke-width="1"/>
+
+        <text x="0"  y="42" font-size="9" fill="#3d5471" font-family="ui-monospace, Consolas, monospace">H₂</text>
+        <rect x="18" y="35" width="22" height="8" fill="#4a6b8a" fill-opacity="0.55"/>
+        <line x1="12" y1="33" x2="12" y2="45" stroke="#3d5471" stroke-width="1"/>
+        <line x1="40" y1="33" x2="40" y2="45" stroke="#3d5471" stroke-width="1"/>
+
+        <text x="118" y="42" font-size="9" fill="#5a7da3" opacity="0.7" font-style="italic">θ ± LUCB</text>
+      </g>
+    </g>
+
+    <line x1="16" y1="278" x2="334" y2="278" stroke="#4a6b8a" stroke-opacity="0.25" stroke-width="0.7"/>
+    <text x="16"  y="294" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#4a6b8a" font-weight="700">⇅ mem_*</text>
+    <text x="334" y="294" text-anchor="end" font-size="9" fill="#4a6b8a" opacity="0.8">读 &amp; 写</text>
+  </g>
+
+  <g id="mod-verify" transform="translate(400, 92)">
+    <rect x="0" y="0" width="380" height="310" rx="12"
+          fill="#ffffff"
+          stroke="#2f7a4a" stroke-opacity="0.65" stroke-width="1.4"/>
+    <path d="M 0 12 Q 0 0 12 0 L 368 0 Q 380 0 380 12 L 380 40 L 0 40 z"
+          fill="#2f7a4a"/>
+    <text x="16" y="26" font-size="13" font-weight="700" fill="#ffffff" font-family="ui-monospace, Consolas, monospace">verify_mcp</text>
+    <text x="364" y="26" text-anchor="end" font-size="9" font-weight="600" fill="#ffffff" fill-opacity="0.75" letter-spacing="0.4">锁定 · 守卫 · 钉定 · 溯源</text>
+
+    <g transform="translate(16, 56)" color="#2f7a4a">
+      <use href="#lock" x="0" y="0" width="16" height="20"/>
+      <text x="24" y="9" font-size="10.5" font-weight="700" fill="#2f7a4a">预注册</text>
+      <text x="24" y="22" font-size="9" fill="#3d5471">AUROC  ↑  τ &gt; 0.80   α = 0.05   BH-FDR</text>
+    </g>
+
+    <g transform="translate(16, 100)">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#2f7a4a">seed_perturb  ·  k = 5</text>
+      <g transform="translate(0, 8)">
+        <line x1="0" y1="9" x2="120" y2="9" stroke="#2f7a4a" stroke-opacity="0.35" stroke-width="0.9"/>
+        <line x1="60" y1="1" x2="60" y2="17" stroke="#2f7a4a" stroke-opacity="0.4" stroke-width="0.8" stroke-dasharray="2 2"/>
+        <circle cx="48" cy="9" r="3" fill="#2f7a4a"/>
+        <circle cx="56" cy="9" r="3" fill="#2f7a4a"/>
+        <circle cx="60" cy="9" r="3" fill="#2f7a4a"/>
+        <circle cx="65" cy="9" r="3" fill="#2f7a4a"/>
+        <circle cx="74" cy="9" r="3" fill="#2f7a4a"/>
+        <text x="135" y="13" font-size="9" font-weight="700" fill="#2f7a4a">稳定  cv 0.04</text>
+      </g>
+    </g>
+
+    <g transform="translate(16, 146)" color="#2f7a4a">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#2f7a4a">溯源链</text>
+      <g transform="translate(0, 10)">
+        <circle cx="9"   cy="9" r="9" fill="#ffffff" stroke="#2f7a4a" stroke-width="1.2"/>
+        <text x="9"   y="12" text-anchor="middle" font-size="7.5" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a">code</text>
+        <line x1="18" y1="9" x2="32" y2="9" stroke="#2f7a4a" stroke-width="1"/>
+        <circle cx="41"  cy="9" r="9" fill="#ffffff" stroke="#2f7a4a" stroke-width="1.2"/>
+        <text x="41"  y="12" text-anchor="middle" font-size="7.5" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a">data</text>
+        <line x1="50" y1="9" x2="64" y2="9" stroke="#2f7a4a" stroke-width="1"/>
+        <circle cx="73"  cy="9" r="9" fill="#ffffff" stroke="#2f7a4a" stroke-width="1.2"/>
+        <text x="73"  y="12" text-anchor="middle" font-size="7.5" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a">seed</text>
+        <line x1="82" y1="9" x2="96" y2="9" stroke="#2f7a4a" stroke-width="1"/>
+        <circle cx="105" cy="9" r="9" fill="#ffffff" stroke="#2f7a4a" stroke-width="1.2"/>
+        <text x="105" y="12" text-anchor="middle" font-size="7.5" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a">run</text>
+        <line x1="114" y1="9" x2="128" y2="9" stroke="#2f7a4a" stroke-width="1"/>
+        <circle cx="137" cy="9" r="9" fill="#ffffff" stroke="#2f7a4a" stroke-width="1.2"/>
+        <text x="137" y="12" text-anchor="middle" font-size="7.5" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a">pin</text>
+        <line x1="146" y1="9" x2="162" y2="9" stroke="#2f7a4a" stroke-width="1.2"/>
+        <circle cx="172" cy="9" r="11" fill="#2f7a4a" fill-opacity="0.18" stroke="#2f7a4a" stroke-width="1.5"/>
+        <text x="172" y="12" text-anchor="middle" font-size="7.5" font-weight="700" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a">claim</text>
+
+        <text x="196" y="12" font-size="9" fill="#5a7da3" opacity="0.7" font-family="ui-monospace, Consolas, monospace">7f3a…b1d2</text>
+      </g>
+    </g>
+
+    <g transform="translate(16, 198)">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#2f7a4a">钉定结论  ·  基线公平</text>
+      <g transform="translate(0, 10)">
+        <text x="0"  y="10" font-size="9" fill="#3d5471">我方</text>
+        <rect x="46" y="3" width="160" height="9" fill="#2f7a4a" fill-opacity="0.7"/>
+        <text x="216" y="10" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#3d5471">0.84</text>
+
+        <text x="0"  y="28" font-size="9" fill="#3d5471">基线</text>
+        <rect x="46" y="21" width="120" height="9" fill="#4a6b8a" fill-opacity="0.5"/>
+        <text x="216" y="28" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#3d5471">0.78</text>
+
+        <text x="0"  y="46" font-size="9" fill="#3d5471">ΔFLOPs +2 %  ·  在容差内</text>
+        <use href="#check" x="280" y="38" width="14" height="14"/>
+      </g>
+    </g>
+
+    <line x1="16" y1="278" x2="364" y2="278" stroke="#2f7a4a" stroke-opacity="0.25" stroke-width="0.7"/>
+    <text x="16"  y="294" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#2f7a4a" font-weight="700">⇅ ver_*</text>
+    <text x="364" y="294" text-anchor="end" font-size="9" fill="#2f7a4a" opacity="0.8">读 &amp; 写</text>
+  </g>
+
+  <g id="mod-prove" transform="translate(800, 92)">
+    <rect x="0" y="0" width="240" height="310" rx="12"
+          fill="#ffffff"
+          stroke="#6b548a" stroke-opacity="0.65" stroke-width="1.4"/>
+    <path d="M 0 12 Q 0 0 12 0 L 228 0 Q 240 0 240 12 L 240 40 L 0 40 z"
+          fill="#6b548a"/>
+    <text x="16" y="26" font-size="13" font-weight="700" fill="#ffffff" font-family="ui-monospace, Consolas, monospace">prove_mcp</text>
+    <text x="224" y="26" text-anchor="end" font-size="9" font-weight="600" fill="#ffffff" fill-opacity="0.75" letter-spacing="0.4">可选 · v4.0+</text>
+
+    <g transform="translate(16, 58)" color="#6b548a">
+      <use href="#doc" x="0" y="0" width="14" height="18"/>
+      <text x="24" y="9" font-size="10.5" font-weight="700" fill="#6b548a">自然语言草稿</text>
+      <text x="24" y="22" font-size="9" fill="#3d5471">切段 · 诊断</text>
+    </g>
+
+    <g transform="translate(16, 106)">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#6b548a">Lean 4 验证器</text>
+      <rect x="0" y="8" width="208" height="60" rx="5" fill="#6b548a" fill-opacity="0.05" stroke="#6b548a" stroke-opacity="0.45" stroke-width="0.9"/>
+      <text x="10" y="26" font-size="9.5" font-family="ui-monospace, Consolas, monospace" fill="#3d5471">theorem stable_seed :</text>
+      <text x="10" y="40" font-size="9.5" font-family="ui-monospace, Consolas, monospace" fill="#3d5471">  ∀ s, |θ(s) − θ̄| ≤ 2σ</text>
+      <text x="10" y="58" font-size="9.5" font-family="ui-monospace, Consolas, monospace" font-weight="700" fill="#6b548a">  ⊢  已验证  ✓</text>
+    </g>
+
+    <g transform="translate(16, 196)" color="#6b548a">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#6b548a">分诊闸</text>
+      <text x="0" y="14" font-size="9" fill="#3d5471">仅在以下条件下启动 prover:</text>
+      <text x="0" y="26" font-size="9" fill="#3d5471">triage_for_formalization = ✓</text>
+    </g>
+
+    <line x1="16" y1="278" x2="224" y2="278" stroke="#6b548a" stroke-opacity="0.25" stroke-width="0.7"/>
+    <text x="16"  y="294" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#6b548a" font-weight="700">⇅ prove_*</text>
+    <text x="224" y="294" text-anchor="end" font-size="9" fill="#6b548a" opacity="0.8">读 &amp; 写</text>
+  </g>
+
+  <g id="mod-hooks" transform="translate(1060, 92)">
+    <rect x="0" y="0" width="410" height="310" rx="12"
+          fill="#ffffff"
+          stroke="#b06520" stroke-opacity="0.65" stroke-width="1.4"/>
+    <path d="M 0 12 Q 0 0 12 0 L 398 0 Q 410 0 410 12 L 410 40 L 0 40 z"
+          fill="#b06520"/>
+    <text x="16" y="26" font-size="13" font-weight="700" fill="#ffffff" font-family="ui-monospace, Consolas, monospace">cockpit  +  hooks</text>
+    <text x="394" y="26" text-anchor="end" font-size="9" font-weight="600" fill="#ffffff" fill-opacity="0.75" letter-spacing="0.4">观察 · 守护 · 操纵</text>
+
+    <g transform="translate(16, 58)" color="#b06520">
+      <use href="#shield" x="0" y="0" width="18" height="22"/>
+      <text x="28" y="9" font-size="10.5" font-weight="700" fill="#b06520">PreToolUse hook  ·  leakage_guard</text>
+      <text x="28" y="23" font-size="9" fill="#3d5471">拦截 /heldout 直读 — 拒绝并记录</text>
+    </g>
+
+    <g transform="translate(16, 102)" color="#b06520">
+      <g transform="translate(0, 8)">
+        <circle cx="0"   cy="0" r="3" fill="#ffffff" stroke="#b06520" stroke-width="1"/>
+        <circle cx="14"  cy="0" r="3" fill="#ffffff" stroke="#b06520" stroke-width="1"/>
+        <circle cx="28"  cy="0" r="4.5" fill="#d68943"/>
+        <circle cx="42"  cy="0" r="3" fill="#ffffff" stroke="#b06520" stroke-width="1"/>
+        <circle cx="56"  cy="0" r="3" fill="#ffffff" stroke="#b06520" stroke-width="1"/>
+        <line x1="-2" y1="0" x2="58" y2="0" stroke="#b06520" stroke-opacity="0.3" stroke-width="1"/>
+      </g>
+      <text x="74" y="11" font-size="10.5" font-weight="700" fill="#b06520">阶段由事件派生</text>
+      <text x="74" y="24" font-size="9" fill="#3d5471">无 schema 迁移 · 纯函数</text>
+    </g>
+
+    <g transform="translate(16, 152)" color="#b06520">
+      <rect x="0"  y="0" width="22" height="18" rx="4" fill="#ffffff" stroke="#b06520" stroke-opacity="0.7" stroke-width="1.1"/>
+      <text x="11" y="13" text-anchor="middle" font-weight="700" font-size="11" fill="#b06520">N</text>
+      <rect x="28" y="0" width="22" height="18" rx="4" fill="#ffffff" stroke="#b06520" stroke-opacity="0.7" stroke-width="1.1"/>
+      <text x="39" y="13" text-anchor="middle" font-weight="700" font-size="11" fill="#b06520">Y</text>
+      <text x="60" y="9" font-size="10.5" font-weight="700" fill="#b06520">用户按键</text>
+      <text x="60" y="22" font-size="9" fill="#3d5471">拒绝 / 通过 / 注入 — 下一轮采纳</text>
+    </g>
+
+    <g transform="translate(16, 200)">
+      <text x="0" y="0" font-size="10.5" font-weight="700" fill="#b06520">预算 &amp; 审计</text>
+      <text x="0" y="14" font-size="9" fill="#3d5471">res_budget_ledger  ·  res_heldout 查询</text>
+      <text x="0" y="26" font-size="9" fill="#3d5471">held-out 读受闸控 · 只返回指标</text>
+
+      <text x="0" y="46" font-size="9" fill="#3d5471">已用</text>
+      <rect x="60"  y="40" width="240" height="7" rx="2" fill="#b06520" fill-opacity="0.12"/>
+      <rect x="60"  y="40" width="150" height="7" rx="2" fill="#b06520" fill-opacity="0.7"/>
+      <text x="310" y="46" font-size="9" fill="#3d5471" font-family="ui-monospace, Consolas, monospace">5 / 8 种子</text>
+    </g>
+
+    <line x1="16" y1="278" x2="394" y2="278" stroke="#b06520" stroke-opacity="0.25" stroke-width="0.7"/>
+    <text x="16"  y="294" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#b06520" font-weight="700">⇅ cockpit_*  ·  ⇅ res_*</text>
+    <text x="394" y="294" text-anchor="end" font-size="9" fill="#b06520" opacity="0.8">读 &amp; 写</text>
+  </g>
+
+  <g id="rw-arrows" stroke-width="1.4" fill="none">
+    <g stroke="#4a6b8a">
+      <path d="M 175 404 L 175 432" marker-end="url(#arrIn)"/>
+      <path d="M 205 432 L 205 404" marker-end="url(#arrIn)"/>
+    </g>
+    <g stroke="#2f7a4a">
+      <path d="M 565 404 L 565 432" marker-end="url(#arrGrn)"/>
+      <path d="M 595 432 L 595 404" marker-end="url(#arrGrn)"/>
+    </g>
+    <g stroke="#6b548a">
+      <path d="M 905 404 L 905 432" marker-end="url(#arrPur)"/>
+      <path d="M 935 432 L 935 404" marker-end="url(#arrPur)"/>
+    </g>
+    <g stroke="#b06520">
+      <path d="M 1180 404 L 1180 432" marker-end="url(#arrAmb)"/>
+      <path d="M 1210 432 L 1210 404" marker-end="url(#arrAmb)"/>
+      <path d="M 1390 404 L 1390 432" marker-end="url(#arrAmb)"/>
+      <path d="M 1420 432 L 1420 404" marker-end="url(#arrAmb)"/>
+    </g>
+  </g>
+
+  <!-- ====================================================================
+       共享状态黑板
+       ==================================================================== -->
+  <g id="blackboard">
+    <rect x="30" y="440" width="1440" height="162" rx="14"
+          fill="#ffffff"
+          stroke="#324a66" stroke-opacity="0.55" stroke-width="1.4"
+          stroke-dasharray="6 4"/>
+
+    <use href="#db" x="46" y="452" width="34" height="40"/>
+    <text x="92" y="466" font-size="13" font-weight="700" fill="#1e293b" font-family="ui-monospace, Consolas, monospace">state.db</text>
+    <text x="92" y="482" font-size="9.5" fill="#5a7da3" opacity="0.85">单一 SQLite 文件  ·  WAL 模式  ·  共享黑板 — 模块在此协作,不走网络</text>
+
+    <line x1="46" y1="495" x2="1452" y2="495" stroke="#324a66" stroke-opacity="0.18" stroke-width="0.9" stroke-dasharray="3 3"/>
+
+    <g transform="translate(48, 502)">
+      <rect x="0" y="0" width="304" height="92" rx="6" fill="#4a6b8a" fill-opacity="0.07"/>
+      <text x="12" y="18" font-size="11" font-weight="700" fill="#4a6b8a" font-family="ui-monospace, Consolas, monospace">mem_*</text>
+      <text x="12" y="34" font-size="9" fill="#3d5471">nodes · edges · bt_ratings</text>
+      <text x="12" y="48" font-size="9" fill="#3d5471">failures · lit_papers · signatures</text>
+      <text x="12" y="62" font-size="9" fill="#3d5471">replay_branches(反事实)</text>
+      <text x="12" y="82" font-size="8.5" fill="#4a6b8a" opacity="0.8">归属 · memory_mcp</text>
+    </g>
+
+    <g transform="translate(368, 502)">
+      <rect x="0" y="0" width="320" height="92" rx="6" fill="#2f7a4a" fill-opacity="0.07"/>
+      <text x="12" y="18" font-size="11" font-weight="700" fill="#2f7a4a" font-family="ui-monospace, Consolas, monospace">ver_*</text>
+      <text x="12" y="34" font-size="9" fill="#3d5471">preregistrations · seed_runs</text>
+      <text x="12" y="48" font-size="9" fill="#3d5471">provenance · claims · fairness</text>
+      <text x="12" y="62" font-size="9" fill="#3d5471">drift_logs · refresh_history</text>
+      <text x="12" y="82" font-size="8.5" fill="#2f7a4a" opacity="0.8">归属 · verify_mcp</text>
+    </g>
+
+    <g transform="translate(704, 502)">
+      <rect x="0" y="0" width="220" height="92" rx="6" fill="#6b548a" fill-opacity="0.07"/>
+      <text x="12" y="18" font-size="11" font-weight="700" fill="#6b548a" font-family="ui-monospace, Consolas, monospace">prove_*</text>
+      <text x="12" y="34" font-size="9" fill="#3d5471">proof_drafts · segments</text>
+      <text x="12" y="48" font-size="9" fill="#3d5471">diagnostic_manifests</text>
+      <text x="12" y="62" font-size="9" fill="#3d5471">lean_attempts</text>
+      <text x="12" y="82" font-size="8.5" fill="#6b548a" opacity="0.8">归属 · prove_mcp(可选)</text>
+    </g>
+
+    <g transform="translate(940, 502)">
+      <rect x="0" y="0" width="280" height="92" rx="6" fill="#b06520" fill-opacity="0.07"/>
+      <text x="12" y="18" font-size="11" font-weight="700" fill="#b06520" font-family="ui-monospace, Consolas, monospace">cockpit_*</text>
+      <text x="12" y="34" font-size="9" fill="#3d5471">events(阶段从此派生)</text>
+      <text x="12" y="48" font-size="9" fill="#3d5471">interventions · snapshots</text>
+      <text x="12" y="62" font-size="9" fill="#3d5471">bookmarks · focus_pointers</text>
+      <text x="12" y="82" font-size="8.5" fill="#b06520" opacity="0.8">归属 · cockpit + hooks</text>
+    </g>
+
+    <g transform="translate(1236, 502)">
+      <rect x="0" y="0" width="216" height="92" rx="6" fill="#6b7280" fill-opacity="0.07"/>
+      <text x="12" y="18" font-size="11" font-weight="700" fill="#4a5560" font-family="ui-monospace, Consolas, monospace">res_*</text>
+      <text x="12" y="34" font-size="9" fill="#3d5471">budget_ledger</text>
+      <text x="12" y="48" font-size="9" fill="#3d5471">heldout · leakage_log</text>
+      <text x="12" y="62" font-size="9" fill="#3d5471">policy · audit</text>
+      <text x="12" y="82" font-size="8.5" fill="#4a5560" opacity="0.8">基础设施 · research-agent 核心</text>
+    </g>
+
+    <line x1="360"  y1="500" x2="360"  y2="596" stroke="#324a66" stroke-opacity="0.18" stroke-width="0.7" stroke-dasharray="3 3"/>
+    <line x1="696"  y1="500" x2="696"  y2="596" stroke="#324a66" stroke-opacity="0.18" stroke-width="0.7" stroke-dasharray="3 3"/>
+    <line x1="932"  y1="500" x2="932"  y2="596" stroke="#324a66" stroke-opacity="0.18" stroke-width="0.7" stroke-dasharray="3 3"/>
+    <line x1="1228" y1="500" x2="1228" y2="596" stroke="#324a66" stroke-opacity="0.18" stroke-width="0.7" stroke-dasharray="3 3"/>
+  </g>
+
+  <!-- ====================================================================
+       下游消费者
+       ==================================================================== -->
+  <g id="downstream">
+    <rect x="30" y="616" width="1440" height="74" rx="12"
+          fill="#324a66" fill-opacity="0.04"
+          stroke="#324a66" stroke-opacity="0.45" stroke-width="1.3"
+          stroke-dasharray="6 4"/>
+
+    <text x="48" y="636" font-size="11" font-weight="700" fill="#324a66" letter-spacing="0.5">下游</text>
+    <text x="48" y="650" font-size="9" fill="#5a7da3" opacity="0.85">读 state.db  ·  产出最终结论</text>
+
+    <g transform="translate(176, 632)" color="#324a66">
+      <use href="#scales" x="0" y="0" width="32" height="28"/>
+      <text x="40" y="14" font-size="11.5" font-weight="700" fill="#324a66">评审 agent</text>
+      <text x="40" y="28" font-size="9" fill="#5a7da3" opacity="0.85">独立 agent  ·  非 MCP</text>
+    </g>
+
+    <path d="M 430 654 L 466 654" stroke="#324a66" stroke-width="1.6" marker-end="url(#arr)" fill="none"/>
+
+    <g transform="translate(478, 632)">
+      <rect x="0" y="0" width="208" height="22" rx="4" fill="#2f7a4a" fill-opacity="0.08" stroke="#2f7a4a" stroke-opacity="0.65" stroke-width="1.1"/>
+      <use href="#check" x="6" y="3" width="16" height="16"/>
+      <text x="28" y="15" font-size="10" font-weight="700" fill="#2f7a4a" letter-spacing="0.4">已验证</text>
+      <text x="80" y="15" font-size="9" font-family="ui-monospace, Consolas, monospace" fill="#3d5471">AUROC 0.84 · CI [0.81,0.87]</text>
+    </g>
+
+    <g transform="translate(478, 658)">
+      <rect x="0" y="0" width="208" height="22" rx="4" fill="#b04545" fill-opacity="0.08" stroke="#b04545" stroke-opacity="0.65" stroke-width="1.1"/>
+      <use href="#xmark" x="6" y="3" width="16" height="16"/>
+      <text x="28" y="15" font-size="10" font-weight="700" fill="#b04545" letter-spacing="0.4">已拦截</text>
+      <text x="80" y="15" font-size="9" fill="#3d5471">缺 pin · 溯源过期</text>
+    </g>
+
+    <path d="M 696 643 L 730 643" stroke="#2f7a4a" stroke-width="1.4" marker-end="url(#arrGrn)" fill="none"/>
+    <path d="M 696 669 L 730 669" stroke="#b04545" stroke-width="1.4" marker-end="url(#arrRed)" fill="none"/>
+
+    <g transform="translate(744, 632)" color="#2f7a4a">
+      <use href="#doc" x="0" y="0" width="16" height="22"/>
+      <text x="24" y="11" font-size="10.5" font-weight="700" fill="#2f7a4a" font-family="ui-monospace, Consolas, monospace">draft.md</text>
+      <text x="24" y="22" font-size="9" fill="#3d5471" opacity="0.85">结论 · CI · 溯源</text>
+    </g>
+
+    <g transform="translate(744, 658)" color="#b04545">
+      <use href="#doc" x="0" y="0" width="16" height="22"/>
+      <text x="24" y="11" font-size="10.5" font-weight="700" fill="#b04545" font-family="ui-monospace, Consolas, monospace">diagnostic.md</text>
+      <text x="24" y="22" font-size="9" fill="#3d5471" opacity="0.85">拒绝理由 · 缺锚点</text>
+    </g>
+
+    <line x1="1020" y1="628" x2="1020" y2="680" stroke="#324a66" stroke-opacity="0.18" stroke-width="0.8" stroke-dasharray="3 3"/>
+    <text x="1040" y="640" font-size="9" font-weight="700" fill="#324a66" letter-spacing="0.4">REPORTS/  ·  文件,不是状态</text>
+    <text x="1040" y="654" font-size="9" fill="#3d5471" opacity="0.85">closure  ·  cascade  ·  portfolio  ·  diagnostic</text>
+    <text x="1040" y="670" font-size="9" fill="#3d5471" opacity="0.85">默认 gitignore;主动 opt-in 分享</text>
+    <text x="1040" y="684" font-size="8.5" fill="#5a7da3" opacity="0.65" font-style="italic">见 ADR-0009 reports-as-files</text>
+  </g>
+
+  <!-- ====================================================================
+       底部宣言
+       ==================================================================== -->
+  <g id="footer">
+    <text x="750" y="720" text-anchor="middle" font-size="11.5" font-weight="700" fill="#324a66" letter-spacing="0.6">不是流水线  ·  是一块黑板 + 互为兄弟的模块</text>
+    <text x="750" y="740" text-anchor="middle" font-size="10" fill="#3d5471" opacity="0.88">explore → select → preregister → experiment → verify → review 只是<tspan font-style="italic">建议</tspan>顺序,实时由 cockpit_events 派生</text>
+    <text x="750" y="758" text-anchor="middle" font-size="10" fill="#3d5471" opacity="0.88">模块互不直接调用 — 所有协作经 state.db  ·  驾驶舱里的人可随时重定向、replay、回滚</text>
+  </g>
+
+</svg>

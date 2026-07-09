@@ -81,7 +81,7 @@ uv run python scripts/seed_proof_failures.py
 claude
 
 # 或终端 A: Codex（setup 选择 codex/both 后）
-codex
+codex -C .
 
 # 终端 B: cockpit TUI（在仓库根目录）
 uv run python -m cockpit.tui
@@ -96,6 +96,18 @@ uv run python -m cockpit.tui --lang zh
 ```
 
 在 TUI 里按 `L` 切换中英文标签。
+
+在 Codex 里，ClaudeScientist 的 skill 要通过 `/skills` 选择，或者用 `$`
+显式提及，例如：
+
+```text
+$research-sop 研究 per-head dropout 是否有助于 ViT 扩展
+```
+
+不要输入 `/research-sop`；`/...` 是 Codex 的 slash command 命名空间。
+Claude Code 用户继续使用原有的 `/research-sop` 快捷入口。
+如果看不到 `$research-sop`，先确认 `.agents/skills/research-sop/SKILL.md`
+已经生成，然后重启 Codex，并从仓库根目录启动。
 
 Lean 形式化验证需要单独安装——见 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md)。
 

@@ -193,13 +193,30 @@ def _print_cheatsheet(state: SetupState) -> None:
     )
     if host == agent_hosts.HOST_CODEX:
         restart_line = "  1. Restart Codex; uv run will pick the values up.\n"
-        terminal_a = "codex"
+        terminal_a = "codex -C ."
+        codex_skill_tip = (
+            "\nCodex skills: start Codex from the repo root, then use "
+            "`/skills` or `$research-sop ...`.\n"
+            "`/research-sop` is a Claude Code shortcut, not a Codex skill "
+            "invocation.\n"
+            "If Codex cannot see it, check "
+            "`.agents/skills/research-sop/SKILL.md` in this repo.\n"
+        )
     elif host == agent_hosts.HOST_BOTH:
         restart_line = "  1. Restart Claude Code / Codex; uv run will pick the values up.\n"
-        terminal_a = "claude  (or: codex)"
+        terminal_a = "claude  (or: codex -C .)"
+        codex_skill_tip = (
+            "\nCodex skills: start Codex from the repo root, then use "
+            "`/skills` or `$research-sop ...`.\n"
+            "`/research-sop` is a Claude Code shortcut, not a Codex skill "
+            "invocation.\n"
+            "If Codex cannot see it, check "
+            "`.agents/skills/research-sop/SKILL.md` in this repo.\n"
+        )
     else:
         restart_line = "  1. Restart Claude Code; uv run will pick the values up.\n"
         terminal_a = "claude"
+        codex_skill_tip = ""
     _console.print()
     _console.print(
         Panel.fit(
@@ -221,6 +238,7 @@ def _print_cheatsheet(state: SetupState) -> None:
                 "  Terminal B: ",
                 ("uv run python -m cockpit.tui", "cyan"),
                 "\n\n",
+                (codex_skill_tip, "yellow"),
                 ("First time? Read: ", "bold"),
                 (str(_QUICKSTART_DOC), "cyan"),
                 ("\n  (15-minute walkthrough of your first session)\n", "dim"),
