@@ -10,7 +10,7 @@ This walkthrough assumes you already have `uv sync` complete and the repository 
 Open two terminals from the repository root.
 
 ```powershell
-# Terminal A: the selected agent host (from the repo root)
+# Terminal A: the AI client you selected (from the repo root)
 claude
 # Or, if setup selected codex/both:
 codex -C .
@@ -35,7 +35,7 @@ If Terminal A is Codex, type:
 $research-sop investigate whether per-head dropout helps ViT scaling
 ```
 
-This invokes the `research-sop` workflow, which orchestrates the entire pipeline. In Codex, you can also choose it from `/skills`; `/research-sop` is a Claude Code shortcut and will fail in Codex unless Codex exposes a matching slash command. Within a few seconds you should see, in Terminal B:
+This starts `research-sop`, which runs the research steps. In Codex, you can also choose it from `/skills`. `/research-sop` is for Claude Code and usually fails in Codex. Within a few seconds you should see, in Terminal B:
 
 - The cockpit's question node appears at the root of the tree
 - Three to five hypothesis nodes spawn under it

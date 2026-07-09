@@ -18,7 +18,7 @@ Claude Code 本身已经把调度、对话、子智能体、工具调用做得�
 │  终端 A: Agent CLI      │  │  终端 B: Cockpit TUI    │
 │  Claude Code 或 Codex   │  │  (监控/干预面板)        │
 │                         │  │                         │
-│  > /research-sop 或 $…  │  │  ┌─ 假说树 ─────┐       │
+│  > 见下方命令说明      │  │  ┌─ 假说树 ─────┐       │
 │  AI 在思考、调工具      │  │  │ ▾ Q ViT scale│       │
 │  AI 在写代码、跑实验    │  │  │   ▸ H_07 …   │       │
 │                         │  │  │   ▸ H_08 …   │       │
@@ -44,7 +44,7 @@ Claude Code 本身已经把调度、对话、子智能体、工具调用做得�
 | 显示什么 | Claude 的自然语言回复 + 工具输入输出 | 派生状态：阶段栏 + 活动卡片 + 焦点 tab |
 | 不显示什么 | 跨主干当前焦点、最近的拒绝/重定向干预 | Claude 具体的思考文本、文件 diff |
 | 你在这里做什么 | 回复 Claude，Ctrl-C 中断 | 拒绝 / 批准 / 写批注 / 排队干预 |
-| 存储 | agent host 自己的会话状态 | `.research-agent/state.db`（单个 SQLite） |
+| 存储 | AI 客户端自己的会话状态 | `.research-agent/state.db`（单个 SQLite） |
 | 用户姿态 | 对话伙伴 | 研究负责人——抬头监控 |
 
 简单说：终端 A 告诉你 AI 刚*做*了什么，终端 B 告诉你研究当前*是*什么状态。两者各有用处，互不重叠。
@@ -63,8 +63,8 @@ Claude Code 本身已经把调度、对话、子智能体、工具调用做得�
 
 ## 4. 一次研究任务的完整流程
 
-在 Codex 里，假设你在终端 A 输入：`$research-sop 研究 dropout 对 ViT 是否有影响`。
-如果使用 Claude Code，`/research-sop 研究 dropout 对 ViT 是否有影响` 是同一个流程的快捷入口。
+在 Codex 里，在终端 A 输入：`$research-sop 研究 dropout 对 ViT 是否有影响`。
+如果使用 Claude Code，则输入：`/research-sop 研究 dropout 对 ViT 是否有影响`。
 
 ```mermaid
 sequenceDiagram

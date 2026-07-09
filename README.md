@@ -53,7 +53,7 @@ uv sync
 uv run python -m claudescientist.setup
 ```
 
-The wizard walks you through agent-host selection (`claude`, `codex`, or
+The wizard walks you through AI client selection (`claude`, `codex`, or
 `both`), embedding backend, proof corpus seeding, held-out directory, Lean
 toolchain, and auto-prune — all in one pass. Run it again any time; it skips
 steps that are already done.
@@ -101,17 +101,16 @@ uv run python -m cockpit.tui --lang zh
 
 Press `L` inside the TUI to toggle English / Chinese labels.
 
-In Codex, invoke ClaudeScientist skills with `/skills` or by mentioning the
-skill with `$`, for example:
+In Codex, start ClaudeScientist skills with `/skills` or `$skill-name`.
+Example:
 
 ```text
 $research-sop investigate whether per-head dropout helps ViT scaling
 ```
 
-Do not type `/research-sop`; `/...` is the Codex slash-command namespace.
-Claude Code users should continue to use the existing `/research-sop` shortcut.
-If `$research-sop` does not appear, verify that `.agents/skills/research-sop/SKILL.md`
-exists, restart Codex, and launch it from the repository root.
+In Codex, do not type `/research-sop`; that form is for Claude Code.
+If `$research-sop` does not appear, check that `.agents/skills/research-sop/SKILL.md`
+exists, restart Codex, and start it from the repository root.
 
 Lean formal verification is a separate opt-in setup — see [`docs/setup-lean.md`](docs/setup-lean.md).
 

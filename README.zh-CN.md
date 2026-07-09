@@ -53,7 +53,7 @@ uv sync
 uv run python -m claudescientist.setup
 ```
 
-向导会一步步引导你完成 agent host 选择（`claude`、`codex` 或 `both`）、embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
+向导会一步步引导你完成 AI 客户端选择（`claude`、`codex` 或 `both`）、embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
 
 非交互式设置可以指定 `CLAUDESCIENTIST_SETUP_AGENT_HOST=codex` 或
 `CLAUDESCIENTIST_SETUP_AGENT_HOST=both`。Codex 适配是项目本地的：setup
@@ -97,15 +97,14 @@ uv run python -m cockpit.tui --lang zh
 
 在 TUI 里按 `L` 切换中英文标签。
 
-在 Codex 里，ClaudeScientist 的 skill 要通过 `/skills` 选择，或者用 `$`
-显式提及，例如：
+在 Codex 里，ClaudeScientist 的 skill 用 `/skills` 选择，或者用
+`$skill-name` 直接写在提示里。例如：
 
 ```text
 $research-sop 研究 per-head dropout 是否有助于 ViT 扩展
 ```
 
-不要输入 `/research-sop`；`/...` 是 Codex 的 slash command 命名空间。
-Claude Code 用户继续使用原有的 `/research-sop` 快捷入口。
+在 Codex 里不要输入 `/research-sop`；这个写法是给 Claude Code 用的。
 如果看不到 `$research-sop`，先确认 `.agents/skills/research-sop/SKILL.md`
 已经生成，然后重启 Codex，并从仓库根目录启动。
 

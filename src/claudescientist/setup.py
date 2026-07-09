@@ -169,7 +169,7 @@ def _print_banner() -> None:
         Panel.fit(
             Text.assemble(
                 ("claudescientist setup\n", "bold"),
-                "Configure agent host, embed backend, held-out paths, proof corpus, and Lean.\n",
+                "Configure AI client, embed backend, held-out paths, proof corpus, and Lean.\n",
                 ("Output: ", "dim"),
                 (".env plus optional Codex adapter files.", "dim italic"),
             ),
@@ -195,23 +195,21 @@ def _print_cheatsheet(state: SetupState) -> None:
         restart_line = "  1. Restart Codex; uv run will pick the values up.\n"
         terminal_a = "codex -C ."
         codex_skill_tip = (
-            "\nCodex skills: start Codex from the repo root, then use "
-            "`/skills` or `$research-sop ...`.\n"
-            "`/research-sop` is a Claude Code shortcut, not a Codex skill "
-            "invocation.\n"
-            "If Codex cannot see it, check "
-            "`.agents/skills/research-sop/SKILL.md` in this repo.\n"
+            "\nCodex: start from the repo root with `codex -C .`.\n"
+            "Then use `/skills` or type `$research-sop ...`.\n"
+            "`/research-sop` is for Claude Code, not Codex.\n"
+            "If Codex cannot see the skill, check "
+            "`.agents/skills/research-sop/SKILL.md`.\n"
         )
     elif host == agent_hosts.HOST_BOTH:
         restart_line = "  1. Restart Claude Code / Codex; uv run will pick the values up.\n"
         terminal_a = "claude  (or: codex -C .)"
         codex_skill_tip = (
-            "\nCodex skills: start Codex from the repo root, then use "
-            "`/skills` or `$research-sop ...`.\n"
-            "`/research-sop` is a Claude Code shortcut, not a Codex skill "
-            "invocation.\n"
-            "If Codex cannot see it, check "
-            "`.agents/skills/research-sop/SKILL.md` in this repo.\n"
+            "\nCodex: start from the repo root with `codex -C .`.\n"
+            "Then use `/skills` or type `$research-sop ...`.\n"
+            "`/research-sop` is for Claude Code, not Codex.\n"
+            "If Codex cannot see the skill, check "
+            "`.agents/skills/research-sop/SKILL.md`.\n"
         )
     else:
         restart_line = "  1. Restart Claude Code; uv run will pick the values up.\n"
@@ -432,12 +430,12 @@ def step_repo_root(state: SetupState) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 3 - agent host
+# Step 3 - AI client
 # ---------------------------------------------------------------------------
 
 
 def step_agent_host(state: SetupState) -> bool:
-    _heading(3, 8, "Agent host")
+    _heading(3, 8, "AI client")
     existing = io.read_env_file(state.env_path).get("CLAUDESCIENTIST_AGENT_HOST", "claude")
     if state.non_interactive:
         host = _env_flag("CLAUDESCIENTIST_SETUP_AGENT_HOST", existing)
@@ -449,7 +447,7 @@ def step_agent_host(state: SetupState) -> bool:
         )
         host = _ask_select(
             state,
-            "which agent host should drive ClaudeScientist?",
+            "which AI client should drive ClaudeScientist?",
             list(agent_hosts.HOST_CHOICES),
             default=(
                 existing
@@ -461,7 +459,7 @@ def step_agent_host(state: SetupState) -> bool:
             return False
     normalized = agent_hosts.normalize_agent_host(host)
     if normalized != host:
-        _console.print(f"  normalized agent host {host!r} -> {normalized!r}.")
+        _console.print(f"  normalized AI client {host!r} -> {normalized!r}.")
     state.env_updates["CLAUDESCIENTIST_AGENT_HOST"] = normalized
 
     if normalized in {agent_hosts.HOST_CLAUDE, agent_hosts.HOST_BOTH}:

@@ -10,7 +10,7 @@
 从仓库根目录打开两个终端。
 
 ```powershell
-# 终端 A：选择好的 agent host（在仓库根目录）
+# 终端 A：你选择的 AI 客户端（在仓库根目录）
 claude
 # 如果 setup 选择了 codex/both，也可以用：
 codex -C .
@@ -35,7 +35,7 @@ uv run python -m cockpit.tui
 $research-sop 研究 per-head dropout 是否有助于 ViT 扩展
 ```
 
-这会触发 `research-sop` 工作流，由它负责调度整个流程。在 Codex 里也可以先输入 `/skills` 再选择它；`/research-sop` 是 Claude Code 的快捷入口，不是 Codex 的 skill 调用方式，除非 Codex 里另有同名 slash command，否则会报 unrecognized command。几秒之后，终端 B 应当出现以下变化：
+这会启动 `research-sop`，由它按步骤推进研究。在 Codex 里也可以先输入 `/skills` 再选择它。`/research-sop` 是给 Claude Code 用的，通常不能在 Codex 里直接用。几秒之后，终端 B 应当出现以下变化：
 
 - cockpit 的"问题"节点出现在树根
 - 三到五个假说节点在它下面长出

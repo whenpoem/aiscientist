@@ -15,8 +15,10 @@ def test_normalize_agent_host_aliases():
     assert agent_hosts.normalize_agent_host("unknown") == "claude"
 
 
-def test_build_codex_config_is_valid_toml():
-    config = tomllib.loads(agent_hosts.build_codex_config())
+def test_build_codex_config_is_valid_toml(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    config = tomllib.loads(agent_hosts.build_codex_config(repo))
 
     assert config["features"]["hooks"] is True
     assert config["features"]["multi_agent"] is True
@@ -26,8 +28,8 @@ def test_build_codex_config_is_valid_toml():
         "-m",
         "memory_mcp.dev_server",
     ]
-    assert config["mcp_servers"]["memory"]["cwd"] == ".."
-    assert config["mcp_servers"]["lean"]["cwd"] == ".."
+    assert config["mcp_servers"]["memory"]["cwd"] == str(repo.resolve())
+    assert config["mcp_servers"]["lean"]["cwd"] == str(repo.resolve())
     assert config["mcp_servers"]["openalex"]["command"] == "npx"
     pre_tool_hooks = config["hooks"]["PreToolUse"]
     assert any("leakage_guard" in item["hooks"][0]["command"] for item in pre_tool_hooks)
@@ -57,6 +59,8 @@ def test_ensure_codex_support_syncs_agents_and_skills(tmp_path):
     result = agent_hosts.ensure_codex_support(repo)
 
     assert repo / ".codex" / "config.toml" in result.written
+    codex_config = tomllib.loads((repo / ".codex" / "config.toml").read_text())
+    assert codex_config["mcp_servers"]["memory"]["cwd"] == str(repo.resolve())
     agent_text = (repo / ".codex" / "agents" / "researcher.toml").read_text(
         encoding="utf-8"
     )

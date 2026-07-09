@@ -132,7 +132,7 @@ def ensure_codex_support(repo_root: Path) -> HostSetupResult:
 
     written: list[Path] = []
     config_path = repo_root / ".codex" / "config.toml"
-    if _write_if_changed(config_path, build_codex_config()):
+    if _write_if_changed(config_path, build_codex_config(repo_root)):
         written.append(config_path)
 
     written.extend(_sync_codex_agents(repo_root))
@@ -140,9 +140,10 @@ def ensure_codex_support(repo_root: Path) -> HostSetupResult:
     return HostSetupResult(written=tuple(written))
 
 
-def build_codex_config() -> str:
+def build_codex_config(repo_root: Path) -> str:
     """Return the project-scoped Codex config TOML."""
 
+    cwd = str(repo_root.resolve())
     blocks = [
         _GENERATED_HEADER.rstrip(),
         "",
@@ -159,7 +160,7 @@ def build_codex_config() -> str:
         "",
     ]
     for name, command, args, env in _MCP_SERVERS:
-        blocks.extend(_mcp_server_block(name, command, args, env))
+        blocks.extend(_mcp_server_block(name, command, args, env, cwd))
     for event, matcher, hook_name, status in _HOOKS:
         blocks.extend(_hook_block(event, matcher, hook_name, status))
     return "\n".join(blocks).rstrip() + "\n"
@@ -170,13 +171,14 @@ def _mcp_server_block(
     command: str,
     args: list[str],
     env: dict[str, str],
+    cwd: str,
 ) -> list[str]:
     lines = [
         f"[mcp_servers.{name}]",
         'enabled = true',
         f"command = {_toml_string(command)}",
         f"args = {_toml_string_list(args)}",
-        'cwd = ".."',
+        f"cwd = {_toml_string(cwd)}",
         "startup_timeout_sec = 30.0",
     ]
     if env:

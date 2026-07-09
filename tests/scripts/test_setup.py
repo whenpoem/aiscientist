@@ -258,6 +258,7 @@ def test_step_agent_host_codex_generates_project_adapter(fake_repo, monkeypatch)
     assert state.env_updates["CLAUDESCIENTIST_AGENT_HOST"] == "codex"
     codex_config = tomllib.loads((fake_repo / ".codex" / "config.toml").read_text())
     assert "memory" in codex_config["mcp_servers"]
+    assert codex_config["mcp_servers"]["memory"]["cwd"] == str(fake_repo.resolve())
     assert (fake_repo / ".codex" / "agents" / "researcher.toml").exists()
     assert (fake_repo / ".agents" / "skills" / "demo" / "SKILL.md").exists()
 

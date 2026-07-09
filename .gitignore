@@ -25,6 +25,11 @@ tmp-pytest-local/
 .env
 .env.local
 
+# Local Codex adapter files written by `claudescientist setup`.
+# They contain machine-specific paths and are regenerated per clone.
+.codex/
+.agents/
+
 # Generated research reports may contain private results, held-out-derived
 # metrics, or unpublished drafts. Add individual files with `git add -f` when
 # you intentionally want to share them.

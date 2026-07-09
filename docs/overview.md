@@ -18,7 +18,7 @@ Open two terminal windows side by side:
 │  Terminal A: Agent CLI  │  │  Terminal B: Cockpit    │
 │  Claude Code or Codex   │  │  TUI (monitor/intervene)│
 │                         │  │                         │
-│  > /research-sop or $.. │  │  ┌─ Hypothesis tree ┐   │
+│  > see commands below   │  │  ┌─ Hypothesis tree ┐   │
 │  AI thinks, calls tools │  │  │ ▾ Q ViT scale    │   │
 │  AI writes/runs code    │  │  │   ▸ H_07 ...     │   │
 │                         │  │  │   ▸ H_08 ...     │   │
@@ -47,7 +47,7 @@ feeling redundant.
 | What it shows | Claude's natural-language response + tool I/O | Derived state: phase strip + activity cards + focus tab |
 | What it does NOT show | Cross-trunk current focus, recent reject/redirect interventions | Claude's specific thinking text, file diffs |
 | What you do here | Reply to Claude, Ctrl-C to halt | Reject / approve / inject note / queue intervention |
-| Storage | Agent-host session state | `.research-agent/state.db` (single SQLite) |
+| Storage | AI client session state | `.research-agent/state.db` (single SQLite) |
 | User posture | Conversation partner | Research lead — eyes-up monitor |
 
 If Terminal A is what the AI just *did*, Terminal B is what's *true*
@@ -67,10 +67,10 @@ about the research right now. Both are useful; they don't overlap.
 
 ## 4. End-to-end flow of a research task
 
-In Codex, suppose you type into Terminal A:
+In Codex, type into Terminal A:
 `$research-sop investigate whether dropout affects ViT scaling`.
-In Claude Code, use `/research-sop investigate whether dropout affects ViT scaling`
-for the same workflow.
+In Claude Code, type:
+`/research-sop investigate whether dropout affects ViT scaling`.
 
 ```mermaid
 sequenceDiagram
