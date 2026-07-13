@@ -1,6 +1,6 @@
 # ADR 0004: Replace Elo with Bradley-Terry ranking
 
-- **Status**: Accepted (v3.0)
+- **Status**: Accepted (v3.0), estimation method amended in v5.1
 - **Date**: 2026-04
 
 ## Context
@@ -24,6 +24,14 @@ shrinkage is exactly what a "pause low-strength branches" decision needs.
 
 ## Decision
 
+> **v5.1 amendment:** the original per-comparison online update below proved
+> order-dependent. Current code refits the complete comparison ledger with a
+> joint Gaussian-prior MAP solve after every comparison and derives centred
+> Laplace covariance from the full precision matrix. The compatibility names
+> `lcb` / `ucb` now denote uncalibrated approximate posterior summaries, not
+> frequentist confidence or strict LUCB bounds. The original text is retained
+> here only as historical rationale.
+
 Add a Bradley-Terry layer alongside (not replacing) the legacy Elo
 columns:
 
@@ -32,12 +40,10 @@ columns:
   `strength_var=1.0` (Beta(1,1)-equivalent shrinkage prior).
 - New table `mem_bt_comparisons` is an append-only ledger of every
   pairwise comparison applied.
-- Online update via Laplace approximation: gradient ascent on the
-  log-likelihood for the means, Fisher-information posterior precision
-  update for the variances. Strength clipped to [-12, 12]; variance floor
-  at 1e-4.
-- Confidence interval: `lcb = strength - 1.96 * sqrt(var)`,
-  `ucb = strength + 1.96 * sqrt(var)`.
+- Joint full-ledger MAP refit via Newton solves with a zero-centred Gaussian
+  prior. Strength is clipped to [-12, 12]; variance has a 1e-4 floor.
+- Approximate posterior interval: `strength +/- z * sqrt(var)`. It is not a
+  calibrated confidence interval or a significance test.
 - `record_judgement` is the **only** dual-writer: it updates
   `mem_nodes.elo_score` AND calls `_bt_apply_comparison`. New code paths
   use `update_bt_rating`, which writes only the BT ledger but accepts a
@@ -54,8 +60,8 @@ section 6.2.
 
 ### Positive
 
-- Honest 95% intervals enable decisions like
-  `suggest_pause_low_strength(ucb_threshold=-0.5)` (see ADR 0005).
+- Order-invariant fits remove the recency effect that previously changed the
+  winner when the same comparison multiset was inserted in another order.
 - Variance shrinks as evidence accumulates; later comparisons cost less
   per bit of information.
 - `expected_information_gain` makes "what should I compare next" a
@@ -78,8 +84,8 @@ section 6.2.
 
 - **TrueSkill** - lost because it is over-parameterised for a single-rank
   tournament and the public Python implementations are heavy.
-- **Bayesian Bradley-Terry with full MCMC** - lost because we want online
-  updates, not nightly batch jobs.
+- **Bayesian Bradley-Terry with full MCMC** - remains deferred because a joint
+  MAP refit is deterministic and cheap enough for the present tournament size.
 - **Just bigger K-factor** - lost because the missing piece is
   uncertainty, not aggressiveness.
 

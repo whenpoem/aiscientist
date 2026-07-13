@@ -44,7 +44,7 @@ def test_claude_settings_register_stdio_cockpit_and_node_openalex():
 
     openalex = settings["mcpServers"]["openalex"]
     assert openalex["command"] == "npx"
-    assert openalex["args"] == ["-y", "openalex-research-mcp"]
+    assert openalex["args"] == ["-y", "openalex-research-mcp@0.5.0"]
 
     expected_hooks = {
         "uv run --no-sync python \"$CLAUDE_PROJECT_DIR/.claude/hooks/leakage_guard.py\"",

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import sys
@@ -14,6 +15,7 @@ from claudescientist.runtime import (
     extract_labeled_metric_records,
     state_db_path,
 )
+from verify_mcp.run_manifest import capture_run_manifest, store_run_manifest
 
 DB = state_db_path()
 
@@ -84,13 +86,40 @@ def main() -> None:
         return
     try:
         for claim, value, session_id, command in records:
-            con.execute(
+            cursor = con.execute(
                 """
                 INSERT INTO ver_provenance(claim, value, session_id, source_command, created_at)
                 VALUES(?,?,?,?,?)
                 """,
                 (claim, value, session_id, command, datetime.now(timezone.utc).isoformat()),
             )
+            provenance_id = int(cursor.lastrowid)
+            manifest = capture_run_manifest(command=command)
+            try:
+                store_run_manifest(con, manifest, provenance_id=provenance_id)
+                input_hashes = [
+                    {"path": entry["path"], "sha256": entry["sha256"]}
+                    for entry in manifest["files"]
+                ]
+                encoded_inputs = json.dumps(input_hashes, ensure_ascii=True)
+                con.execute(
+                    """
+                    INSERT INTO ver_provenance_dag(
+                      prov_id, input_hashes, output_hash, parent_prov_ids,
+                      stale, refreshed_at
+                    ) VALUES(?, ?, ?, '[]', 0, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        provenance_id,
+                        encoded_inputs,
+                        hashlib.sha256(encoded_inputs.encode("utf-8")).hexdigest(),
+                    ),
+                )
+            except sqlite3.OperationalError:
+                # A pre-v5.1 database may not have manifest tables yet. Keep
+                # the numeric evidence and let the next normal bootstrap add
+                # the new schema rather than making the lifecycle hook fail.
+                pass
         con.commit()
     except sqlite3.OperationalError:
         pass

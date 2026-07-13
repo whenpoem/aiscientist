@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import re
 import statistics
+import sys
 from pathlib import Path
 
 from claudescientist.runtime import extract_metric_tokens
 from verify_mcp.budget import budget_ratios, extract_budget
 from verify_mcp.db import _connect, tx
+from verify_mcp.run_manifest import capture_run_manifest, store_run_manifest
 
 from ._common import _emit_event, _run_script
 
@@ -40,20 +42,26 @@ def _extract_pattern_value(text: str, pattern: str) -> float | None:
         return None
 
 
-def _verify_metric_pin(metric_pin_id: int | None) -> dict[str, object] | None:
+def _resolve_metric_pin(
+    metric_pin_id: int | None,
+) -> tuple[int | None, dict[str, object] | None]:
     if metric_pin_id is None:
-        return None
+        return None, None
     con = _connect()
     try:
         row = con.execute(
-            "SELECT id, claim, value FROM ver_metric_pins WHERE id = ?",
+            "SELECT id, provenance_id FROM ver_metric_pins WHERE id = ?",
             (metric_pin_id,),
         ).fetchone()
     finally:
         con.close()
     if row is None:
-        return {"ok": False, "error": "unknown_metric_pin", "metric_pin_id": metric_pin_id}
-    return None
+        return None, {
+            "ok": False,
+            "error": "unknown_metric_pin",
+            "metric_pin_id": metric_pin_id,
+        }
+    return int(row["provenance_id"]), None
 
 
 def _stability_threshold(
@@ -94,6 +102,8 @@ def seed_perturb(
     metric_pin_id: int | None = None,
     seed_env: str | None = "PYTHONHASHSEED",
     extra_env: dict[str, str] | None = None,
+    input_files: list[str] | None = None,
+    config_files: list[str] | None = None,
 ) -> dict:
     """Run a training script across multiple seeds and summarize the metric."""
 
@@ -102,9 +112,19 @@ def seed_perturb(
     if not seeds:
         raise ValueError("seeds must not be empty.")
 
-    metric_pin_error = _verify_metric_pin(metric_pin_id)
+    provenance_id, metric_pin_error = _resolve_metric_pin(metric_pin_id)
     if metric_pin_error is not None:
         return metric_pin_error
+
+    command = f"{sys.executable} {script_path} {seed_arg} <seed>"
+    manifest = capture_run_manifest(
+        command=command,
+        script_path=script_path,
+        input_files=input_files,
+        config_files=config_files,
+        seeds=seeds,
+        env_overrides=extra_env,
+    )
 
     values: list[float] = []
     outputs: list[str] = []
@@ -170,6 +190,12 @@ def seed_perturb(
             ),
         )
         run_id = int(cur.lastrowid)
+        stored_manifest = store_run_manifest(
+            con,
+            manifest,
+            provenance_id=provenance_id,
+            seed_run_id=run_id,
+        )
         _emit_event(
             con,
             "seed_run_recorded",
@@ -201,6 +227,7 @@ def seed_perturb(
         "stability_mode": resolved_stability_mode,
         "verdict": verdict,
         "metric_pin_id": metric_pin_id,
+        "run_manifest": stored_manifest,
         "stdout": outputs,
     }
 

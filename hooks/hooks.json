@@ -1,0 +1,71 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Write|Edit|Bash|apply_patch|exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook leakage_guard --event PreToolUse",
+            "timeout": 20,
+            "statusMessage": "Checking sequestered-data and provenance guard"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook destructive_bash_guard --event PreToolUse",
+            "timeout": 20,
+            "statusMessage": "Checking destructive command guard"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook provenance_log --event PostToolUse",
+            "timeout": 20,
+            "statusMessage": "Recording numeric provenance"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook intervention_pump --event UserPromptSubmit",
+            "timeout": 20,
+            "statusMessage": "Loading Cockpit interventions"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook intervention_pump --event Stop",
+            "timeout": 20,
+            "statusMessage": "Draining Cockpit interventions"
+          },
+          {
+            "type": "command",
+            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook stop_flush --event Stop",
+            "timeout": 20,
+            "statusMessage": "Recording turn summary"
+          }
+        ]
+      }
+    ]
+  }
+}

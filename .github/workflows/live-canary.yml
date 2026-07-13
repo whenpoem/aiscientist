@@ -1,0 +1,31 @@
+name: Live dependency canary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  external-mcps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: uv tool run arxiv-mcp-server==0.5.0 --help
+      - run: npx -y openalex-research-mcp@0.5.0 --help
+      - run: test "$(npm view openalex-research-mcp version)" = "0.5.0"
+
+  local-embedding-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --extra proof
+      - run: uv run python -c "import sentence_transformers; from prove_mcp.embedding import get_backend; print(type(get_backend()).__name__)"
+        env:
+          RESEARCH_AGENT_EMBED_BACKEND: mock

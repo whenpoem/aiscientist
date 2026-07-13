@@ -1,0 +1,39 @@
+{
+  "skill_name": "debug-sop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "This test fails about one run in twenty and sometimes hangs. Find and fix the real cause.",
+      "expected_output": "Recovers history, reproduces repeatedly, isolates timing/order/shared-state hypotheses, applies a scoped fix, and verifies the original path.",
+      "files": [],
+      "expectations": [
+        "Distinguishes intermittent reproduction from deterministic reproduction",
+        "Uses discriminating hypotheses and one-variable-at-a-time tests",
+        "Requires the original reproduction plus regression verification",
+        "Records the proven failure mechanism"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Diagnose why this command crashes, but do not modify anything yet.",
+      "expected_output": "Stops after evidence-backed diagnosis and a scoped proposed fix.",
+      "files": [],
+      "expectations": [
+        "Explicitly preserves diagnosis-only authorization",
+        "Does not treat a familiar exception as proof of cause",
+        "Reports surviving hypotheses when evidence is incomplete"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The MCP is visible but never starts outside the ClaudeScientist checkout. Debug the integration.",
+      "expected_output": "Checks discovery, executable/config, process startup, protocol, workspace state, hooks, then UI behavior.",
+      "files": [],
+      "expectations": [
+        "Tests integration boundaries separately",
+        "Compares environment and workspace paths",
+        "Has an external-dependency recovery branch"
+      ]
+    }
+  ]
+}

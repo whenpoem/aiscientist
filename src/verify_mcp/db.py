@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS ver_preregistrations (
   alpha REAL NOT NULL DEFAULT 0.05,
   mc_correction TEXT NOT NULL DEFAULT 'bonferroni'
     CHECK(mc_correction IN ('bh', 'bonferroni', 'none')),
+  family_id TEXT NOT NULL DEFAULT '',
+  family_size INTEGER NOT NULL DEFAULT 1 CHECK(family_size > 0),
   observed_value REAL,
   observed_p_value REAL,
   adjusted_p_value REAL,
@@ -122,6 +124,21 @@ CREATE INDEX IF NOT EXISTS idx_ver_preregistrations_hypothesis
   ON ver_preregistrations(hypothesis_id);
 CREATE INDEX IF NOT EXISTS idx_ver_preregistrations_status
   ON ver_preregistrations(status);
+
+CREATE TABLE IF NOT EXISTS ver_run_manifests (
+  manifest_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provenance_id INTEGER REFERENCES ver_provenance(id) ON DELETE CASCADE,
+  seed_run_id INTEGER REFERENCES ver_seed_runs(run_id) ON DELETE CASCADE,
+  manifest_json TEXT NOT NULL,
+  manifest_sha256 TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK(provenance_id IS NOT NULL OR seed_run_id IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ver_run_manifests_provenance
+  ON ver_run_manifests(provenance_id);
+CREATE INDEX IF NOT EXISTS idx_ver_run_manifests_seed_run
+  ON ver_run_manifests(seed_run_id);
 
 CREATE TABLE IF NOT EXISTS res_budget_ledger (
   budget_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,6 +173,42 @@ def _ensure_heldout_query_columns(con: sqlite3.Connection) -> None:
     )
 
 
+def _ensure_preregistration_family_columns(con: sqlite3.Connection) -> None:
+    """Add fixed-family metadata and conservatively backfill legacy rows."""
+    ensure_columns(
+        con,
+        "ver_preregistrations",
+        {
+            "family_id": "TEXT NOT NULL DEFAULT ''",
+            "family_size": "INTEGER NOT NULL DEFAULT 1",
+        },
+    )
+    open_count = int(
+        con.execute(
+            """
+            SELECT COUNT(*) FROM ver_preregistrations
+            WHERE status = 'open' AND family_id = ''
+            """
+        ).fetchone()[0]
+    )
+    if open_count:
+        con.execute(
+            """
+            UPDATE ver_preregistrations
+            SET family_id = 'legacy_open_v5', family_size = ?
+            WHERE status = 'open' AND family_id = ''
+            """,
+            (open_count,),
+        )
+    con.execute(
+        """
+        UPDATE ver_preregistrations
+        SET family_id = 'legacy_' || prereg_id, family_size = 1
+        WHERE family_id = ''
+        """
+    )
+
+
 def bootstrap() -> None:
     path = state_db_path()
     key = cache_key(path)
@@ -163,8 +216,9 @@ def bootstrap() -> None:
         return
     con = connect_sqlite(path)
     try:
-        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA, schema_version=4)
+        apply_schema_migration(con, "verify_mcp", VERIFY_SCHEMA, schema_version=5)
         _ensure_heldout_query_columns(con)
+        _ensure_preregistration_family_columns(con)
     finally:
         con.close()
     _BOOTSTRAPPED.add(key)

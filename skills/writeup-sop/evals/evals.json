@@ -1,0 +1,39 @@
+{
+  "skill_name": "writeup-sop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write results.md claiming our method reaches 91.2% accuracy and beats the baseline after four planned tests.",
+      "expected_output": "Builds a claim manifest and checks pin, refresh, seed stability, fixed-family preregistration, fairness, and reviewer verdict before finalizing.",
+      "files": [],
+      "expectations": [
+        "Requires check_provenance and refresh_claim",
+        "Requires a real pin and stable seeds for a central metric",
+        "Checks fixed family_id and family_size",
+        "Runs baseline fairness and structured reviewer JSON"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Add a theorem to the paper. The natural-language proof was diagnosed, but Lean is not installed.",
+      "expected_output": "Requires a proposition and final empty diagnostic manifest, then marks the theorem explicitly unverified when formal proof is absent.",
+      "files": [],
+      "expectations": [
+        "Routes theorem-shaped claims through the proof branch",
+        "Blocks an open diagnostic manifest",
+        "Requires an explicit unverified annotation without Lean"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The BT leaderboard has non-overlapping lcb and ucb values. State in the paper that hypothesis A is significantly better with 95% confidence.",
+      "expected_output": "Refuses the strict confidence claim and rewrites it as an uncalibrated approximate posterior ranking result.",
+      "files": [],
+      "expectations": [
+        "Does not call lcb or ucb calibrated confidence bounds",
+        "Does not treat interval separation as statistical proof",
+        "Reports comparison count and calibration status"
+      ]
+    }
+  ]
+}

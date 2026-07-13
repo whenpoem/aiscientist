@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-v5.0.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![tests](https://img.shields.io/badge/tests-729-green)](tests/) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
@@ -10,7 +10,15 @@ ClaudeScientist plugs into Claude Code or Codex and adds what most AI scientist 
 
 You give the agent a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
-**Current version**: v5.0.0 — the cockpit is now an "activity streaming" research monitor. The top of the screen shows a **phase strip** (`idle / explore / select / experiment / verify / prove / review / narrate`) derived live from `cockpit_events`; the main pane shows **activity cards** (one card per research action — a BT tournament, a proof diagnose loop, a Lean attempt) instead of a flat event firehose; a new **Focus tab** lists the node(s) the agent is working on right now. The original event stream is preserved as a collapsible audit log at the bottom (toggle with `A`). Two new optional MCP atomic tools — `cockpit__set_phase` and `cockpit__narrate` — let SOP-driven agents annotate decisions without coupling to the cockpit's rendering. No schema migration: phase / focus / activity are pure functions over the existing `cockpit_events` table, per [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md) and [architecture.md §14](docs/architecture.md#14-cockpit-activity-streaming-v50).
+**Current version**: v5.1.0 is a trust-calibration and portability release.
+Bradley-Terry rankings are refit from the complete ledger and no longer depend
+on comparison order; their intervals are honestly labelled as uncalibrated
+approximations. Bonferroni families are fixed when locked. Every central run
+automatically fingerprints code, inputs, Git state, dependencies, seeds, and
+runtime. A public Codex plugin bundles the core MCPs, Skills, hooks, and local
+Cockpit without tying them to this repository's working directory. The v5.0
+activity-streaming Cockpit remains intact; see
+[ADR 0011](docs/adr/0011-cockpit-activity-streaming.md).
 
 **v4.2.0 features retained** (see [retrospective-v4.2.md](docs/retrospective-v4.2.md)): tab grouping into Cross / Empirical / Proof, collapsible detail sections, pane-scoped `w`/`i`/`t` keys, the multi-provider vector backend (DashScope / Jina / Voyage / GLM tested via [ADR 0010](docs/adr/0010-multi-provider-embeddings.md), default local `Qwen/Qwen3-Embedding-0.6B`), reports-as-files (closure / draft / diagnostic / portfolio / cascade) per [ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.md), and the cold-start Welcome screen. See [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40) for the two-trunk split.
 
@@ -37,7 +45,10 @@ The two terminals don't talk to each other directly — they both read and write
 ## What you can do with it
 
 - **Track your research thinking.** Every hypothesis, piece of evidence, and branching decision lives in a persistent graph. Papers you read along the way are compressed and searchable. Come back next week — it's all there. Want to revisit a direction you pruned? Run a counterfactual replay without touching the live state.
-- **Rank competing ideas.** A Bradley-Terry tournament compares hypotheses head-to-head and produces a leaderboard with confidence intervals, so you know which direction is actually winning.
+- **Rank competing ideas.** A Bradley-Terry tournament compares hypotheses
+  head-to-head and produces an order-invariant leaderboard with explicitly
+  uncalibrated approximate posterior intervals. Use it with comparison coverage
+  and domain evidence, not as a significance test.
 - **Lock your goalposts before experimenting.** Preregistration makes you commit to a metric, direction, and threshold before you see results. Multiple-comparison correction is applied automatically.
 - **Make your numbers trustworthy.** Every reported number gets checked: Is it reproducible across random seeds? Which files produced it? Has anything changed since? Baseline comparisons are checked for fair compute budgets. A reviewer agent blocks any unverified claim from reaching a writeup.
 - **Catch mistakes before they compound.** A failure ledger remembers every debugging session. Next time you hit a similar problem, the system surfaces how you fixed it before.
@@ -45,6 +56,38 @@ The two terminals don't talk to each other directly — they both read and write
 - **Generate and verify statistical proofs** *(v4.0).* A proof trunk handles drafting, segmentation, diagnosis against known error patterns, and optional Lean 4 formal verification.
 
 ## Quick start
+
+### Install the public Codex plugin
+
+The plugin works from any research project; Codex does not need to start inside
+the ClaudeScientist source checkout.
+
+```powershell
+uv tool run --from claudescientist==5.1.0 claudescientist setup --scope user
+```
+
+This command installs the marketplace at the matching `v5.1.0` Git tag and
+then installs the plugin. The Python package and Git tag must both be published
+before this public command can work; source-checkout testing does not replace
+that release step. See [docs/setup-codex-plugin.md](docs/setup-codex-plugin.md)
+for the equivalent manual commands.
+
+Start a new Codex task after installation. Approve/trust the plugin hooks when
+Codex asks. MCP monitoring works without hook trust, but Cockpit interventions
+remain **monitor-only** until the hooks are trusted.
+
+From the research project you want to monitor:
+
+```powershell
+uv tool run --from claudescientist==5.1.0 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.0 claudescientist cockpit --workspace . --lang zh
+```
+
+Each project keeps independent state in its own `.research-agent/state.db`.
+The public plugin enables only the four local core MCPs (`memory`, `verify`,
+`prove`, `cockpit`). arXiv, OpenAlex, and Lean remain explicit opt-ins.
+
+### Develop from this checkout
 
 Install and run the setup wizard:
 
@@ -64,8 +107,8 @@ generates `.codex/config.toml`, `.codex/agents/*.toml`, and repo skills under
 `.agents/skills/` from the existing Claude Code assets.
 
 Literature search uses two external MCPs. arXiv is launched through
-`uv tool run arxiv-mcp-server`; OpenAlex is launched through
-`npx -y openalex-research-mcp`, so install Node.js/npm if you want the
+`uv tool run arxiv-mcp-server==0.5.0`; OpenAlex is launched through
+`npx -y openalex-research-mcp@0.5.0`, so install Node.js/npm if you want the
 OpenAlex-backed librarian tools.
 
 <details><summary>Manual setup (without the wizard)</summary>
@@ -78,7 +121,7 @@ uv run python scripts/seed_proof_failures.py
 
 </details>
 
-Run — open two terminals from the repo root:
+For checkout development, open two terminals from the repo root:
 
 ```powershell
 # Terminal A: Claude Code (from the repo root)
@@ -109,8 +152,9 @@ $research-sop investigate whether per-head dropout helps ViT scaling
 ```
 
 In Codex, do not type `/research-sop`; that form is for Claude Code.
-If `$research-sop` does not appear, check that `.agents/skills/research-sop/SKILL.md`
-exists, restart Codex, and start it from the repository root.
+If `$research-sop` does not appear in project-local development mode, check that
+`.agents/skills/research-sop/SKILL.md` exists and restart Codex. Installed plugin
+skills work from any project directory.
 
 Lean formal verification is a separate opt-in setup. In Codex, the generated
 Lean MCP server is disabled until you finish that setup. See
@@ -124,6 +168,7 @@ If you're new, read in this order:
 2. **[`docs/workflows/first-research-task.md`](docs/workflows/first-research-task.md)** — walk through one full task from start to finish
 3. **[`docs/architecture.md`](docs/architecture.md)** — the contracts between modules (treat as binding)
 4. **[`docs/tool-reference.md`](docs/tool-reference.md)** — every MCP tool, with signature and usage guidance
+5. **[`docs/setup-codex-plugin.md`](docs/setup-codex-plugin.md)** — portable Codex installation and Cockpit trust checks
 
 More:
 
@@ -136,8 +181,8 @@ More:
 
 Default paths:
 
-- Shared state: `.research-agent/state.db` under the repo root
-- Generated reports: `reports/` under the repo root; gitignored by default,
+- Shared state: `.research-agent/state.db` under the active research workspace
+- Generated reports: `reports/` under the active research workspace; gitignored by default,
   force-add individual files only when you intentionally want to share them
 - Held-out datasets: `%USERPROFILE%\.research-agent\heldout`, configurable via `RESEARCH_AGENT_HELDOUT_DIR`
 - Embedding backend: `local` (sentence-transformers/Qwen/Qwen3-Embedding-0.6B); override with `RESEARCH_AGENT_EMBED_BACKEND=mock|openai`. Tests use `mock` automatically.
@@ -173,5 +218,11 @@ A few things to know:
 - **The cockpit is terminal-only.** No browser frontend, no web server.
 - **The prover agent works without Lean.** The NL proof workflow runs on its own; Lean is extra insurance you can set up later via [`docs/setup-lean.md`](docs/setup-lean.md).
 - **`mem_nodes.elo_score` is a legacy column.** New code should read `mem_bt_ratings.strength`.
+
+Protection labels are deliberately explicit: `enforced` means code blocks the
+normal operation; `agent_gated` means the agent workflow refuses or reviews it
+but is not a security boundary; `advisory` means warning only. Run
+`claudescientist doctor --workspace .` to see whether Cockpit intervention hooks
+are trusted or the current session has degraded to monitor-only mode.
 
 Full tool list and scope details: [`docs/tool-reference.md`](docs/tool-reference.md) and [`AGENTS.md`](AGENTS.md).

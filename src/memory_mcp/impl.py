@@ -30,7 +30,7 @@ from .tools.graph import (
     propose_hypothesis,
 )
 from .tools.literature import find_baselines_for, ingest_paper, query_literature
-from .tools.replay import list_replay_branches, replay_counterfactual, snapshot
+from .tools.replay import list_replay_branches, list_snapshots, replay_counterfactual, snapshot
 
 TOOL_NAMES = [
     "propose_hypothesis",
@@ -44,6 +44,7 @@ TOOL_NAMES = [
     "match_signatures",
     "find_contradictions",
     "snapshot",
+    "list_snapshots",
     "ingest_paper",
     "query_literature",
     "find_baselines_for",

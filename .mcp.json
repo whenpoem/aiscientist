@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+  "memory": {
+    "command": "uv",
+    "args": ["tool", "run", "--from", "claudescientist==5.1.0", "claudescientist", "mcp", "memory"],
+    "startup_timeout_sec": 30
+  },
+  "verify": {
+    "command": "uv",
+    "args": ["tool", "run", "--from", "claudescientist==5.1.0", "claudescientist", "mcp", "verify"],
+    "startup_timeout_sec": 30
+  },
+  "prove": {
+    "command": "uv",
+    "args": ["tool", "run", "--from", "claudescientist==5.1.0", "claudescientist", "mcp", "prove"],
+    "startup_timeout_sec": 30
+  },
+  "cockpit": {
+    "command": "uv",
+    "args": ["tool", "run", "--from", "claudescientist==5.1.0", "claudescientist", "mcp", "cockpit"],
+    "startup_timeout_sec": 30
+  }
+  }
+}

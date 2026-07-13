@@ -51,6 +51,14 @@ def test_seed_perturb_records_stable_runs(workspace):
             LIMIT 1
             """
         ).fetchone()
+        manifest_row = con.execute(
+            """
+            SELECT provenance_id, seed_run_id, manifest_json, manifest_sha256
+            FROM ver_run_manifests
+            WHERE seed_run_id = ?
+            """,
+            (result["run_id"],),
+        ).fetchone()
     finally:
         con.close()
 
@@ -64,6 +72,15 @@ def test_seed_perturb_records_stable_runs(workspace):
     assert row["verdict"] == "stable"
     assert row["metric_pin_id"] == pin["pin_id"]
     assert json.loads(event["payload"])["run_id"] == result["run_id"]
+    manifest = json.loads(manifest_row["manifest_json"])
+    assert manifest_row["provenance_id"] == pin["provenance_id"]
+    assert manifest_row["seed_run_id"] == result["run_id"]
+    assert len(manifest_row["manifest_sha256"]) == 64
+    assert manifest["seeds"] == [0, 1, 2]
+    script_entries = [entry for entry in manifest["files"] if "script" in entry["roles"]]
+    assert len(script_entries) == 1
+    assert script_entries[0]["path"].endswith("seed_stable.py")
+    assert script_entries[0]["sha256"] is not None
 
 
 def test_seed_perturb_flags_noisy_runs(workspace):

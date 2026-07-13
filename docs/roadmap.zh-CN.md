@@ -1,6 +1,11 @@
 # 后续发展方向
 
 > English version: [roadmap.md](roadmap.md)
+
+> v5.1 修正：方向 1 必须先完成 BT 覆盖率和误剪枝模拟；当
+> `interval_calibrated=False` 时，不得发布 Thompson Sampling。方向 4 的代码与环境
+> 运行清单基础闭环已经完成。方向 8 必须从可复现的多进程压力测试开始，因为固定的
+> 预注册 family 已不再依赖 `open_count`。
 > 这份文档汇总了 v3.0 之后的中长期发展方向。它不是承诺清单，而是设计判断：在已有架构基础上，下一步最值得做什么、为什么、以及可能的实现路径。每条方向都标注了"价值"与"复杂度"的初步评估。
 
 ## 写在前面：当前的成熟度坐标
@@ -17,17 +22,23 @@ ClaudeScientist v3.0 已经把"研究流程的工程化"做到了一个可用的
 
 ## 一、深化现有能力
 
-### 方向 1：把 BT 排名从被动排序升级为主动实验设计
+### 方向 1：先校准 BT 不确定性，再做主动实验设计
 
-**当前**：`expected_information_gain` 已经能计算每个候选与榜首比较的预期方差缩减量，但调用是手动的，且只用了贪心策略。
+**当前**：v5.1 已把依赖写入顺序的在线更新改成完整账本联合 MAP 拟合，但中心化 Laplace 区间仍明确标记为未经校准。
 
-**建议**：引入 Thompson Sampling（汤普森采样）替代贪心选择。每次需要决定"下一对比较哪两个假说"时，对每个假说从其后验分布 N(strength, strength_var) 中采样，然后选采样值最高的两个。
+**v5.1 诊断基线**：`scripts/simulate_bt_diagnostics.py` 已能用固定随机种子和已知真值，
+测量头名/完整排名恢复率、边际区间覆盖率、误剪枝率和正确剪枝检出率。它直接复用 MCP
+实际使用的拟合器，没有另写一套容易漂移的统计实现。
 
-**价值**：高。Thompson Sampling 在 multi-armed bandit 设定下有 O(√(K ln K · T)) 的 regret bound，能在探索（高方差黑马）与利用（已确认的强势假说）之间自动平衡。这把 BT 锦标赛从"事后排序"变成"主动实验设计"，节省可观的比较次数。
+**下一步证据**：继续扩展到稀疏、断连、不平衡和近似并列的比较图，并预先锁定验收
+阈值。只有这些检查证明区间足够可靠后，才考虑 Thompson Sampling（汤普森采样）或
+其他依赖后验不确定性的选择器。
 
-**复杂度**：低。在 `memory_mcp/impl.py` 加一个 `thompson_select_pair` 工具即可，核心实现仅几行 `random.gauss`。
+**价值**：高。它防止主动选择机制放大尚未证明覆盖率与剪枝安全性的近似区间。
 
-**约束**：需要决定何时触发——可以做成 `bt-tournament` skill 的可选模式，或者在 `expected_information_gain` 旁提供并行选项。
+**复杂度**：中。确定性模拟框架已经完成，剩余重点是广泛场景、验收阈值和失败判据。
+
+**约束**：只要公开契约仍是 `interval_calibrated=False`，就不得发布 Thompson Sampling。
 
 ---
 
@@ -71,11 +82,11 @@ for child in descendants(H_parent):
 
 ---
 
-### 方向 4：溯源链扩展到实验脚本
+### 方向 4：细化自动运行清单（v5.1 已完成基础闭环）
 
-**当前**：`ver_provenance_dag` 只追踪输入数据文件的哈希。实验脚本本身被改了之后重跑，`refresh_claim` 检测不到。
+**当前**：v5.1 已自动记录脚本、命令引用文件、显式输入/配置、依赖锁文件、Git 状态、运行时、种子和安全环境值；`refresh_claim` 会检查这些清单。
 
-**建议**：分级追踪脚本：
+**可选细化**：在自动运行清单之上分级追踪脚本：
 
 - **Level 1**：脚本文件 SHA-256（任何改动都触发）
 - **Level 2**：AST 哈希，忽略注释和空白（只有逻辑变更触发）
@@ -83,7 +94,7 @@ for child in descendants(H_parent):
 
 不同级别触发不同严重度的事件：Level 2 → "建议重跑"，Level 3 → "强制重跑"。
 
-**价值**：高。当前是"已知漏洞"——文档里写的是 provenance 闭环，实际只闭了一半（数据闭环、代码不闭）。
+**价值**：中。关键代码/环境缺口已经关闭；语义哈希可以减少只改注释导致的重跑噪声。
 
 **复杂度**：中。Python `ast` 模块直接可用；需要决定 AST 序列化的规范形式以保证哈希稳定。
 
@@ -151,11 +162,11 @@ for child in descendants(H_parent):
 
 ## 三、走向生态
 
-### 方向 8：多会话/多用户的乐观并发控制
+### 方向 8：先做多进程压力测试，再决定并发控制
 
-**当前**：设计假定单用户单会话。两个 Claude Code 会话同时写同一个 `state.db` 时，`ver_preregistrations` 的预注册阈值校正可能因为读到相同的 open_count 而被低估。
+**当前**：SQLite 写事务使用 `BEGIN IMMEDIATE`，v5.1 固定 family 也不再依赖变化的 `open_count`；当前代码下尚未复现具体的丢更新故障。
 
-**建议**：在关键表（`ver_preregistrations`、`mem_bt_ratings`、`res_budget_ledger`）加一列 `version INTEGER DEFAULT 0`。所有写操作改用 CAS（Compare-And-Swap）：
+**建议**：先为图写入、BT 重拟合、family 锁定和预算消耗增加多进程压力测试。只有测试复现真实故障后，再增加 version 列或 CAS：
 
 ```sql
 UPDATE ver_preregistrations
@@ -241,8 +252,8 @@ WHERE prereg_id = ? AND version = ?;
 
 如果要从今天开始执行，我建议的顺序是：
 
-1. **方向 1（Thompson Sampling）** —— 收益高、成本低，几小时就能验证
-2. **方向 4（脚本溯源）** —— 关闭已知的 provenance 漏洞
+1. **方向 1（BT 校准模拟）** —— 主动选择的前置条件
+2. **方向 4（语义运行清单细化）** —— v5.1 基础闭环后的可选降噪
 3. **方向 7（节奏面板）** —— 短平快，提升用户体验
 4. **方向 6（语义化失败匹配）** —— 中期投入，长期复利
 5. **方向 2（Meta-Calibration 闭环）** —— 在多模型场景成熟前不急

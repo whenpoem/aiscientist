@@ -32,6 +32,14 @@ def test_build_codex_config_is_valid_toml(tmp_path):
     assert config["mcp_servers"]["lean"]["cwd"] == str(repo.resolve())
     assert config["mcp_servers"]["lean"]["enabled"] is False
     assert config["mcp_servers"]["openalex"]["command"] == "npx"
+    assert config["mcp_servers"]["arxiv"]["enabled"] is False
+    assert config["mcp_servers"]["openalex"]["enabled"] is False
+    assert config["mcp_servers"]["arxiv"]["args"][-1] == (
+        "arxiv-mcp-server==0.5.0"
+    )
+    assert config["mcp_servers"]["openalex"]["args"][-1] == (
+        "openalex-research-mcp@0.5.0"
+    )
     pre_tool_hooks = config["hooks"]["PreToolUse"]
     assert any("leakage_guard" in item["hooks"][0]["command"] for item in pre_tool_hooks)
 
@@ -71,6 +79,7 @@ def test_ensure_codex_support_syncs_agents_and_skills(tmp_path):
     assert "Never write files" in agent_config["developer_instructions"]
     assert "mcp__memory__query_literature" in agent_config["developer_instructions"]
     assert (repo / ".agents" / "skills" / "demo" / "SKILL.md").exists()
+    assert (repo / "skills" / "demo" / "SKILL.md").exists()
 
     second = agent_hosts.ensure_codex_support(repo)
     assert second.written == ()
@@ -148,6 +157,16 @@ def test_codex_hook_runner_accepts_misdecoded_powershell_bom(monkeypatch):
     assert codex_hooks.main(["destructive_bash_guard", "--event", "PreToolUse"]) == 0
     payload = json.loads(stdout.getvalue())
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_clean_json_stdin_repairs_gbk_surrogateescape_mojibake():
+    original = json.dumps(
+        {"input": {"patch": "\u5efa\u8bae \"\u4e0b\u4e00\u6b65\""}},
+        ensure_ascii=False,
+    )
+    mojibake = original.encode("utf-8").decode("gbk", errors="surrogateescape")
+
+    assert codex_hooks._clean_json_stdin(mojibake) == original  # noqa: SLF001
 
 
 def test_codex_hook_runner_denies_invalid_json_for_safety_hooks(monkeypatch):

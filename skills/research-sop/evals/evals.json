@@ -1,0 +1,39 @@
+{
+  "skill_name": "research-sop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Investigate whether retrieval augmentation improves our classifier, compare several mechanisms, run the most informative experiment, and tell me what we can honestly claim.",
+      "expected_output": "Routes literature, comparable hypotheses, BT selection, exploratory/confirmatory choice, implementation, automatic run manifests, verification, and claim handoff.",
+      "files": [],
+      "expectations": [
+        "Separates exploratory and confirmatory work before the result is observed",
+        "Uses fixed preregistration family metadata for related confirmatory tests",
+        "Describes BT intervals as uncalibrated approximate posterior summaries",
+        "Requires fresh provenance, seeds, fairness, and explicit completion criteria"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Continue yesterday's interrupted experiment without restarting; I think there was already a snapshot and one open preregistration.",
+      "expected_output": "Resumes from graph, snapshots, preregistrations, pins, manifests, and failures before choosing the next action.",
+      "files": [],
+      "expectations": [
+        "Contains an explicit interrupted-work recovery branch",
+        "Inspects recorded state rather than relying on conversation memory",
+        "Preserves existing exploratory or confirmatory status"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Use the public ClaudeScientist plugin to start a research task in this repo. I do not have any custom agents configured.",
+      "expected_output": "Works inline without custom agents and gives the workspace-specific Cockpit launch command.",
+      "files": [],
+      "expectations": [
+        "States that custom role agents are optional",
+        "Provides an inline fallback for every role boundary",
+        "Shows a Cockpit command with an explicit workspace"
+      ]
+    }
+  ]
+}

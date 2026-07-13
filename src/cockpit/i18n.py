@@ -236,6 +236,10 @@ TEXT: dict[str, dict[str, str]] = {
         "pin_error_numeric": "Value must be numeric.",
         "help_actions": "Actions",
         "help_meta": "Meta",
+        "help_protection_strength": "Protection strength",
+        "protection_enforced_help": "code or an enabled hook blocks the action",
+        "protection_agent_gated_help": "the agent workflow refuses, but direct use can bypass it",
+        "protection_advisory_help": "warns or scores risk without blocking",
         "move_selection": "move selection",
         "collapse_expand": "collapse/expand or move focus",
         "jump_pane": "jump to pane",
@@ -432,6 +436,18 @@ TEXT: dict[str, dict[str, str]] = {
         "animations_enabled": "animations on",
     },
     "zh": {
+        "help_protection_strength": "\u4fdd\u62a4\u5f3a\u5ea6",
+        "protection_enforced_help": (
+            "\u7531\u4ee3\u7801\u6216\u5df2\u542f\u7528\u7684 hook \u62e6\u622a"
+        ),
+        "protection_agent_gated_help": (
+            "\u7531\u4ee3\u7406\u6d41\u7a0b\u62d2\u7edd\uff0c"
+            "\u4f46\u76f4\u63a5\u64cd\u4f5c\u4ecd\u53ef\u80fd\u7ed5\u8fc7"
+        ),
+        "protection_advisory_help": (
+            "\u53ea\u8b66\u544a\u6216\u8bc4\u4f30\u98ce\u9669\uff0c"
+            "\u4e0d\u4f1a\u62e6\u622a"
+        ),
         "app_name": "研究状态",
         "tree_title": "1 假设树",
         "detail_title": "2 节点详情",

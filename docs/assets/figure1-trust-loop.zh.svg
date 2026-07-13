@@ -223,7 +223,7 @@
         <line x1="12" y1="33" x2="12" y2="45" stroke="#3d5471" stroke-width="1"/>
         <line x1="40" y1="33" x2="40" y2="45" stroke="#3d5471" stroke-width="1"/>
 
-        <text x="118" y="42" font-size="9" fill="#5a7da3" opacity="0.7" font-style="italic">θ ± LUCB</text>
+        <text x="118" y="42" font-size="9" fill="#5a7da3" opacity="0.7" font-style="italic">theta +/- approx.</text>
       </g>
     </g>
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import runpy
 import sys
 from pathlib import Path
@@ -104,6 +105,11 @@ def normalize_payload(payload: dict[str, Any], *, event_name: str | None = None)
 def _hook_path(hook_name: str) -> Path:
     if hook_name not in _ALLOWED_HOOKS:
         raise SystemExit(f"unknown hook {hook_name!r}")
+    plugin_root = os.environ.get("PLUGIN_ROOT") or os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        plugin_path = Path(plugin_root) / ".claude" / "hooks" / f"{hook_name}.py"
+        if plugin_path.is_file():
+            return plugin_path
     root = project_root()
     if root is None:
         raise SystemExit("could not locate claudescientist repo root")
@@ -136,6 +142,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _clean_json_stdin(raw: str) -> str:
+    # Some Windows PowerShell launch paths decode UTF-8 input as GBK with
+    # surrogateescape. Reverse that lossless mojibake before parsing JSON.
+    if any(0xDC80 <= ord(char) <= 0xDCFF for char in raw):
+        try:
+            raw = raw.encode("gbk", errors="surrogateescape").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
     # Windows PowerShell can misdecode a UTF-8 BOM plus "{" as two codepoints.
     if raw.startswith(_POWERSHELL_MISDECODED_JSON_OBJECT_PREFIX):
         return "{" + raw[len(_POWERSHELL_MISDECODED_JSON_OBJECT_PREFIX) :]
@@ -145,7 +158,11 @@ def _clean_json_stdin(raw: str) -> str:
     return raw
 
 
-def _deny_invalid_payload(hook_name: str) -> None:
+def _deny_invalid_payload(
+    hook_name: str,
+    error: json.JSONDecodeError | None = None,
+) -> None:
+    position = error.pos if error is not None else 0
     print(
         json.dumps(
             {
@@ -154,7 +171,8 @@ def _deny_invalid_payload(hook_name: str) -> None:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         f"{hook_name} received an invalid hook payload; refusing "
-                        "the tool call so safety checks cannot be bypassed."
+                        "the tool call so safety checks cannot be bypassed. "
+                        f"Payload error position: {position}."
                     ),
                 }
             }
@@ -167,9 +185,9 @@ def main(argv: list[str] | None = None) -> int:
     raw_payload = _clean_json_stdin(sys.stdin.read())
     try:
         payload = json.loads(raw_payload or "{}")
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         if args.hook_name in _PRETOOL_SAFETY_HOOKS:
-            _deny_invalid_payload(args.hook_name)
+            _deny_invalid_payload(args.hook_name, exc)
             return 0
         return 1
     if not isinstance(payload, dict):

@@ -231,6 +231,39 @@ def replay_counterfactual(snapshot_id: str, counterfactual: str) -> dict:
     }
 
 
+def list_snapshots(limit: int = 20) -> list[dict]:
+    """Return recent snapshot metadata without loading full frozen payloads."""
+    con = _connect()
+    try:
+        rows = con.execute(
+            """
+            SELECT snapshot_id, label, payload, created_at
+            FROM mem_snapshots
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT ?
+            """,
+            (min(200, max(1, int(limit))),),
+        ).fetchall()
+    finally:
+        con.close()
+    snapshots: list[dict] = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        counts = payload.get("counts")
+        snapshots.append(
+            {
+                "snapshot_id": row["snapshot_id"],
+                "label": row["label"],
+                "created_at": row["created_at"],
+                "counts": counts if isinstance(counts, dict) else {},
+            }
+        )
+    return snapshots
+
+
 def list_replay_branches(limit: int = 20) -> list[dict]:
     """Return recent replay branches, newest first."""
     con = _connect()

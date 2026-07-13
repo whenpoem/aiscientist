@@ -28,8 +28,13 @@ Classify numeric figures before applying gates. Result metrics, statistical clai
 2. For publication-critical numeric claims, call `mcp__verify__check_provenance` with the claim. If `status == "missing"`, add a blocker `"no provenance for: <claim>"` and set `pin_id = null`. For context numbers, do not block solely for missing provenance; put any concern in `notes`.
 3. If a pin exists, inspect `check_provenance().pins[*]` for `pin_id`, `seed_verdict`, `seed_run_count`, and `latest_seed_run_id`. Then call `mcp__verify__refresh_claim` to confirm the underlying inputs have not drifted. Any non-zero `stale_count` is a blocker for publication-critical claims. `unchecked_count > 0` is an audit warning unless the claim is a central result with no other trace.
 4. Call `mcp__verify__list_preregistrations(hypothesis_id=<linked id>)` if the manuscript ties the claim to a confirmatory hypothesis. Reject when the matching confirmatory prereg is `open` (not yet resolved) or `missed`. Exploratory claims may pass only if clearly labelled exploratory.
+   Verify that related confirmatory tests retain the same locked `family_id`
+   and `family_size`; resolution order must never relax Bonferroni correction.
 5. For central experimental metrics, refuse to accept unless the linked pin's `seed_verdict == "stable"` or the manuscript explicitly narrows the claim to an exploratory / unstable result. The `provenance_trace` row must reflect this.
-6. Cross-check the headline conclusion against `mcp__memory__get_bt_leaderboard`. If the manuscript champions a hypothesis whose Bradley-Terry status is `paused` or `pruned`, that is a blocker.
+6. Cross-check the headline conclusion against `mcp__memory__get_bt_leaderboard`.
+   If the manuscript champions a hypothesis whose status is `paused` or
+   `pruned`, that is a blocker. Treat `lcb`/`ucb` as uncalibrated approximate
+   posterior intervals, never strict 95% confidence or LUCB guarantees.
 
 ## Proof checklist (theorem claims)
 

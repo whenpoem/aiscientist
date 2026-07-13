@@ -17,17 +17,30 @@ The directions below cluster into three layers: **deepening existing capabilitie
 
 ## I. Deepening existing capabilities
 
-### Direction 1: Promote BT ranking from passive sorting to active experimental design
+### Direction 1: Calibrate BT uncertainty before active experimental design
 
-**Today**: `expected_information_gain` already computes the expected variance reduction from comparing each candidate against the leader, but invocation is manual and the strategy is greedy.
+**Today**: v5.1 replaced order-dependent online updates with an order-invariant
+full-ledger joint MAP fit. Its centred Laplace intervals are explicitly
+uncalibrated.
 
-**Proposal**: Replace the greedy choice with **Thompson Sampling**. To pick the next pair to compare, sample from each hypothesis's posterior `N(strength, strength_var)` and select the two with the highest sampled values.
+**v5.1 diagnostic baseline**: `scripts/simulate_bt_diagnostics.py` now measures
+top/full ranking recovery, marginal interval coverage, erroneous pruning, and
+true-prune detection against known simulated strengths with a fixed seed. It
+uses the exact fitter used by the MCP rather than a second implementation.
 
-**Value**: High. Thompson Sampling has an O(√(K ln K · T)) regret bound under the multi-armed bandit framing, balancing exploration (high-variance dark horses) and exploitation (already-confirmed leaders) automatically. This turns the BT tournament from "sort after the fact" into "actively design the next experiment", saving a meaningful number of comparisons.
+**Next evidence**: Expand the scenario matrix across sparse, disconnected,
+imbalanced, and near-tied comparison graphs and set preregistered acceptance
+thresholds. Only after those checks establish usable calibration should
+Thompson Sampling or another posterior-driven selector be considered.
 
-**Complexity**: Low. A new `thompson_select_pair` tool in `memory_mcp/impl.py`, core implementation just a few lines of `random.gauss`.
+**Value**: High. It prevents active selection from amplifying uncertainty
+estimates that have not demonstrated coverage or pruning safety.
 
-**Constraint**: Decide when to trigger it — possibly as an opt-in mode of the `bt-tournament` skill, or as a parallel option next to `expected_information_gain`.
+**Complexity**: Medium. The deterministic harness is complete; broad scenario
+design and acceptance thresholds remain the substantive work.
+
+**Constraint**: Do not ship Thompson Sampling while
+`interval_calibrated=False` remains the public contract.
 
 ---
 
@@ -71,11 +84,13 @@ for child in descendants(H_parent):
 
 ---
 
-### Direction 4: Extend the provenance chain to experiment scripts
+### Direction 4: Refine automatic run manifests *(baseline completed in v5.1)*
 
-**Today**: `ver_provenance_dag` only hashes input data files. If the experiment script itself is edited and re-run, `refresh_claim` cannot detect it.
+**Today**: v5.1 automatically fingerprints scripts, command-referenced files,
+explicit inputs/configs, dependency locks, Git state, runtime, seeds, and safe
+environment values. `refresh_claim` checks this manifest for drift.
 
-**Proposal**: Multi-level script tracking:
+**Possible refinement**: Multi-level script tracking:
 
 - **Level 1**: Script file SHA-256 (any change triggers)
 - **Level 2**: AST hash, ignoring comments and whitespace (only logical changes trigger)
@@ -83,7 +98,8 @@ for child in descendants(H_parent):
 
 Different levels emit different severity events: Level 2 → "suggest re-run", Level 3 → "force re-run".
 
-**Value**: High. This is a known hole — the docs claim a closed provenance loop, but in reality only the data half is closed.
+**Value**: Medium. The critical code/environment gap is closed; semantic hashes
+could reduce noisy reruns after comment-only edits.
 
 **Complexity**: Medium. Python's `ast` module is directly usable; a canonical AST serialization is needed for stable hashes.
 
@@ -153,9 +169,13 @@ Together they form an "EKG" of the research: at a glance you can tell whether yo
 
 ### Direction 8: Optimistic concurrency control for multi-session use
 
-**Today**: Design assumes single-user single-session. Two Claude Code sessions writing the same `state.db` simultaneously can under-correct preregistration thresholds because both see the same `open_count`.
+**Today**: SQLite writes use `BEGIN IMMEDIATE`, and v5.1 fixed
+preregistration families no longer depend on a changing `open_count`. A concrete
+lost-update failure has not yet been reproduced under the current code.
 
-**Proposal**: Add a `version INTEGER DEFAULT 0` column to critical tables (`ver_preregistrations`, `mem_bt_ratings`, `res_budget_ledger`). Convert all writes to compare-and-swap:
+**Proposal**: First add multi-process stress tests for graph writes, BT refits,
+preregistration-family locking, and budget consumption. Add version columns or
+compare-and-swap only for a failure the tests can reproduce:
 
 ```sql
 UPDATE ver_preregistrations
@@ -244,8 +264,8 @@ The two trunks share four cooperation interfaces (one tree, one failure ledger, 
 
 If you start today, I would suggest this order:
 
-1. **Direction 1 (Thompson Sampling)** — high value, low cost, validatable in hours
-2. **Direction 4 (script provenance)** — closes a known provenance hole
+1. **Direction 1 (BT calibration simulations)** — prerequisite for active selection
+2. **Direction 4 (semantic manifest refinement)** — optional noise reduction after v5.1 closure
 3. **Direction 7 (rhythm pane)** — short and sweet, UX win
 4. **Direction 6 (semantic failure matching)** — medium investment, long compound returns
 5. **Direction 2 (meta-calibration loop)** — wait until multi-model usage matures

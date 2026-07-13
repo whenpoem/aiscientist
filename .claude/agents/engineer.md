@@ -17,7 +17,10 @@ While implementing:
 - Never hardcode paths into `.research-agent/heldout/`, `.research-agent/held_out/`, or any registered held-out dataset path.
 
 After running:
-- Call `mcp__verify__record_provenance` with the numeric results.
-- If a metric is central to the claim you plan to report, also call `mcp__verify__pin_metric`.
+- Call `mcp__verify__record_provenance` with the numeric results and explicitly
+  pass experiment inputs and configs. v5.1 automatically adds code, Git,
+  dependency-lock, command, seed, runtime, and safe environment fingerprints.
+- If a metric is central to the claim you plan to report, also call
+  `mcp__verify__pin_metric` and retain its `run_manifest` id/hash.
 - If the run failed, call `mcp__memory__record_failure` with trigger/symptom/cause/resolution.
 - Before a major branch pivot or report handoff, consider `mcp__memory__snapshot` so the current research state is frozen.

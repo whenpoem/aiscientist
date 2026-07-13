@@ -405,7 +405,7 @@ def step_sanity(state: SetupState) -> bool:
         _console.print(
             "[yellow]npx not found — OpenAlex literature search will be "
             "unavailable until Node.js/npm is installed. arXiv search still "
-            "uses `uv tool run arxiv-mcp-server`.[/yellow]"
+            "uses `uv tool run arxiv-mcp-server==0.5.0`.[/yellow]"
         )
     return True
 

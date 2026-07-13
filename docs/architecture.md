@@ -16,17 +16,22 @@ This document describes the contracts between modules — the rules that keep th
 
 ### 1. Module map
 
-ClaudeScientist is composed of four runtime layers and one shared state file.
+ClaudeScientist is composed of five runtime layers and one shared state file.
 
 | Layer | Package | Process model | Talks to |
 |---|---|---|---|
 | **Runtime core** | `claudescientist` | Library (no daemon) | All other layers |
 | **Memory MCP** | `memory_mcp` | One stdio subprocess per Claude Code session | SQLite, Claude over stdio |
 | **Verify MCP** | `verify_mcp` | One stdio subprocess per Claude Code session | SQLite, Claude over stdio |
+| **Proof MCP** | `prove_mcp` | One stdio subprocess per agent session | SQLite, agent over stdio |
 | **Cockpit** | `cockpit` | TUI process (Terminal B) **+** stdio MCP bridge | SQLite |
 | **Hooks** | `.claude/hooks/*.py` | Short-lived processes spawned by Claude Code at lifecycle events | SQLite |
 
-The five layers never call each other directly. They all talk through the SQLite file at `.research-agent/state.db`.
+The runtime layers coordinate through the SQLite file at
+`<workspace>/.research-agent/state.db`. The install location supplies Python
+packages, plugin assets, and hooks; the active research workspace supplies state
+and reports. Code must use `installation_root()` and `workspace_root()` rather
+than assuming those locations are the same.
 
 ### 2. The state file
 
@@ -46,6 +51,21 @@ Held-out data (typically test sets) is doubly protected. Both layers must hold f
 
 If a hook or tool anywhere needs to bypass these protections, the bypass must come with a written justification and an additional unit test.
 
+#### Protection strength is part of the public contract
+
+Every safeguard must be described at its actual strength:
+
+| Level | Meaning | Examples |
+|---|---|---|
+| `enforced` | Code mechanically blocks the normal operation | held-out path guard; held-out query budget |
+| `agent_gated` | Agent instructions require refusal or review, but this is not a security boundary | reviewer write-up gate; preregistration workflow |
+| `advisory` | The system reports a risk or recommendation without blocking | BT uncertainty and pause suggestions |
+
+The machine-readable catalogue is `claudescientist.protections`. Cockpit help
+and user documentation must not describe an agent-gated or advisory check as an
+unconditional mechanical guarantee. A bypass environment variable or missing
+hook state must be documented as a degradation condition.
+
 ### 4. Agent tool contracts
 
 Agent prompts and tool whitelists are part of the architecture, not just configuration. Two rules:
@@ -62,7 +82,9 @@ Some things are deliberately not fixed here, because they are expected to evolve
 - **The exact set of MCP tools.** New tools land in the existing memory and verify servers without requiring a new MCP server, per the v3.0 plan.
 - **Cockpit pane layout.** The grid, modals, and keybindings can change as long as the data contract holds.
 - **Subagent prompts.** They can be revised freely, as long as the tool whitelist matches the role's contract (§4).
-- **External literature MCPs.** `arxiv-mcp-server` and `openalex-research-mcp` are installed as-is; we own only the `ingest_paper` compression layer in `memory_mcp`.
+- **External literature MCPs.** arXiv and OpenAlex are optional, version-pinned
+  integrations. We own only the `ingest_paper` compression layer in
+  `memory_mcp`; neither external server is bundled into the public plugin.
 
 ### 6. How to break a contract
 
@@ -83,7 +105,11 @@ Silent contract changes are the highest-severity bug class in this project.
 
 The `claudescientist.runtime` module owns the four pieces of cross-module infrastructure that every layer depends on:
 
-- **Path resolution.** `state_db_path()`, `heldout_root()`, and friends are the only legitimate way to locate shared resources. Feature packages must not duplicate path resolution; in particular, held-out roots must come from `runtime.heldout_root()` or from a registered `ver_heldout_budgets.heldout_path` row.
+- **Path resolution.** `installation_root()`, `workspace_root()`,
+  `state_db_path()`, `heldout_root()`, and friends are the only legitimate way
+  to locate resources. Feature packages must not duplicate path resolution.
+  `PLUGIN_ROOT` may identify installed plugin assets, while
+  `RESEARCH_AGENT_WORKSPACE` identifies the active research project.
 - **SQLite connection setup.** `connect_sqlite()` enables WAL mode, foreign keys, row factories, and a 5-second busy timeout. `connect_existing_sqlite()` is the hook-safe variant: it returns `None` instead of creating the DB when state is missing or malformed.
 - **Schema migration bookkeeping.** The `ra_migrations` table records, per component, the schema version, schema hash, apply status, and any failure text. Structural upgrades that cannot be expressed by `CREATE TABLE IF NOT EXISTS` must use explicit compatibility helpers and ship with tests.
 - **Cockpit event insertion.** `emit_cockpit_event()` is the canonical way to push something to the cockpit. Producers should call it inside the same transaction as the underlying state change.
@@ -125,28 +151,41 @@ The hypothesis-ranking system that replaced the v0.2 Elo layer.
 
 #### The math, briefly
 
-For a single comparison with `winner=i, loser=j`:
+After every comparison, the implementation refits all candidates of that kind
+from the complete append-only comparison ledger. It maximizes the joint
+Bradley-Terry log likelihood plus a zero-centred Gaussian prior:
 
-```
-diff   = clip(theta_i - theta_j, [-30, 30])
-p      = sigmoid(diff)
-fisher = max(1e-6, p * (1-p)) * weight
-delta  = lr * weight * (1 - p)            # lr = 0.5
-theta_i := clip(theta_i + delta, [-12, 12])
-theta_j := clip(theta_j - delta, [-12, 12])
-var_i := 1 / (1/var_i + fisher)
-var_j := 1 / (1/var_j + fisher)
+```text
+log posterior(theta) = sum_c weight_c * log sigmoid(theta_w - theta_l)
+                       - 0.5 * sum_i theta_i^2 / prior_var
 ```
 
-Confidence intervals on the leaderboard are `lcb = strength - 1.96 * sqrt(var)` and `ucb = strength + 1.96 * sqrt(var)`. The initial `strength_var = 1.0` plus the strength clip act as a Beta(1,1) shrinkage prior, bounding deterministic blowups when one node always wins.
+Newton solves use the full precision matrix, so the fitted ranking is invariant
+to comparison insertion order. The inverse observed precision is centred to
+remove the unidentifiable common translation mode. `strength_var` stores the
+resulting marginal variance. The compatibility fields `lcb` and `ucb` are
+`strength +/- z * sqrt(strength_var)` for the requested interval level.
+
+These intervals are an **uncalibrated Laplace approximation to a MAP posterior**.
+They are not frequentist confidence intervals, strict LUCB bounds, or a
+significance test. Pruning and stopping decisions must also consider comparison
+coverage, ranking stability, and domain evidence.
 
 ### 10. Preregistration and the provenance DAG (v3.0)
 
 These two mechanisms together enforce trustworthy numeric claims.
 
 - **Publication-critical numeric claims should trace** to pinned provenance, stable seed evidence, and, when the claim is confirmatory, a `ver_preregistrations.prereg_id` whose `status='met'`. Exploratory results must be labelled as exploratory instead of being silently promoted to main claims.
-- **`ver_provenance_dag.input_hashes` records the sha256 of every cited input file at record time.** `refresh_claim` re-hashes and emits `prov_dag_stale` events on drift. Stale provenance blocks publication-critical claims; missing DAG rows are reported as unchecked audit context rather than proof of freshness.
-- **`resolve_preregistration` computes correction against the count of currently-open prereg rows.** Locking many preregs at once intentionally tightens alpha, which is conservative multiple-comparison behavior. New prereg rows use `bonferroni`; old `bh` rows remain accepted as a compatibility alias for the same Bonferroni-style calculation.
+- **Every provenance record carries an automatic run manifest.** It fingerprints
+  the command-referenced script and files, explicit inputs/configs, dependency
+  lockfiles, Git commit and dirty state, runtime, seeds, and safe reproducibility
+  environment values. `refresh_claim` checks both the DAG and manifest and emits
+  `prov_dag_stale` on drift. Secret-like environment values are redacted.
+- **Bonferroni families are fixed when preregistration is locked.** Every row
+  stores `family_id` and `family_size`; resolving other members never relaxes
+  alpha. New rows use `bonferroni`. Legacy `bh` rows remain readable through the
+  same compatibility calculation, and unresolved pre-v5 rows migrate into one
+  conservative fixed legacy family.
 
 ### 11. Resource ledger (v3.0)
 
@@ -193,7 +232,7 @@ The core is everything that doesn't know whether the work in flight is empirical
 | `claudescientist.runtime` | path, SQLite, migrations, event emission | Domain-free infrastructure |
 | `mem_nodes` / `mem_edges` | hypothesis/proposition graph | `kind` field carries the domain; the table itself does not |
 | `mem_failures` + FTS5 | cross-domain failure ledger | New `domain` column gates filtering; the matching algorithm is domain-free |
-| `mem_bt_ratings` + tournament tools | ranking + LUCB intervals | Cross-kind comparison stays disallowed; same-kind comparison works for `hypothesis` and `proof_skeleton` alike |
+| `mem_bt_ratings` + tournament tools | ranking + approximate posterior intervals | Cross-kind comparison stays disallowed; same-kind comparison works for `hypothesis` and `proof_skeleton` alike |
 | `meta_calibration` | per-agent reliability | Calibration is per-judge, not per-domain |
 | `mem_replay_branches` | counterfactual snapshots | Domain-free |
 | `cockpit` + `cockpit_events` | live UI + event bus | One tree, two trunks |

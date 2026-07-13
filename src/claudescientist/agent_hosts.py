@@ -50,11 +50,11 @@ _MCP_SERVERS: tuple[tuple[str, str, list[str], dict[str, str]], ...] = (
         ["run", "python", "-m", "cockpit.mcp_server"],
         {"RESEARCH_AGENT_DEV": "1"},
     ),
-    ("arxiv", "uv", ["tool", "run", "arxiv-mcp-server"], {}),
-    ("openalex", "npx", ["-y", "openalex-research-mcp"], {}),
+    ("arxiv", "uv", ["tool", "run", "arxiv-mcp-server==0.5.0"], {}),
+    ("openalex", "npx", ["-y", "openalex-research-mcp@0.5.0"], {}),
 )
 
-_CODEX_DISABLED_MCP_SERVERS = {"lean"}
+_CODEX_DISABLED_MCP_SERVERS = {"arxiv", "lean", "openalex"}
 
 _HOOKS: tuple[tuple[str, str | None, str, str], ...] = (
     (
@@ -139,6 +139,7 @@ def ensure_codex_support(repo_root: Path) -> HostSetupResult:
 
     written.extend(_sync_codex_agents(repo_root))
     written.extend(_sync_codex_skills(repo_root))
+    written.extend(_sync_plugin_skills(repo_root))
     return HostSetupResult(written=tuple(written))
 
 
@@ -189,6 +190,8 @@ def _mcp_server_block(
     lines: list[str] = []
     if name == "lean":
         lines.append("# Lean is optional. Enable this after completing docs/setup-lean.md.")
+    elif name in {"arxiv", "openalex"}:
+        lines.append("# External literature search is optional; enable only when needed.")
     lines.extend(
         [
             f"[mcp_servers.{name}]",
@@ -305,6 +308,25 @@ def _sync_codex_skills(repo_root: Path) -> tuple[Path, ...]:
             continue
         relative = source.relative_to(source_dir)
         target = target_dir / relative
+        if not target.exists() or source.read_bytes() != target.read_bytes():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            written.append(target)
+    return tuple(written)
+
+
+def _sync_plugin_skills(repo_root: Path) -> tuple[Path, ...]:
+    """Refresh the standard plugin ``skills/`` publishing surface."""
+    source_dir = repo_root / ".claude" / "skills"
+    target_dir = repo_root / "skills"
+    if not source_dir.is_dir():
+        return ()
+
+    written: list[Path] = []
+    for source in sorted(source_dir.rglob("*")):
+        if not source.is_file():
+            continue
+        target = target_dir / source.relative_to(source_dir)
         if not target.exists() or source.read_bytes() != target.read_bytes():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)

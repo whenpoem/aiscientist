@@ -75,7 +75,7 @@
     <rect width="185" height="120" rx="8" class="l1card"/>
     <g><rect width="22" height="18" rx="4" fill="#3F6395"/><text x="11" y="13" text-anchor="middle" class="stnum">2</text></g>
     <text x="30" y="14" class="l1-title">Hypothesis Ranking</text>
-    <text x="6"  y="40" class="l1-sub">Bradley-Terry · LUCB intervals</text>
+    <text x="6"  y="40" class="l1-sub">Bradley-Terry · approximate intervals</text>
     <g transform="translate(46,58)">
       <line x1="0"  y1="6"  x2="86" y2="6"  stroke="#1F2A37" stroke-width="2.6"/><circle cx="64" cy="6" r="2.8" fill="#1F2A37"/>
       <line x1="14" y1="18" x2="72" y2="18" stroke="#3F5972" stroke-width="2.2"/><circle cx="48" cy="18" r="2.4" fill="#3F5972"/>
@@ -449,7 +449,7 @@
         <g transform="translate(0,14)">
           <rect width="200" height="116" rx="8" class="l3card"/>
           <text x="10" y="18" class="label" font-weight="700" fill="#2F4256">Bradley-Terry ratings</text>
-          <text x="10" y="32" class="micro">strength + 95% LUCB</text>
+          <text x="10" y="32" class="micro">strength + approximate interval</text>
           <g transform="translate(20,52)">
             <line x1="0"  y1="6"  x2="80" y2="6"  stroke="#1F2A37" stroke-width="2.2"/><circle cx="60" cy="6" r="2.4" fill="#1F2A37"/>
             <line x1="14" y1="18" x2="68" y2="18" stroke="#3F5972" stroke-width="2.0"/><circle cx="46" cy="18" r="2.2" fill="#3F5972"/>

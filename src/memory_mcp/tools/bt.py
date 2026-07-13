@@ -1,4 +1,4 @@
-"""Bradley-Terry ranking tools and the underlying online-update math.
+"""Bradley-Terry ranking tools and the underlying batch MAP fit.
 
 Contains the canonical BT comparison primitive (`_bt_apply_comparison`) plus
 the seven public tools that exercise it: judge / record_judgement /
@@ -12,6 +12,8 @@ import math
 import os
 import sqlite3
 
+import numpy as np
+
 from memory_mcp.db import _connect, tx
 
 from ._common import _emit_event, _get_node
@@ -20,8 +22,9 @@ AUTO_PRUNE_ENV = "RESEARCH_AGENT_AUTO_PRUNE"
 
 BT_STRENGTH_CLIP = 12.0
 BT_PRIOR_VAR = 1.0
-BT_LEARNING_RATE = 0.5
 BT_MIN_VAR = 1e-4
+BT_FIT_TOL = 1e-10
+BT_FIT_MAX_ITER = 100
 BT_MIN_COMPARISONS_FOR_RANK = 3
 BT_VALID_SOURCES = {
     "llm_judge",
@@ -42,10 +45,6 @@ def _expected_score(rating_a: float, rating_b: float) -> float:
 def _bt_sigmoid(diff: float) -> float:
     clipped = max(-30.0, min(30.0, diff))
     return 1.0 / (1.0 + math.exp(-clipped))
-
-
-def _bt_clip_strength(value: float) -> float:
-    return max(-BT_STRENGTH_CLIP, min(BT_STRENGTH_CLIP, value))
 
 
 def _ensure_bt_row(con: sqlite3.Connection, node_id: str) -> sqlite3.Row:
@@ -71,29 +70,130 @@ def _ensure_bt_row(con: sqlite3.Connection, node_id: str) -> sqlite3.Row:
     ).fetchone()
 
 
-def _bt_online_update(
-    theta_w: float,
-    var_w: float,
-    theta_l: float,
-    var_l: float,
-    weight: float = 1.0,
-) -> tuple[float, float, float, float]:
-    """One online Bradley-Terry update via Laplace approximation.
+def _fit_bt_arrays(
+    node_ids: list[str],
+    comparisons: list[tuple[str, str, float]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Fit the joint MAP model without depending on SQLite.
 
-    Uses logistic-link gradient ascent on log-likelihood for the means and
-    a Fisher-information posterior precision update for the variances. The
-    Beta(1,1)-equivalent shrinkage comes from BT_PRIOR_VAR initial variance
-    plus the strength clip.
+    The database tool and the deterministic calibration simulator share this
+    primitive so the simulator measures the exact model used in production.
+    The returned covariance is centred because only pairwise strength
+    differences are identifiable in a Bradley-Terry model.
     """
-    weight_eff = max(0.05, float(weight))
-    p_winner = _bt_sigmoid(theta_w - theta_l)
-    fisher = max(1e-6, p_winner * (1.0 - p_winner)) * weight_eff
-    delta = BT_LEARNING_RATE * weight_eff * (1.0 - p_winner)
-    new_theta_w = _bt_clip_strength(theta_w + delta)
-    new_theta_l = _bt_clip_strength(theta_l - delta)
-    new_var_w = 1.0 / (1.0 / max(var_w, BT_MIN_VAR) + fisher)
-    new_var_l = 1.0 / (1.0 / max(var_l, BT_MIN_VAR) + fisher)
-    return new_theta_w, max(BT_MIN_VAR, new_var_w), new_theta_l, max(BT_MIN_VAR, new_var_l)
+    if not node_ids:
+        empty_float = np.zeros(0, dtype=float)
+        return empty_float, np.zeros((0, 0), dtype=float), np.zeros(0, dtype=int)
+    if len(set(node_ids)) != len(node_ids):
+        raise ValueError("node_ids must be unique")
+
+    index = {node_id: idx for idx, node_id in enumerate(node_ids)}
+    theta = np.zeros(len(node_ids), dtype=float)
+    counts = np.zeros(len(node_ids), dtype=int)
+    prior_precision = 1.0 / BT_PRIOR_VAR
+
+    for winner_id, loser_id, weight in comparisons:
+        if winner_id not in index or loser_id not in index:
+            raise ValueError("comparison contains a node outside node_ids")
+        if winner_id == loser_id:
+            raise ValueError("comparison winner and loser must differ")
+        if not math.isfinite(float(weight)) or float(weight) <= 0:
+            raise ValueError("comparison weight must be positive and finite")
+        counts[index[winner_id]] += 1
+        counts[index[loser_id]] += 1
+
+    def gradient_and_precision(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        gradient = -prior_precision * values
+        precision = np.eye(len(node_ids), dtype=float) * prior_precision
+        for winner_id, loser_id, raw_weight in comparisons:
+            winner = index[winner_id]
+            loser = index[loser_id]
+            weight = float(raw_weight)
+            probability = _bt_sigmoid(float(values[winner] - values[loser]))
+            residual = weight * (1.0 - probability)
+            fisher = weight * probability * (1.0 - probability)
+            gradient[winner] += residual
+            gradient[loser] -= residual
+            precision[winner, winner] += fisher
+            precision[loser, loser] += fisher
+            precision[winner, loser] -= fisher
+            precision[loser, winner] -= fisher
+        return gradient, precision
+
+    for _ in range(BT_FIT_MAX_ITER):
+        gradient, precision = gradient_and_precision(theta)
+        step = np.linalg.solve(precision, gradient)
+        theta = np.clip(theta + step, -BT_STRENGTH_CLIP, BT_STRENGTH_CLIP)
+        if float(np.max(np.abs(step))) < BT_FIT_TOL:
+            break
+    else:
+        raise RuntimeError("Bradley-Terry MAP fit did not converge")
+
+    _, precision = gradient_and_precision(theta)
+    covariance = np.linalg.inv(precision)
+    centerer = np.eye(len(node_ids), dtype=float) - (
+        np.ones((len(node_ids), len(node_ids)), dtype=float) / len(node_ids)
+    )
+    return theta, centerer @ covariance @ centerer, counts
+
+
+def _fit_bt_kind(con: sqlite3.Connection, kind: str) -> dict[str, tuple[float, float, int]]:
+    """Refit one rankable kind from its complete comparison ledger.
+
+    A zero-centred Gaussian prior makes the model identifiable even when the
+    comparison graph is disconnected. Newton updates solve the joint MAP
+    problem, then the inverse observed precision supplies marginal variances
+    for an explicitly approximate Laplace posterior interval.
+    """
+    rows = con.execute(
+        """
+        SELECT r.node_id
+        FROM mem_bt_ratings r
+        JOIN mem_nodes n ON n.node_id = r.node_id
+        WHERE n.kind = ?
+        ORDER BY r.node_id
+        """,
+        (kind,),
+    ).fetchall()
+    node_ids = [str(row["node_id"]) for row in rows]
+    if not node_ids:
+        return {}
+
+    comparison_rows = con.execute(
+        """
+        SELECT c.winner_id, c.loser_id, c.weight
+        FROM mem_bt_comparisons c
+        JOIN mem_nodes w ON w.node_id = c.winner_id
+        JOIN mem_nodes l ON l.node_id = c.loser_id
+        WHERE w.kind = ? AND l.kind = ?
+        ORDER BY c.comparison_id
+        """,
+        (kind, kind),
+    ).fetchall()
+
+    comparisons = [
+        (
+            str(row["winner_id"]),
+            str(row["loser_id"]),
+            float(row["weight"]),
+        )
+        for row in comparison_rows
+    ]
+    theta, centered_covariance, counts = _fit_bt_arrays(node_ids, comparisons)
+    fitted: dict[str, tuple[float, float, int]] = {}
+    for idx, node_id in enumerate(node_ids):
+        variance = max(BT_MIN_VAR, float(centered_covariance[idx, idx]))
+        fitted[node_id] = (float(theta[idx]), variance, int(counts[idx]))
+        con.execute(
+            """
+            UPDATE mem_bt_ratings
+            SET strength = ?, strength_var = ?, n_comparisons = ?,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE node_id = ?
+            """,
+            (*fitted[node_id], node_id),
+        )
+    return fitted
 
 
 def _bt_apply_comparison(
@@ -109,7 +209,11 @@ def _bt_apply_comparison(
         raise ValueError(f"unsupported BT source: {source!r}")
     if winner_id == loser_id:
         raise ValueError("winner_id and loser_id must differ")
-    if not isinstance(weight, (int, float)) or weight <= 0 or math.isnan(float(weight)):
+    if (
+        not isinstance(weight, (int, float))
+        or not math.isfinite(float(weight))
+        or weight <= 0
+    ):
         raise ValueError("weight must be a positive finite number")
 
     winner_node = _get_node(con, winner_id)
@@ -131,15 +235,8 @@ def _bt_apply_comparison(
             f"loser is {loser_kind!r}"
         )
 
-    winner_row = _ensure_bt_row(con, winner_id)
-    loser_row = _ensure_bt_row(con, loser_id)
-    new_theta_w, new_var_w, new_theta_l, new_var_l = _bt_online_update(
-        float(winner_row["strength"]),
-        float(winner_row["strength_var"]),
-        float(loser_row["strength"]),
-        float(loser_row["strength_var"]),
-        weight=float(weight),
-    )
+    _ensure_bt_row(con, winner_id)
+    _ensure_bt_row(con, loser_id)
 
     cur = con.execute(
         """
@@ -150,26 +247,9 @@ def _bt_apply_comparison(
         (winner_id, loser_id, float(weight), source, provenance_id),
     )
     comparison_id = int(cur.lastrowid)
-    con.execute(
-        """
-        UPDATE mem_bt_ratings
-        SET strength = ?, strength_var = ?,
-            n_comparisons = n_comparisons + 1,
-            last_updated = CURRENT_TIMESTAMP
-        WHERE node_id = ?
-        """,
-        (new_theta_w, new_var_w, winner_id),
-    )
-    con.execute(
-        """
-        UPDATE mem_bt_ratings
-        SET strength = ?, strength_var = ?,
-            n_comparisons = n_comparisons + 1,
-            last_updated = CURRENT_TIMESTAMP
-        WHERE node_id = ?
-        """,
-        (new_theta_l, new_var_l, loser_id),
-    )
+    fitted = _fit_bt_kind(con, str(winner_kind))
+    new_theta_w, new_var_w, _ = fitted[winner_id]
+    new_theta_l, new_var_l, _ = fitted[loser_id]
     _emit_event(
         con,
         "bt_rating_updated",
@@ -331,7 +411,7 @@ def update_bt_rating(
     weight: float = 1.0,
     provenance_id: int | None = None,
 ) -> dict:
-    """Record one pairwise comparison and run an incremental BT update.
+    """Record one pairwise comparison and refit the complete BT ledger.
 
     Source must be in {llm_judge, metric_diff, user_intervention,
     reviewer_critic}. Emits ``bt_rating_updated`` and returns the updated
@@ -361,8 +441,10 @@ def get_bt_leaderboard(
     comparison primitive forbids cross-kind matches, so a mixed table
     would conflate unrelated rankings.
 
-    Each row carries a 95% LUCB-style interval ``[lcb, ucb]`` derived from
-    the Laplace posterior variance. Nodes whose ``n_comparisons`` is below
+    Each row carries a 95% *approximate posterior* interval derived from a
+    Laplace approximation at the joint MAP fit. The legacy ``lcb`` / ``ucb``
+    field names remain for compatibility; they are not calibrated frequentist
+    confidence bounds. Nodes whose comparison count is below
     ``BT_MIN_COMPARISONS_FOR_RANK`` get an ``insufficient_samples`` flag.
     """
     if kind not in BT_RANKABLE_KINDS:
@@ -408,6 +490,9 @@ def get_bt_leaderboard(
                 "strength_var": round(var, 6),
                 "lcb": round(strength - 1.96 * sd, 6),
                 "ucb": round(strength + 1.96 * sd, 6),
+                "interval_level": 0.95,
+                "interval_method": "laplace_map_centered_approximate_posterior",
+                "interval_calibrated": False,
                 "n_comparisons": int(row["n_comparisons"]),
                 "elo_score": float(row["elo_score"] or 1500.0),
                 "last_updated": row["last_updated"],

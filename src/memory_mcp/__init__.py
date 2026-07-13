@@ -1,8 +1,8 @@
 """memory_mcp - Hypothesis graph, Bradley-Terry ranking, and supporting memory.
 
-Owns the hypothesis graph, the BT online tournament, the failure ledger, the
+Owns the hypothesis graph, the batch-refit BT tournament, the failure ledger, the
 compressed literature index, the calibration ledger, and the snapshot /
-counterfactual replay surface. Exposes 23 MCP tools through ``impl.py``;
+counterfactual replay surface. Exposes 24 MCP tools through ``impl.py``;
 implementations live under ``tools/`` and are domain-grouped.
 
 Public surface
@@ -81,7 +81,7 @@ Where things live
 Tool re-export shell:     impl.py (do not add new logic here)
 Hypothesis graph tools:   tools/graph.py
 Failure ledger + FTS:     tools/failures.py
-Bradley-Terry online math + tools:   tools/bt.py
+Bradley-Terry batch MAP fit + tools: tools/bt.py
 Calibration buckets:      tools/calibration.py
 Snapshot + replay:        tools/replay.py
 Literature compression:   tools/literature.py

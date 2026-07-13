@@ -5,9 +5,13 @@
 
 ## 1. One-line positioning
 
-ClaudeScientist plugs into Claude Code as **a research augmentation layer** — it adds persistent memory, verifiable experiment results, an interruptible research loop, and a real-time cockpit.
+ClaudeScientist plugs into Claude Code or Codex as **a research augmentation
+layer** — it adds persistent memory, verifiable experiment results, an
+interruptible research loop, and a real-time cockpit.
 
-Claude Code already handles scheduling, dialogue, sub-agents, and tool invocation. This project fills in four things on top: **memory, verification, statistical proof generation (v4.0), and a cockpit**.
+The AI client already handles dialogue, planning, and tool invocation. This
+project fills in four things on top: **memory, verification, statistical proof
+generation, and a cockpit**.
 
 ## 2. What you actually see
 
@@ -57,13 +61,17 @@ about the research right now. Both are useful; they don't overlap.
 
 | Role | Where | Job | Analogy |
 |---|---|---|---|
-| **Claude Code** | Terminal A | Main conductor. Reads your intent, calls tools, writes code | Project manager |
+| **Claude Code / Codex** | Terminal A | Main conductor. Reads your intent, calls tools, writes code | Project manager |
 | **MCP servers** | Background subprocesses | Provide "tools" — memory, verification, literature search | Toolbox |
-| **Hooks** | Mounted at Claude Code startup | Run scripts automatically before/after tool calls; act as safety gates and bookkeepers | Security checkpoint |
+| **Hooks** | Mounted by the project or plugin | Run scripts automatically around lifecycle events; act as safety gates and bookkeepers | Security checkpoint |
 | **Cockpit TUI** | Terminal B | Live state display; lets you intervene by hand | Monitoring screen |
 | **SQLite** | `.research-agent/state.db` | Stores everything: hypotheses, evidence, failures, ratings, preregistrations, events | Shared blackboard |
 
-**MCP (Model Context Protocol)** is a wire protocol that lets an AI invoke external Python functions. At startup, Claude Code reads `.claude/settings.json` and spawns several subprocesses: `memory_mcp`, `verify_mcp`, `prove_mcp` (v4.0 proof trunk), `cockpit.mcp_server`, plus two external packages `arxiv` and `openalex`, with optional `lean` (opt-in via `docs/setup-lean.md`). They all communicate with Claude over stdio, but **all of them read and write the same SQLite file**.
+**MCP (Model Context Protocol)** lets an AI invoke external tools. Project-local
+Claude settings or the Codex plugin start the four core subprocesses:
+`memory_mcp`, `verify_mcp`, `prove_mcp`, and `cockpit.mcp_server`. arXiv,
+OpenAlex, and Lean are optional. They communicate over stdio, while local core
+state converges on the same workspace SQLite file.
 
 ## 4. End-to-end flow of a research task
 
@@ -130,7 +138,11 @@ sequenceDiagram
 
 ### 5.1 Single state boundary
 
-All local runtime state lives in one file: `.research-agent/state.db`. Memory, verify, cockpit, and hooks each own their own tables (prefixed `mem_*`, `ver_*`, `cockpit_*`, `res_*`), but cross-module signaling goes through the `cockpit_events` table to avoid modules reaching directly into each other's internals.
+All local runtime state lives in one file under the active research workspace:
+`.research-agent/state.db`. The plugin installation directory contains code and
+hooks; it never becomes the default research-state directory. Memory, verify,
+cockpit, and hooks each own their own tables, while cross-module signaling goes
+through `cockpit_events`.
 
 What this buys you:
 
@@ -174,6 +186,12 @@ flowchart LR
 ```
 
 Any attempt to read held-out files directly is blocked by the PreToolUse hook. The only legitimate path is the `query_heldout` MCP tool, which verifies the file fingerprint, decrements the budget, and **returns only the final metric** — no raw output that might leak labels.
+
+Safeguards use three explicit strength labels: `enforced` means code blocks the
+normal operation; `agent_gated` means the agent workflow refuses or reviews it
+but is not a security boundary; `advisory` means warning only. Untrusted plugin
+hooks degrade Cockpit intervention to monitor-only rather than pretending the
+delivery bridge is active.
 
 ## 7. What this project explicitly is *not*
 

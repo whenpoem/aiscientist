@@ -1,0 +1,20 @@
+{
+  "name": "claudescientist",
+  "interface": {
+    "displayName": "ClaudeScientist"
+  },
+  "plugins": [
+    {
+      "name": "claudescientist",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/whenpoem/aiscientist.git"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

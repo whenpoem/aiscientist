@@ -91,6 +91,10 @@ def test_external_mcp_optional_edges_are_documented():
         "python",
         "scripts/lean_mcp_or_noop.py",
     ]
+    assert settings["mcpServers"]["arxiv"]["args"][-1] == "arxiv-mcp-server==0.5.0"
+    assert settings["mcpServers"]["openalex"]["args"][-1] == (
+        "openalex-research-mcp@0.5.0"
+    )
     assert "toolchain absent" in setup_lean
     assert "npx" in readme
     assert "arxiv-mcp-server" in readme

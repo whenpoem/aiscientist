@@ -1,4 +1,4 @@
-# MCP Tool Reference (v5.0.0)
+# MCP Tool Reference (v5.1.0)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -145,8 +145,12 @@ A direct BT update path that does **not** dual-write to the Elo ledger. Accepts 
 
 **When to use**: when the source of the comparison is something other than an LLM judge — e.g. an experimental result that directly favored one hypothesis.
 
-#### `get_bt_leaderboard(top_k=20, include_paused=False)`
-Return the top `top_k` hypotheses ranked by BT strength, with 95% LUCB intervals (`lcb`, `ucb`). Hypotheses with fewer than 3 comparisons are flagged `insufficient_samples=True`.
+#### `get_bt_leaderboard(top_k=20, include_paused=False, kind="hypothesis", interval_level=0.95)`
+Return candidates ranked by the full-ledger BT MAP fit. `lcb` and `ucb` are
+compatibility names for an uncalibrated centred Laplace posterior
+approximation, not strict LUCB or frequentist confidence bounds. The response
+also reports `interval_method` and `interval_calibrated=False`. Candidates with
+fewer than 3 comparisons are flagged `insufficient_samples=True`.
 
 **Returns**: list of leaderboard rows.
 
@@ -207,6 +211,12 @@ Return the most recent replay branches.
 
 ### Snapshots
 
+#### `list_snapshots(limit=20)`
+Return recent snapshot metadata newest first, including label, creation time,
+and saved counts without loading the full frozen payload.
+
+**When to use**: before replay when the user has not supplied a snapshot id.
+
 #### `snapshot(label="")`
 Capture the current graph + BT ratings into a frozen snapshot row.
 
@@ -261,10 +271,14 @@ AST-scan a Python script for known leakage patterns: `fit()` on concatenated tra
 
 ### Provenance
 
-#### `record_provenance(claim, value, session_id, source_command="", input_files=None, parent_prov_ids=None)`
-Append a provenance row for a numeric claim. When `input_files` is provided, each path is sha256-hashed and the fingerprint is stored in `ver_provenance_dag`, enabling later re-validation by `refresh_claim`.
+#### `record_provenance(claim, value, session_id, source_command="", input_files=None, parent_prov_ids=None, config_files=None)`
+Append a provenance row for a numeric claim. The tool automatically captures a
+run manifest covering command-referenced files, explicit inputs/configs,
+dependency locks, Git state, runtime, and safe environment values. Secret-like
+environment values are redacted. All captured files are sha256-hashed for later
+re-validation by `refresh_claim`.
 
-**Returns**: `{"recorded": True, "provenance_id": <int>, "dag": {...}}`
+**Returns**: `{"recorded": True, "provenance_id": <int>, "dag": {...}, "manifest": {...}}`
 
 **When to use**: every time a script reports a numeric result that you might cite later.
 
@@ -276,7 +290,8 @@ Look up a claim and return its pin (if any), seed verdict, and source command.
 **When to use**: by the writeup workflow before a publication-critical result metric or statistical claim makes it into a manuscript.
 
 #### `refresh_claim(claim)`
-Re-hash every input file in the claim's provenance DAG and compare to stored hashes. Emits `prov_dag_stale` for any drift.
+Re-check the provenance DAG and automatic run manifest, including files, Git
+state, runtime, and safe environment values. Emits `prov_dag_stale` for drift.
 
 **Returns**: `{"status": "fresh"|"stale", "drifted_files": [...]}`
 
@@ -284,8 +299,9 @@ Re-hash every input file in the claim's provenance DAG and compare to stored has
 
 ### Pinned metrics
 
-#### `pin_metric(claim, value, session_id, source_command="", note="", input_files=None, parent_prov_ids=None)`
-Pin a central metric so the writeup workflow knows which numbers matter. Creates one provenance row and one `ver_metric_pins` row, linking them. When `input_files` or `parent_prov_ids` are supplied, also writes a provenance DAG entry for later freshness checks. Emits `claim_pinned`.
+#### `pin_metric(claim, value, session_id, source_command="", note="", input_files=None, parent_prov_ids=None, config_files=None)`
+Pin a central metric and create its provenance row, DAG, and automatic run
+manifest in one operation. Emits `claim_pinned`.
 
 **Returns**: `{"pinned": True, "pin_id": <int>, "provenance_id": <int>}`
 
@@ -293,10 +309,13 @@ Pin a central metric so the writeup workflow knows which numbers matter. Creates
 
 ### Seed and fairness
 
-#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto")`
+#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto", seed_env="PYTHONHASHSEED", extra_env=None, input_files=None, config_files=None)`
 Run `script_path` once per seed (defaults to `[0, 1, 2]`). Extract the metric from each stdout, compute mean and standard deviation, classify the verdict as `stable` or `unstable`. `stability_mode="auto"` uses an absolute tolerance for small bounded metrics and a relative tolerance for larger-scale metrics; callers can force `absolute` or `relative`. When `metric_pin_id` is given, the seed run is linked to that pin so writeup checks can find it.
 
-**Returns**: `{"ok": True, "values": [...], "mean": ..., "std": ..., "verdict": "stable"|"unstable"}`
+The stored run manifest fingerprints the script, referenced files, seeds, Git
+state, runtime, and redacted environment overrides.
+
+**Returns**: `{"ok": True, "values": [...], "mean": ..., "std": ..., "verdict": "stable"|"unstable", "manifest": {...}}`
 
 **When to use**: for every metric pin that will end up in a writeup.
 
@@ -318,15 +337,20 @@ The only legitimate access path to held-out data. Reserves budget *before* execu
 
 ### Preregistration
 
-#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bonferroni")`
-Lock the falsification target for a confirmatory hypothesis before promoting results to main claims. Exploratory runs may exist before this, but they must stay labelled exploratory. `direction` must be one of `higher_better` or `lower_better`. `mc_correction` must be one of `bonferroni`, `none`, or the legacy alias `bh`; new `bh` inputs are stored as `bonferroni`, and existing `bh` rows resolve through the same Bonferroni-style calculation. Emits `prereg_locked`.
+#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bonferroni", family_id=None, family_size=1)`
+Lock the falsification target and its multiple-comparison family before
+confirmatory evidence is observed. Every member of one family must use the same
+`family_id`, fixed `family_size`, alpha, and correction. New `bh` inputs are
+stored as the backward-compatible `bonferroni` behavior. Emits `prereg_locked`.
 
 **Returns**: `{"prereg_id": "prereg_...", "status": "open", ...}`
 
 **When to use**: as the gate between the BT tournament and the engineer subagent. No experiment should run without one.
 
 #### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None)`
-Compare `observed_value` against the locked threshold and direction. If `observed_p_value` is given, apply the multiple-comparison correction across all currently-open prereg rows. Emits `prereg_resolved`.
+Compare `observed_value` against the locked threshold and direction. If
+`observed_p_value` is given, apply the correction using the `family_size` frozen
+at registration. Resolution order cannot relax alpha. Emits `prereg_resolved`.
 
 **Returns**: `{"status": "met"|"missed", "adjusted_p_value": ..., ...}`
 
@@ -525,8 +549,8 @@ These are installed as third-party packages; we do not own their schemas. They a
 
 | Server | Source | Use |
 |---|---|---|
-| `arxiv` | `arxiv-mcp-server` | Search and fetch arXiv papers |
-| `openalex` | `openalex-research-mcp` (npx) | Search and fetch OpenAlex works |
+| `arxiv` | `arxiv-mcp-server==0.5.0` | Optional search and fetch for arXiv papers |
+| `openalex` | `openalex-research-mcp@0.5.0` (npx) | Optional search and fetch for OpenAlex works |
 
 ---
 

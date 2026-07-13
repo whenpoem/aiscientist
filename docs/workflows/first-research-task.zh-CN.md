@@ -79,7 +79,8 @@ mcp__memory__get_bt_leaderboard top_k=5
 ...
 ```
 
-榜首假说与亚军的置信区间不重叠时，它就是要推进的候选。
+BT 排名只是选择证据之一。区间是未经校准的后验近似，不能因为榜首与亚军区间
+不重叠就宣称显著；还要检查比较覆盖、排名稳定性和领域证据。
 
 ## 3. 为确认性实验预注册
 
@@ -132,7 +133,10 @@ mcp__verify__pin_metric claim="vit_dropout_test_accuracy" value=0.873 session_id
 mcp__verify__resolve_preregistration prereg_id=preg_... observed_value=0.873
 ```
 
-如果观测值在锁定方向上达到了阈值，状态翻为 `met`。如果你还传了 `observed_p_value`，系统会把配置的多重比较校正应用到所有当前打开的预注册上。新的预注册行使用 `bonferroni`；旧的 `bh` 行仍作为同一套 Bonferroni-style 计算的兼容别名被接受。
+如果观测值在锁定方向上达到阈值，状态翻为 `met`。如果还传了
+`observed_p_value`，系统使用锁定 family 时固定的 `family_size` 校正；先解析一个
+成员不会放松后续成员的 alpha。新行使用 `bonferroni`；旧 `bh` 行仍作为同一套
+固定 family 计算的兼容别名。
 
 ## 7. 抽查 provenance DAG
 

@@ -1,4 +1,4 @@
-# MCP 工具参考（v5.0.0）
+# MCP 工具参考（v5.1.0）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。
@@ -145,8 +145,11 @@
 
 **何时使用**：当比较的来源不是 LLM judge 时——例如某个实验结果直接证明一个假说更优。
 
-#### `get_bt_leaderboard(top_k=20, include_paused=False)`
-返回按 BT 强度排名的前 `top_k` 个假说，附带 95% LUCB 置信区间（`lcb`、`ucb`）。比较次数少于 3 的假说会带有 `insufficient_samples=True` 标记。
+#### `get_bt_leaderboard(top_k=20, include_paused=False, kind="hypothesis", interval_level=0.95)`
+按完整比较账本的 BT MAP 拟合返回候选项。`lcb`、`ucb` 是兼容字段，表示未经
+校准的中心化 Laplace 后验近似，不是严格 LUCB 或频率学置信界。响应同时给出
+`interval_method` 和 `interval_calibrated=False`。比较少于 3 次的候选项会标记
+`insufficient_samples=True`。
 
 **返回**：排行榜行的列表。
 
@@ -207,6 +210,11 @@
 
 ### 快照
 
+#### `list_snapshots(limit=20)`
+按从新到旧返回快照元数据，包括标签、创建时间和保存的计数，不加载完整 payload。
+
+**何时使用**：用户没有给 snapshot id、准备开始 replay 时。
+
 #### `snapshot(label="")`
 把当前的图谱与 BT 评分凝固成一个快照行。
 
@@ -261,10 +269,12 @@
 
 ### 溯源
 
-#### `record_provenance(claim, value, session_id, source_command="", input_files=None, parent_prov_ids=None)`
-为一个数值声明追加一条溯源记录。当提供 `input_files` 时，每个路径都会被 sha256 哈希，指纹存入 `ver_provenance_dag`，方便后续 `refresh_claim` 重新校验。
+#### `record_provenance(claim, value, session_id, source_command="", input_files=None, parent_prov_ids=None, config_files=None)`
+为数值声明追加溯源记录，并自动捕获运行清单：命令引用文件、显式输入/配置、
+依赖锁文件、Git 状态、运行时和安全的环境值。密钥类环境值会脱敏；捕获文件会
+做 sha256 哈希，供 `refresh_claim` 重新校验。
 
-**返回**：`{"recorded": True, "provenance_id": <int>, "dag": {...}}`
+**返回**：`{"recorded": True, "provenance_id": <int>, "dag": {...}, "manifest": {...}}`
 
 **何时使用**：每次脚本报出一个未来可能被引用的数值结果时。
 
@@ -276,7 +286,8 @@
 **何时使用**：写作流程中，任何数值声明进入手稿之前都要查一次。
 
 #### `refresh_claim(claim)`
-重新计算该声明的 provenance DAG 中每个输入文件的哈希，与存储的哈希对比。任何漂移都会发出 `prov_dag_stale` 事件。
+同时复查 provenance DAG 和自动运行清单，包括文件、Git 状态、运行时和安全环境值。
+任何漂移都会发出 `prov_dag_stale` 事件。
 
 **返回**：`{"status": "fresh"|"stale", "drifted_files": [...]}`
 
@@ -284,8 +295,8 @@
 
 ### 指标 pin
 
-#### `pin_metric(claim, value, session_id, source_command="", note="", input_files=None, parent_prov_ids=None)`
-pin 住一个核心指标，让写作流程知道哪些数字是要紧的。会创建一行 provenance 和一行 `ver_metric_pins`，并把它们关联起来。提供 `input_files` 或 `parent_prov_ids` 时，还会写入 provenance DAG，供后续 freshness 检查。发出 `claim_pinned`。
+#### `pin_metric(claim, value, session_id, source_command="", note="", input_files=None, parent_prov_ids=None, config_files=None)`
+一次完成核心指标 pin、provenance、DAG 和自动运行清单。发出 `claim_pinned`。
 
 **返回**：`{"pinned": True, "pin_id": <int>, "provenance_id": <int>}`
 
@@ -293,10 +304,12 @@ pin 住一个核心指标，让写作流程知道哪些数字是要紧的。会�
 
 ### 种子与公平性
 
-#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto")`
+#### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto", seed_env="PYTHONHASHSEED", extra_env=None, input_files=None, config_files=None)`
 对每个种子（默认 `[0, 1, 2]`）跑一遍 `script_path`。从每次的 stdout 抠出指标，计算均值和标准差，把 verdict 分类为 `stable` 或 `unstable`。`stability_mode="auto"` 对小型有界指标使用绝对容差，对大尺度指标使用相对容差；调用方也可以强制 `absolute` 或 `relative`。提供 `metric_pin_id` 时，本次种子运行会被关联到那个 pin，这样写作检查能找到它。
 
-**返回**：`{"ok": True, "values": [...], "mean": ..., "std": ..., "verdict": "stable"|"unstable"}`
+保存的运行清单会记录脚本、引用文件、种子、Git 状态、运行时和脱敏后的环境覆盖。
+
+**返回**：`{"ok": True, "values": [...], "mean": ..., "std": ..., "verdict": "stable"|"unstable", "manifest": {...}}`
 
 **何时使用**：每个会进入手稿的指标 pin 都要跑。
 
@@ -318,15 +331,18 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ### 预注册
 
-#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bonferroni")`
-为确认性假说锁定证伪目标，避免把探索性结果直接提升为主结论。探索性运行可以先存在，但必须保持探索性标注。`direction` 只能是 `higher_better` 或 `lower_better`。`mc_correction` 只能是 `bonferroni`、`none`，或旧别名 `bh`；新的 `bh` 输入会按 `bonferroni` 存储，已有 `bh` 行仍按同一套 Bonferroni-style 计算解析。发出 `prereg_locked`。
+#### `preregister(hypothesis_id, metric_name, direction, threshold, heldout_dataset=None, seed_count=5, alpha=0.05, mc_correction="bonferroni", family_id=None, family_size=1)`
+在看到确认性证据前锁定证伪目标和多重比较 family。同一 family 的成员必须使用
+相同 `family_id`、固定 `family_size`、alpha 和校正方式。新的 `bh` 输入按向后
+兼容的 `bonferroni` 行为保存。发出 `prereg_locked`。
 
 **返回**：`{"prereg_id": "prereg_...", "status": "open", ...}`
 
 **何时使用**：当准备把某个 BT 赢家交给 confirmatory engineer run，或准备把探索性结果提升为主声明时使用；探索性实验不必因为没有预注册而卡住。
 
 #### `resolve_preregistration(prereg_id, observed_value, observed_p_value=None)`
-拿 `observed_value` 与锁定的阈值和方向比对。如果给了 `observed_p_value`，就在所有当前打开的预注册上应用多重比较校正。发出 `prereg_resolved`。
+拿 `observed_value` 与锁定的阈值和方向比对。如果给了 `observed_p_value`，使用
+注册时固定的 `family_size` 校正；解析顺序不会放松 alpha。发出 `prereg_resolved`。
 
 **返回**：`{"status": "met"|"missed", "adjusted_p_value": ..., ...}`
 
@@ -525,8 +541,8 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 | 服务器 | 来源 | 用途 |
 |---|---|---|
-| `arxiv` | `arxiv-mcp-server` | 搜索和拉取 arXiv 论文 |
-| `openalex` | `openalex-research-mcp`（npx） | 搜索和拉取 OpenAlex 文献 |
+| `arxiv` | `arxiv-mcp-server==0.5.0` | 可选：搜索和拉取 arXiv 论文 |
+| `openalex` | `openalex-research-mcp@0.5.0`（npx） | 可选：搜索和拉取 OpenAlex 文献 |
 
 ---
 

@@ -16,6 +16,7 @@ DEFAULT_STATE_DIR = Path(".research-agent")
 DEFAULT_DB_NAME = "state.db"
 HELDOUT_DIR_ENV = "RESEARCH_AGENT_HELDOUT_DIR"
 CLAUDE_PROJECT_DIR_ENV = "CLAUDE_PROJECT_DIR"
+RESEARCH_AGENT_WORKSPACE_ENV = "RESEARCH_AGENT_WORKSPACE"
 MIGRATION_SCHEMA = """
 CREATE TABLE IF NOT EXISTS ra_migrations (
   component TEXT PRIMARY KEY,
@@ -46,7 +47,7 @@ def _looks_like_repo_root(path: Path) -> bool:
 
 
 def project_root(start: Path | None = None) -> Path | None:
-    """Resolve the claudescientist repo root without trusting cwd.
+    """Resolve a ClaudeScientist source checkout for development assets.
 
     Claude Code normally exports ``CLAUDE_PROJECT_DIR``. Prefer that when it
     points at a checkout; otherwise walk upward from ``start`` (or cwd). This
@@ -66,6 +67,52 @@ def project_root(start: Path | None = None) -> Path | None:
     return None
 
 
+def installation_root() -> Path:
+    """Return the installed package root or the editable source checkout.
+
+    This location owns bundled hooks and static assets. It must never decide
+    where a user's research state is written.
+    """
+    checkout = project_root(Path(__file__).resolve())
+    if checkout is not None:
+        return checkout
+    return Path(__file__).resolve().parent
+
+
+def _looks_like_workspace_root(path: Path) -> bool:
+    return any(
+        (
+            (path / ".research-agent").exists(),
+            (path / ".git").exists(),
+            (path / "pyproject.toml").exists(),
+            (path / "AGENTS.md").exists(),
+        )
+    )
+
+
+def workspace_root(start: Path | None = None) -> Path:
+    """Resolve the active research workspace independently of installation.
+
+    Explicit ``RESEARCH_AGENT_WORKSPACE`` wins. Agent hosts commonly provide
+    ``CLAUDE_PROJECT_DIR`` and that directory is accepted even when it is an
+    ordinary research repository with no ClaudeScientist source files.
+    Otherwise the nearest recognizable project ancestor is used, falling back
+    to the supplied start directory (or current working directory).
+    """
+    explicit = os.environ.get(RESEARCH_AGENT_WORKSPACE_ENV)
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+    host_workspace = os.environ.get(CLAUDE_PROJECT_DIR_ENV)
+    if host_workspace:
+        return Path(host_workspace).expanduser().resolve()
+
+    current = (start or Path.cwd()).expanduser().resolve()
+    for candidate in (current, *current.parents):
+        if _looks_like_workspace_root(candidate):
+            return candidate
+    return current
+
+
 def state_db_path() -> Path:
     override = os.environ.get("RESEARCH_AGENT_DB_PATH")
     if override:
@@ -73,10 +120,7 @@ def state_db_path() -> Path:
     state_dir = os.environ.get("RESEARCH_AGENT_STATE_DIR")
     if state_dir:
         return Path(state_dir).expanduser() / DEFAULT_DB_NAME
-    root = project_root()
-    if root is not None:
-        return root / DEFAULT_STATE_DIR / DEFAULT_DB_NAME
-    return DEFAULT_STATE_DIR / DEFAULT_DB_NAME
+    return workspace_root() / DEFAULT_STATE_DIR / DEFAULT_DB_NAME
 
 
 def runtime_path(*parts: str) -> Path:

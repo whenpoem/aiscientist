@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from claudescientist.runtime import project_root
+from claudescientist.runtime import workspace_root
 
 ENV_REPORTS_DIR = "RESEARCH_AGENT_REPORTS_DIR"
 DEFAULT_REPORTS_SUBDIR = "reports"
@@ -31,10 +31,7 @@ def reports_dir() -> Path:
     override = os.environ.get(ENV_REPORTS_DIR)
     if override:
         return Path(override).resolve()
-    root = project_root()
-    if root is not None:
-        return root / DEFAULT_REPORTS_SUBDIR
-    return Path.cwd() / DEFAULT_REPORTS_SUBDIR
+    return workspace_root() / DEFAULT_REPORTS_SUBDIR
 
 
 def _short(node_id: str) -> str:

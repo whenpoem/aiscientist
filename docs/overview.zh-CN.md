@@ -5,9 +5,9 @@
 
 ## 1. 一句话定位
 
-ClaudeScientist 是**给 Claude Code 加装的一层科研增强层**——让它具备持久记忆、可验证的实验结果、可干预的研究过程，以及实时的监控面板。
+ClaudeScientist 是**给 Claude Code 或 Codex 加装的一层科研增强层**——让它具备持久记忆、可验证的实验结果、可干预的研究过程，以及实时的监控面板。
 
-Claude Code 本身已经把调度、对话、子智能体、工具调用做得很好了，本项目只在上面补四件事：**记忆（memory）、验证（verify）、统计证明生成（prove，v4.0）、监控（cockpit）**。
+AI 客户端负责对话、规划和工具调用；本项目在上面补四件事：**记忆（memory）、验证（verify）、统计证明生成（prove）、监控（cockpit）**。
 
 ## 2. 你眼前实际看到什么
 
@@ -53,13 +53,16 @@ Claude Code 本身已经把调度、对话、子智能体、工具调用做得�
 
 | 角色 | 在哪里 | 职责 | 类比 |
 |---|---|---|---|
-| **Claude Code** | 终端 A | 主指挥，理解你的需求，调用工具，写代码 | 项目经理 |
+| **Claude Code / Codex** | 终端 A | 主指挥，理解你的需求，调用工具，写代码 | 项目经理 |
 | **MCP 服务器** | 后台子进程 | 给 Claude 提供"工具"——记忆、验证、文献检索 | 工具箱 |
-| **Hooks** | Claude Code 启动时挂载 | 在工具调用前后自动跑脚本，做安全闸和记账 | 安检门 |
+| **Hooks** | 由项目或插件挂载 | 在生命周期事件前后自动跑脚本，做安全闸和记账 | 安检门 |
 | **Cockpit TUI** | 终端 B | 实时显示状态，让你手动干预 | 监控大屏 |
 | **SQLite** | `.research-agent/state.db` | 存放一切：假说、证据、失败、评分、预注册、事件 | 共享黑板 |
 
-**MCP（Model Context Protocol）** 是一种让 AI 能调用外部 Python 函数的协议。Claude Code 启动时会读 `.claude/settings.json`，按里面的配置启动几个子进程：`memory_mcp`、`verify_mcp`、`prove_mcp`（v4.0 证明主干）、`cockpit.mcp_server`，再加上两个外部包 `arxiv` 和 `openalex`，以及可选的 `lean`（按 `docs/setup-lean.zh-CN.md` 自行启用）。它们都通过标准输入输出和 Claude 通话，但**都对同一个 SQLite 文件读写**。
+**MCP（Model Context Protocol）** 让 AI 调用外部工具。项目配置或 Codex 插件会
+启动 `memory_mcp`、`verify_mcp`、`prove_mcp`、`cockpit.mcp_server` 四个核心
+进程；arXiv、OpenAlex、Lean 均为可选。它们通过标准输入输出通信，本地核心状态
+汇入同一个工作区 SQLite 文件。
 
 ## 4. 一次研究任务的完整流程
 
@@ -124,7 +127,9 @@ sequenceDiagram
 
 ### 5.1 单一状态边界
 
-所有本地运行状态都落到 `.research-agent/state.db` 这一个文件里。memory、verify、cockpit、hooks 各自拥有自己的表（前缀 `mem_*`、`ver_*`、`cockpit_*`、`res_*`），但跨模块通信尽量通过 `cockpit_events` 表完成，避免模块之间直接修改对方的内部表。
+所有本地运行状态都落到当前研究工作区的 `.research-agent/state.db`。插件安装目录
+只提供代码和 hooks，不会成为默认研究状态目录。memory、verify、cockpit、hooks
+各自拥有自己的表，跨模块通信通过 `cockpit_events` 完成。
 
 这样做的好处：
 - 备份整个系统状态只需要复制一个文件
@@ -167,6 +172,10 @@ flowchart LR
 ```
 
 任何尝试直接读取 held-out 数据的工具调用都会被 PreToolUse Hook 拦截。唯一的合法访问路径是 `query_heldout` MCP 工具——它会校验文件指纹、扣减预算、并且**只返回最终指标**，不返回可能含有标签泄漏的原始输出。
+
+保护使用三种明确等级：`enforced` 表示代码机械拦截；`agent_gated` 表示 agent
+流程拒绝或复核，但不是安全边界；`advisory` 表示只提醒。插件 hooks 未信任时，
+Cockpit 干预会明确降级为 `monitor-only`，不会假装交付通道仍然生效。
 
 ## 7. 这个项目"明确不是"什么
 

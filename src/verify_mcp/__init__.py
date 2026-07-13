@@ -21,6 +21,7 @@ Owned tables (ver_*, res_*)
 ver_provenance         [empirical] Append-only numeric-claim ledger; the source of truth.
 ver_metric_pins        [empirical] Pinned headline numbers; reviewer reads these on writeup.
 ver_provenance_dag     [empirical] Per-claim input-file hashes; refresh_claim re-checks.
+ver_run_manifests      [empirical] Automatic code, Git, runtime, seed, and environment fingerprints.
 ver_seed_runs          [empirical] One row per seed_perturb invocation (mean / std / verdict).
 ver_heldout_budgets    [empirical] Sequestered-dataset registration + remaining budget.
 ver_heldout_queries    [empirical] One row per query_heldout invocation; FK to budgets.
@@ -49,13 +50,12 @@ Critical invariants
   ``record_provenance`` / ``pin_metric``, a stable ``ver_seed_runs.verdict``,
   a ``status='met'`` ``ver_preregistrations`` row for confirmatory claims,
   and non-stale ``ver_provenance_dag`` evidence when input files were tracked.
-- ``refresh_claim`` re-hashes input files and emits ``prov_dag_stale``
-  events; stale provenance is a publication blocker, while missing DAG rows are
-  surfaced as unchecked audit context rather than silently treated as proof.
-- New preregistration rows use ``bonferroni`` by default. Old ``bh`` rows
-  remain readable and resolve through the same Bonferroni-style correction;
-  it runs against the count of *currently open* prereg rows, so the more
-  open at once, the stricter the alpha each one must clear.
+- ``refresh_claim`` re-hashes DAG inputs and refreshes the automatic run
+  manifest (code, Git state, runtime, and safe environment values). Drift emits
+  ``prov_dag_stale`` and blocks publication-critical claims.
+- New preregistration rows use ``bonferroni`` by default and lock a fixed
+  ``family_id`` / ``family_size``. Resolution order never relaxes alpha. Old
+  ``bh`` rows remain readable through the compatibility calculation.
 - ``budget_consume`` is the only writer of ``res_budget_ledger``;
   ``budget_check`` is read-only and must address the same
   ``(scope, resource, window)`` triple that consume writes.

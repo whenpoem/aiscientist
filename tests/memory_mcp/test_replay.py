@@ -33,6 +33,21 @@ def test_replay_unknown_snapshot_raises(workspace):
     assert raised
 
 
+def test_list_snapshots_returns_metadata_newest_first(workspace):
+    impl = workspace["memory_mcp.impl"]
+    first = impl.snapshot(label="first")
+    second = impl.snapshot(label="second")
+
+    rows = impl.list_snapshots(limit=20)
+    assert [row["snapshot_id"] for row in rows[:2]] == [
+        second["snapshot_id"],
+        first["snapshot_id"],
+    ]
+    assert rows[0]["label"] == "second"
+    assert isinstance(rows[0]["counts"], dict)
+    assert "nodes" in rows[0]["counts"]
+
+
 def test_replay_empty_counterfactual_rejected(workspace):
     impl = workspace["memory_mcp.impl"]
     snap = impl.snapshot(label="empty-test")

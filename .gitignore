@@ -29,6 +29,11 @@ tmp-pytest-local/
 # They contain machine-specific paths and are regenerated per clone.
 .codex/
 .agents/
+!.agents/
+.agents/*
+!.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json
 
 # Generated research reports may contain private results, held-out-derived
 # metrics, or unpublished drafts. Add individual files with `git add -f` when

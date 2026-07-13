@@ -22,11 +22,14 @@ ClaudeScientist 由四个运行时层和一个共享状态文件组成。
 |---|---|---|---|
 | **运行时核心** | `claudescientist` | 库（不是常驻进程） | 所有其他层 |
 | **Memory MCP** | `memory_mcp` | 每个 Claude Code 会话启动一个 stdio 子进程 | SQLite、通过 stdio 与 Claude 通信 |
-| **Verify MCP** | `verify_mcp` | 每个 Claude Code 会话启动一个 stdio 子进程 | SQLite、通过 stdio 与 Claude 通信 |
+| **Verify MCP** | `verify_mcp` | 每个 agent 会话启动一个 stdio 子进程 | SQLite、通过 stdio 与 agent 通信 |
+| **Proof MCP** | `prove_mcp` | 每个 agent 会话启动一个 stdio 子进程 | SQLite、通过 stdio 与 agent 通信 |
 | **Cockpit** | `cockpit` | TUI 进程（终端 B） **加** stdio MCP 桥 | SQLite |
 | **Hooks** | `.claude/hooks/*.py` | Claude Code 在生命周期事件触发时启动的短命进程 | SQLite |
 
-这五层**从不直接互相调用**。它们全部通过 `.research-agent/state.db` 这个 SQLite 文件来通信。
+运行层通过 `<workspace>/.research-agent/state.db` 协作。安装目录提供 Python
+包、插件资源和 hooks；当前研究工作区提供状态与报告。代码必须通过
+`installation_root()` 和 `workspace_root()` 区分两者，不能假设它们是同一目录。
 
 ### 2. 状态文件
 
@@ -43,6 +46,18 @@ held-out 数据（通常是测试集）受到双重保护。两层保护必须�
 
 - **直接文件访问被 hook 拦截。** PreToolUse Hook `leakage_guard.py` 会拒绝任何路径解析到已注册 held-out 目录下的 `Read`/`Write`/`Edit`/`Bash` 调用。拦截是无条件的，唯一例外是环境变量 `RESEARCH_AGENT_VERIFY=1`——这个变量只允许 `verify_mcp` 自己设置。
 - **`query_heldout` 是唯一合法的访问路径。** 它在运行模型脚本**之前**就预留预算，记录一行查询记录，**且不返回原始 stdout/stderr**——因为里面可能包含泄漏的标签或样本。即使脚本执行失败，预留的预算也会被消耗，因为脚本已经被授权访问过数据了。
+
+#### 保护强度属于公开契约
+
+| 等级 | 含义 | 例子 |
+|---|---|---|
+| `enforced` | 代码机械阻止正常操作 | held-out 路径拦截、held-out 查询预算 |
+| `agent_gated` | agent 指令要求拒绝或复核，但不是安全边界 | reviewer 写作门、预注册流程 |
+| `advisory` | 只报告风险或建议，不阻止操作 | BT 不确定性、暂停建议 |
+
+机器可读目录位于 `claudescientist.protections`。Cockpit 帮助和用户文档不能把
+`agent_gated` 或 `advisory` 描述成无条件的机械保证；旁路环境变量或缺失 hook
+状态必须明确写成降级条件。
 
 如果某个 hook 或工具确实需要绕过这些保护，绕过本身必须附带书面理由和一个额外的单元测试。
 
@@ -62,7 +77,8 @@ held-out 数据（通常是测试集）受到双重保护。两层保护必须�
 - **MCP 工具的具体集合。** 按照 v3.0 计划，新工具落地到现有的 memory 和 verify 服务器，无需新建 MCP 服务器。
 - **Cockpit 面板布局。** 只要数据契约不变，网格、模态框、快捷键都可以调整。
 - **子智能体 prompt。** 可以自由修改，前提是工具白名单与角色契约保持一致（§4）。
-- **外部文献 MCP。** `arxiv-mcp-server` 与 `openalex-research-mcp` 按原样安装；我们只拥有 `memory_mcp` 中的 `ingest_paper` 压缩层。
+- **外部文献 MCP。** arXiv 与 OpenAlex 是可选且锁定版本的集成；我们只拥有
+  `memory_mcp` 中的 `ingest_paper` 压缩层。公开插件不默认捆绑这两个外部服务。
 
 ### 6. 何时打破契约
 
@@ -83,7 +99,9 @@ held-out 数据（通常是测试集）受到双重保护。两层保护必须�
 
 `claudescientist.runtime` 模块拥有所有跨模块基础设施：
 
-- **路径解析。** `state_db_path()`、`heldout_root()` 等函数是定位共享资源的唯一合法途径。功能包不得自己实现路径解析；特别是 held-out 数据根目录必须来自 `runtime.heldout_root()` 或注册过的 `ver_heldout_budgets.heldout_path` 行。
+- **路径解析。** `installation_root()`、`workspace_root()`、`state_db_path()`、
+  `heldout_root()` 等函数是定位资源的唯一合法途径。`PLUGIN_ROOT` 可以指向安装的
+  插件资源；`RESEARCH_AGENT_WORKSPACE` 指向当前研究项目。
 - **SQLite 连接配置。** `connect_sqlite()` 启用 WAL 模式、外键约束、row factory 和 5 秒 busy timeout。`connect_existing_sqlite()` 是 hook 安全变体：状态缺失或损坏时返回 `None`，不创建新 DB。
 - **Schema 迁移记账。** `ra_migrations` 表按组件记录 schema 版本号、schema 哈希、应用状态和失败错误信息。无法用 `CREATE TABLE IF NOT EXISTS` 表达的结构性升级必须使用显式兼容性辅助函数，并附带测试。
 - **Cockpit 事件写入。** `emit_cockpit_event()` 是向 cockpit 推送事件的标准方式。生产者应当在与底层状态变更相同的事务里调用它。
@@ -125,28 +143,32 @@ cockpit 始终允许手动刷新，但常规工作流不应当依赖手动刷新
 
 #### 数学简述
 
-对于一次 `winner=i, loser=j` 的比较：
+每次新增比较后，实现都会用该 kind 的完整比较账本重新联合拟合所有候选项。
+目标是 Bradley-Terry 对数似然加零均值高斯先验：
 
-```
-diff   = clip(theta_i - theta_j, [-30, 30])
-p      = sigmoid(diff)
-fisher = max(1e-6, p * (1-p)) * weight
-delta  = lr * weight * (1 - p)            # lr = 0.5
-theta_i := clip(theta_i + delta, [-12, 12])
-theta_j := clip(theta_j - delta, [-12, 12])
-var_i := 1 / (1/var_i + fisher)
-var_j := 1 / (1/var_j + fisher)
+```text
+log posterior(theta) = sum_c weight_c * log sigmoid(theta_w - theta_l)
+                       - 0.5 * sum_i theta_i^2 / prior_var
 ```
 
-排行榜上的置信区间为 `lcb = strength - 1.96 * sqrt(var)`、`ucb = strength + 1.96 * sqrt(var)`。初始 `strength_var = 1.0` 加上对 strength 的截断，相当于 Beta(1,1) 收缩先验，能在某节点总是赢的极端情况下避免数值爆炸。
+Newton 求解使用完整精度矩阵，因此拟合结果不依赖比较写入顺序。观测精度矩阵的
+逆在报告前会去掉所有强度共同平移的不可识别方向；`strength_var` 保存对应边际方差。
+兼容字段 `lcb`、`ucb` 按请求的区间水平计算 `strength +/- z * sqrt(var)`。
+
+这些区间只是**未经校准的 Laplace-MAP 后验近似**，不是频率学置信区间、严格
+LUCB 界或显著性检验。剪枝和停止还必须考虑比较覆盖、排名稳定性和领域证据。
 
 ### 10. 预注册与 Provenance DAG（v3.0）
 
 这两个机制配合起来，构成了"可信数值"的工程化保证。
 
 - **发布级核心数值声明要可追溯**到 pin 过的 provenance、稳定的 seed 证据，以及 confirmatory 声明的 `ver_preregistrations.prereg_id`（其 `status='met'`）。探索性结果必须标注为探索性，而非静默提升为主结论。`reviewer` 子智能体在写作阶段会强制执行这条规则。
-- **`ver_provenance_dag.input_hashes` 在 record 时记录了每个被引用输入文件的 sha256 哈希。** `refresh_claim` 会重新计算哈希，发现漂移时发出 `prov_dag_stale` 事件。stale provenance 会阻断发布级核心声明；没有 DAG 的记录会作为 unchecked 审计信息暴露出来，不能自动当成 freshness 证明。
-- **`resolve_preregistration` 基于"当前打开的预注册行数"计算校正。** 一次性锁定多个预注册会有意收紧 alpha，这是保守的多重比较行为。新的预注册行使用 `bonferroni`；旧的 `bh` 行仍作为同一套 Bonferroni-style 计算的兼容别名被接受。
+- **每条 provenance 都带自动运行清单。** 清单记录命令引用的脚本和文件、显式
+  输入/配置、依赖锁文件、Git commit 与 dirty 状态、运行时、随机种子和安全的复现
+  环境值。`refresh_claim` 同时检查 DAG 与清单；密钥类环境值会被脱敏。
+- **Bonferroni family 在预注册锁定时固定。** 每行保存 `family_id` 和
+  `family_size`，解析其他成员不会放松 alpha。新行使用 `bonferroni`；旧 `bh`
+  行继续按兼容计算读取，未解析的 v5 前旧行会迁入一个保守的固定 legacy family。
 
 ### 11. 资源账本（v3.0）
 
@@ -191,7 +213,7 @@ ClaudeScientist v4.0 把架构显式拆成**一个共用内核**加**两条领�
 | `claudescientist.runtime` | 路径、SQLite、迁移、事件 | 与领域无关的基础设施 |
 | `mem_nodes` / `mem_edges` | 假设/命题图 | `kind` 字段携带领域；表本身不区分 |
 | `mem_failures` + FTS5 | 跨域错题本 | 新增 `domain` 列做过滤；匹配算法本身领域无关 |
-| `mem_bt_ratings` + 锦标赛工具 | 排序 + LUCB 区间 | 跨 kind 比较仍被禁止；同 kind 比较对 `hypothesis` 与 `proof_skeleton` 同样适用 |
+| `mem_bt_ratings` + 锦标赛工具 | 排序 + 近似后验区间 | 跨 kind 比较仍被禁止；同 kind 比较对 `hypothesis` 与 `proof_skeleton` 同样适用 |
 | `meta_calibration` | 单 agent 可靠性 | 校准按裁判记录，与领域无关 |
 | `mem_replay_branches` | 反事实快照 | 领域无关 |
 | `cockpit` + `cockpit_events` | 实时 UI + 事件总线 | 一棵树承载两条主干 |

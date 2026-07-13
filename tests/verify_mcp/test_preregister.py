@@ -1,5 +1,32 @@
 from __future__ import annotations
 
+import multiprocessing
+import os
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+
+
+def _concurrent_preregister_worker(arguments: tuple[str, int, int]) -> str:
+    database, family_size, index = arguments
+    os.environ["RESEARCH_AGENT_DB_PATH"] = database
+    from claudescientist.runtime import cache_key
+    from verify_mcp import db
+    from verify_mcp.tools.prereg import preregister
+
+    db._BOOTSTRAPPED.add(cache_key(Path(database)))
+    try:
+        preregister(
+            hypothesis_id=f"hyp_concurrent_{index}",
+            metric_name=f"metric_{index}",
+            direction="higher_better",
+            threshold=0.5,
+            family_id="concurrent_family",
+            family_size=family_size,
+        )
+    except ValueError as exc:
+        return str(exc)
+    return "ok"
+
 
 def test_preregister_locks_and_lists(workspace):
     impl = workspace["verify_mcp.impl"]
@@ -20,6 +47,8 @@ def test_preregister_locks_and_lists(workspace):
     assert rows[0]["status"] == "open"
     assert rows[0]["metric_name"] == "acc"  # normalized
     assert rows[0]["mc_correction"] == "bonferroni"
+    assert rows[0]["family_id"] == result["family_id"]
+    assert rows[0]["family_size"] == 1
 
 
 def test_preregister_validates_inputs(workspace):
@@ -105,7 +134,7 @@ def test_resolve_marks_missed_when_below_threshold(workspace):
     assert resolved["status"] == "missed"
 
 
-def test_bonferroni_tightens_alpha_with_more_open_rows(workspace):
+def test_bonferroni_uses_fixed_family_size_after_rows_resolve(workspace):
     impl = workspace["verify_mcp.impl"]
 
     locked = []
@@ -118,6 +147,8 @@ def test_bonferroni_tightens_alpha_with_more_open_rows(workspace):
                 threshold=0.5,
                 alpha=0.05,
                 mc_correction="bonferroni",
+                family_id="primary_metrics",
+                family_size=4,
             )
         )
 
@@ -126,7 +157,7 @@ def test_bonferroni_tightens_alpha_with_more_open_rows(workspace):
         observed_value=0.6,
         observed_p_value=0.04,
     )
-    # Four open rows tighten alpha to 0.05/4 = 0.0125 here.
+    # The locked family of four uses alpha 0.05/4 = 0.0125.
     assert first["status"] == "missed"
     assert first["adjusted_p_value"] == 0.16
     assert first["adjusted_alpha"] <= 0.05 / 4 + 1e-9
@@ -136,8 +167,90 @@ def test_bonferroni_tightens_alpha_with_more_open_rows(workspace):
         observed_value=0.6,
         observed_p_value=0.001,
     )
-    # 3 open rows now (we just resolved one), so alpha is 0.05/3.
+    # Resolving one row does not relax the remaining family's correction.
     assert last["status"] == "met"
+    assert last["adjusted_p_value"] == 0.004
+    assert last["adjusted_alpha"] == 0.0125
+
+
+def test_fixed_family_prevents_sequential_bonferroni_relaxation(workspace):
+    impl = workspace["verify_mcp.impl"]
+    first = impl.preregister(
+        hypothesis_id="hyp_a",
+        metric_name="acc_a",
+        direction="higher_better",
+        threshold=0.5,
+        family_id="two_tests",
+        family_size=2,
+    )
+    second = impl.preregister(
+        hypothesis_id="hyp_b",
+        metric_name="acc_b",
+        direction="higher_better",
+        threshold=0.5,
+        family_id="two_tests",
+        family_size=2,
+    )
+
+    result_a = impl.resolve_preregistration(first["prereg_id"], 0.6, 0.04)
+    result_b = impl.resolve_preregistration(second["prereg_id"], 0.6, 0.04)
+    assert result_a["status"] == "missed"
+    assert result_b["status"] == "missed"
+    assert result_a["adjusted_alpha"] == result_b["adjusted_alpha"] == 0.025
+    assert result_a["adjusted_p_value"] == result_b["adjusted_p_value"] == 0.08
+
+
+def test_preregistration_family_definition_is_immutable(workspace):
+    impl = workspace["verify_mcp.impl"]
+    impl.preregister(
+        hypothesis_id="hyp_a",
+        metric_name="acc_a",
+        direction="higher_better",
+        threshold=0.5,
+        family_id="locked_family",
+        family_size=2,
+    )
+    try:
+        impl.preregister(
+            hypothesis_id="hyp_b",
+            metric_name="acc_b",
+            direction="higher_better",
+            threshold=0.5,
+            family_id="locked_family",
+            family_size=3,
+        )
+    except ValueError as exc:
+        assert "family_size" in str(exc)
+    else:
+        raise AssertionError("expected immutable family definition")
+
+
+def test_concurrent_processes_cannot_overfill_fixed_family(workspace):
+    db = workspace["verify_mcp.db"]
+    database = str(db.state_db_path().resolve())
+    family_size = 4
+    context = multiprocessing.get_context("spawn")
+
+    with ProcessPoolExecutor(max_workers=8, mp_context=context) as executor:
+        outcomes = list(
+            executor.map(
+                _concurrent_preregister_worker,
+                [(database, family_size, index) for index in range(12)],
+            )
+        )
+
+    assert outcomes.count("ok") == family_size
+    assert outcomes.count("preregistration family is already full") == 8
+
+    con = db._connect()
+    try:
+        count = con.execute(
+            "SELECT COUNT(*) FROM ver_preregistrations WHERE family_id = ?",
+            ("concurrent_family",),
+        ).fetchone()[0]
+    finally:
+        con.close()
+    assert count == family_size
 
 
 def test_legacy_bh_alias_canonicalizes_for_new_rows(workspace):

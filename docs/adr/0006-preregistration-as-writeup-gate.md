@@ -1,6 +1,6 @@
 # ADR 0006: Preregistration correction aliases as the writeup gate
 
-- **Status**: Accepted (v3.0)
+- **Status**: Accepted (v3.0), family semantics corrected in v5.1
 - **Date**: 2026-04
 
 ## Context
@@ -23,20 +23,25 @@ needed the same mechanical guarantee for trustworthy numeric claims.
 
 ## Decision
 
+> **v5.1 amendment:** counting only currently open rows does not control the
+> family-wise error rate because alpha relaxes as earlier rows resolve. Current
+> rows therefore lock `family_id` and `family_size` at registration. Resolution
+> order can no longer change the correction. The current behavior below replaces
+> the original open-count rule.
+
 Introduce a preregistration mechanism with the following rules:
 
 - `preregister(hypothesis_id, metric_name, direction, threshold,
-  mc_correction='bonferroni', alpha=0.05, ...)` writes a row to
+  family_id, family_size, mc_correction='bonferroni', alpha=0.05, ...)` writes a row to
   `ver_preregistrations` with `status='open'`. This must happen **before**
   the experiment runs.
 - `resolve_preregistration(prereg_id, observed_value, observed_p_value)`
   freezes the verdict (`met` or `missed`). Multiple-comparison correction
-  applies based on the count of *currently open* prereg rows:
+  uses the family definition frozen at registration:
   - `bh`: accepted for old v3.0 rows and callers, then treated as the
     Bonferroni-style calculation below. It is **not** rank-based
     Benjamini-Hochberg.
-  - `bonferroni`: alpha / max(1, open_count); raw p multiplied by
-    open_count.
+  - `bonferroni`: alpha / family_size; raw p multiplied by family_size.
   - `none`: no adjustment (must be explicitly chosen).
 - True Benjamini-Hochberg would require rank-based thresholds over the
   correction family (`alpha * k / m`) and monotonic adjusted p-values. That
@@ -60,9 +65,10 @@ trace.
 - p-hacking is blocked by construction: thresholds are locked before
   experiments. Changing a locked prereg requires opening a new one,
   which the audit trail makes visible.
-- Multiple-comparison correction tightens automatically as more preregs
-  open simultaneously. The current calculation is conservative and
-  Bonferroni-style; it does not yet provide rank-based FDR control.
+- Multiple-comparison correction remains stable for the entire locked family,
+  regardless of the order in which members resolve. It controls family-wise
+  error under the standard Bonferroni assumptions; it does not provide
+  rank-based FDR control.
 - The reviewer's verdict ("accept" / "refuse with blockers") is
   programmatically derived; the user cannot accidentally ship a number
   that does not trace back.

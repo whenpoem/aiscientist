@@ -13,39 +13,18 @@ from pathlib import Path
 
 from verify_mcp.db import _connect, tx
 from verify_mcp.provenance import normalize_claim, normalize_value
+from verify_mcp.run_manifest import (
+    capture_run_manifest,
+    hash_file,
+    refresh_run_manifest,
+    store_run_manifest,
+)
 
 from ._common import _emit_event
 
 
-def _insert_provenance(
-    *,
-    claim: str,
-    value: str,
-    session_id: str,
-    source_command: str,
-) -> int:
-    with tx() as con:
-        cur = con.execute(
-            """
-            INSERT INTO ver_provenance(claim, value, session_id, source_command)
-            VALUES(?,?,?,?)
-            """,
-            (normalize_claim(claim), normalize_value(value), session_id, source_command),
-        )
-        return int(cur.lastrowid)
-
-
 def _hash_file(path: Path) -> str | None:
-    try:
-        if not path.exists() or not path.is_file():
-            return None
-        digest = hashlib.sha256()
-        with path.open("rb") as fh:
-            for chunk in iter(lambda: fh.read(65536), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except OSError:
-        return None
+    return hash_file(path)
 
 
 def _compute_input_hashes(input_files: list[str] | None) -> list[dict[str, str | None]]:
@@ -164,6 +143,7 @@ def record_provenance(
     source_command: str = "",
     input_files: list[str] | None = None,
     parent_prov_ids: list[int] | None = None,
+    config_files: list[str] | None = None,
 ) -> dict:
     """Store provenance for a numeric claim.
 
@@ -171,22 +151,38 @@ def record_provenance(
     resulting fingerprint is stored in ``ver_provenance_dag`` so the chain
     can later be re-validated by :func:`refresh_claim`.
     """
-    provenance_id = _insert_provenance(
-        claim=claim,
-        value=str(value),
-        session_id=session_id,
-        source_command=source_command,
+    manifest = capture_run_manifest(
+        command=source_command,
+        input_files=input_files,
+        config_files=config_files,
     )
-    if input_files or parent_prov_ids:
-        with tx() as con:
-            dag = _record_provenance_dag(
-                con,
-                prov_id=provenance_id,
-                input_files=input_files,
-                parent_prov_ids=parent_prov_ids,
-            )
-        return {"recorded": True, "provenance_id": provenance_id, "dag": dag}
-    return {"recorded": True, "provenance_id": provenance_id}
+    manifest_files = [str(entry["path"]) for entry in manifest["files"]]
+    with tx() as con:
+        cur = con.execute(
+            """
+            INSERT INTO ver_provenance(claim, value, session_id, source_command)
+            VALUES(?,?,?,?)
+            """,
+            (normalize_claim(claim), normalize_value(str(value)), session_id, source_command),
+        )
+        provenance_id = int(cur.lastrowid)
+        dag = _record_provenance_dag(
+            con,
+            prov_id=provenance_id,
+            input_files=manifest_files,
+            parent_prov_ids=parent_prov_ids,
+        )
+        stored_manifest = store_run_manifest(
+            con,
+            manifest,
+            provenance_id=provenance_id,
+        )
+    return {
+        "recorded": True,
+        "provenance_id": provenance_id,
+        "dag": dag,
+        "run_manifest": stored_manifest,
+    }
 
 
 def pin_metric(
@@ -197,10 +193,17 @@ def pin_metric(
     note: str = "",
     input_files: list[str] | None = None,
     parent_prov_ids: list[int] | None = None,
+    config_files: list[str] | None = None,
 ) -> dict:
     """Pin a central metric to a provenance record for later write-up checks."""
     normalized_claim = normalize_claim(claim)
     normalized_value = normalize_value(value)
+    manifest = capture_run_manifest(
+        command=source_command,
+        input_files=input_files,
+        config_files=config_files,
+    )
+    manifest_files = [str(entry["path"]) for entry in manifest["files"]]
     with tx() as con:
         cur = con.execute(
             """
@@ -227,14 +230,17 @@ def pin_metric(
             ),
         )
         pin_id = int(pin.lastrowid)
-        dag = None
-        if input_files or parent_prov_ids:
-            dag = _record_provenance_dag(
-                con,
-                prov_id=provenance_id,
-                input_files=input_files,
-                parent_prov_ids=parent_prov_ids,
-            )
+        dag = _record_provenance_dag(
+            con,
+            prov_id=provenance_id,
+            input_files=manifest_files,
+            parent_prov_ids=parent_prov_ids,
+        )
+        stored_manifest = store_run_manifest(
+            con,
+            manifest,
+            provenance_id=provenance_id,
+        )
         _emit_event(
             con,
             "claim_pinned",
@@ -245,10 +251,13 @@ def pin_metric(
                 "session_id": session_id,
             },
         )
-    result = {"pinned": True, "pin_id": pin_id, "provenance_id": provenance_id}
-    if dag is not None:
-        result["dag"] = dag
-    return result
+    return {
+        "pinned": True,
+        "pin_id": pin_id,
+        "provenance_id": provenance_id,
+        "dag": dag,
+        "run_manifest": stored_manifest,
+    }
 
 
 def check_provenance(claim: str) -> dict:
@@ -286,10 +295,23 @@ def check_provenance(claim: str) -> dict:
         for pin in pin_dicts:
             pin["pin_id"] = int(pin["id"])
             pin.update(seed_summaries.get(int(pin["id"]), _empty_seed_summary()))
+        manifests = con.execute(
+            """
+            SELECT m.manifest_id, m.provenance_id, m.seed_run_id,
+                   m.manifest_sha256, m.manifest_json, m.created_at
+            FROM ver_run_manifests m
+            JOIN ver_provenance p ON p.id = m.provenance_id
+            WHERE p.claim = ?
+            ORDER BY m.created_at DESC, m.manifest_id DESC
+            LIMIT 20
+            """,
+            (normalized_claim,),
+        ).fetchall()
         return {
             "status": "found",
             "evidence": [dict(row) for row in rows],
             "pins": pin_dicts,
+            "run_manifests": [dict(row) for row in manifests],
         }
     finally:
         con.close()
@@ -351,7 +373,34 @@ def refresh_claim(claim: str) -> dict:
                         }
                     )
 
-            stale = 1 if mismatched else 0
+            manifest_rows = con.execute(
+                """
+                SELECT manifest_id, manifest_json
+                FROM ver_run_manifests
+                WHERE provenance_id = ?
+                ORDER BY manifest_id
+                """,
+                (prov_id,),
+            ).fetchall()
+            manifest_mismatched: list[dict] = []
+            for manifest_row in manifest_rows:
+                try:
+                    manifest = json.loads(manifest_row["manifest_json"])
+                except (TypeError, json.JSONDecodeError):
+                    manifest_mismatched.append(
+                        {
+                            "manifest_id": int(manifest_row["manifest_id"]),
+                            "field": "manifest_json",
+                            "error": "invalid_json",
+                        }
+                    )
+                    continue
+                for mismatch in refresh_run_manifest(manifest):
+                    manifest_mismatched.append(
+                        {"manifest_id": int(manifest_row["manifest_id"]), **mismatch}
+                    )
+
+            stale = 1 if (mismatched or manifest_mismatched) else 0
             con.execute(
                 """
                 UPDATE ver_provenance_dag
@@ -368,6 +417,7 @@ def refresh_claim(claim: str) -> dict:
                         "prov_id": prov_id,
                         "claim": normalized_claim,
                         "mismatched": mismatched,
+                        "manifest_mismatched": manifest_mismatched,
                     },
                 )
             affected.append(
@@ -376,7 +426,9 @@ def refresh_claim(claim: str) -> dict:
                     "stale": bool(stale),
                     "unchecked": False,
                     "mismatched": mismatched,
+                    "manifest_mismatched": manifest_mismatched,
                     "input_count": len(stored),
+                    "manifest_count": len(manifest_rows),
                 }
             )
 

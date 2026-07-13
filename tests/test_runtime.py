@@ -8,8 +8,10 @@ from claudescientist.runtime import (
     apply_schema_migration,
     connect_existing_sqlite,
     connect_sqlite,
+    installation_root,
     project_root,
     state_db_path,
+    workspace_root,
 )
 
 
@@ -162,3 +164,35 @@ def test_state_db_env_overrides_still_win(monkeypatch, tmp_path):
     monkeypatch.setenv("RESEARCH_AGENT_DB_PATH", str(override))
 
     assert state_db_path() == override
+
+
+def test_workspace_root_accepts_external_research_project(monkeypatch, tmp_path):
+    research_project = tmp_path / "external-research"
+    research_project.mkdir()
+    (research_project / "README.md").write_text("research\n", encoding="utf-8")
+    monkeypatch.delenv("RESEARCH_AGENT_WORKSPACE", raising=False)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(research_project))
+    monkeypatch.delenv("RESEARCH_AGENT_DB_PATH", raising=False)
+    monkeypatch.delenv("RESEARCH_AGENT_STATE_DIR", raising=False)
+
+    assert project_root(start=research_project) is None
+    assert workspace_root() == research_project.resolve()
+    assert state_db_path() == research_project.resolve() / ".research-agent" / "state.db"
+
+
+def test_explicit_workspace_override_wins_over_host_directory(monkeypatch, tmp_path):
+    explicit = tmp_path / "explicit"
+    host = tmp_path / "host"
+    explicit.mkdir()
+    host.mkdir()
+    monkeypatch.setenv("RESEARCH_AGENT_WORKSPACE", str(explicit))
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(host))
+
+    assert workspace_root() == explicit.resolve()
+
+
+def test_installation_root_is_independent_from_workspace(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_AGENT_WORKSPACE", str(tmp_path))
+    installed = installation_root()
+    assert installed != tmp_path.resolve()
+    assert installed.exists()

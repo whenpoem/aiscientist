@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import shlex
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,11 +16,26 @@ from textual.reactive import reactive
 from textual.widgets import Input, Static
 
 from . import data
+from .action_router import (
+    FOCUS_ORDER,
+    cycle_right_tab,
+    focus_relative,
+    jump_cursor,
+    move_cursor,
+    move_horizontal,
+)
 from .activity import ActivityCard, aggregate_from_db
 from .bars import progress_bar
+from .command_handler import execute_command, goto_node
 from .commands import CockpitCommands, ThemeSwitcherCommands
 from .diagnostics import get_logger, health_state, reset_health
 from .i18n import normalize_lang, t, toggle_lang
+from .intervention_controller import (
+    notify_intervention_queued,
+    queue_intervention,
+    short_node_label,
+    track_intervention,
+)
 from .layout import (
     LAYOUT_FOCUS,
     LAYOUT_SINGLE,
@@ -48,6 +62,8 @@ from .panes.activity_pane import ActivityPane
 from .panes.focus_pane import FocusState, derive_focus_from_db
 from .panes.phase_strip import PhaseStripPane
 from .phase import Phase, derive_phase_from_db
+from .refresh_coordinator import dispatch_events
+from .refresh_coordinator import refresh_state as coordinate_refresh
 from .row_detail import row_detail
 from .screens.splash import SplashScreen
 from .screens.welcome import WelcomeScreen
@@ -77,9 +93,6 @@ _log = get_logger("app")
 # "activity" in the body grid; the original RichLog moved to a bottom-
 # docked "audit log". Settings persisted under the legacy name are healed
 # to the new name on load (see :func:`_normalize_focus_pane`).
-FOCUS_ORDER = ("tree", "detail", "activity", "tabs")
-
-
 def _pane_label(lang: str, pane: str) -> str:
     """Localized pane name for the HUD focus-mode chip and breadcrumb.
 
@@ -1201,20 +1214,7 @@ class CockpitApp(App[None]):
         return self.query_one(ContextBar)
 
     def refresh_state(self, *, include_events: bool) -> None:
-        self._refresh_graph()
-        self._refresh_tabs()
-        self._refresh_counts()
-        if include_events:
-            self._refresh_events()
-        self._detail_override = False
-        self.detail_pane.clear_override()
-        self._refresh_detail()
-        # If a DetailScreen is on top of the stack, repaint it so action
-        # keys (y/n/r/c/m) fired from inside the drill-in surface their
-        # state change immediately — without this the user sees a stale
-        # node body and has to bounce out and back in.
-        self._repaint_top_detail_screen()
-
+        coordinate_refresh(self, include_events=include_events)
     def _repaint_top_detail_screen(self) -> None:
         if len(self.screen_stack) <= 1:
             return
@@ -1305,80 +1305,31 @@ class CockpitApp(App[None]):
         self._set_focus("tabs")
 
     def action_focus_next_pane(self) -> None:
-        # Priority Tab on the App swallows the keystroke before it reaches
-        # any focused widget — including the inputs inside PinMetricModal
-        # / TextInputModal, which rely on Tab → focus_next() to walk their
-        # fields. When a modal is on the stack we forward the operation
-        # to the modal so its own field cycle still works.
-        if len(self.screen_stack) > 1:
-            top = self.screen_stack[-1]
-            try:
-                top.focus_next()
-            except Exception:  # pragma: no cover - defensive
-                pass
-            return
-        index = FOCUS_ORDER.index(self.focused_pane)
-        self._set_focus(FOCUS_ORDER[(index + 1) % len(FOCUS_ORDER)])
+        focus_relative(self, 1)
 
     def action_focus_prev_pane(self) -> None:
-        if len(self.screen_stack) > 1:
-            top = self.screen_stack[-1]
-            try:
-                top.focus_previous()
-            except Exception:  # pragma: no cover - defensive
-                pass
-            return
-        index = FOCUS_ORDER.index(self.focused_pane)
-        self._set_focus(FOCUS_ORDER[(index - 1) % len(FOCUS_ORDER)])
+        focus_relative(self, -1)
 
     def action_cursor_down(self) -> None:
-        if self.focused_pane == "tree":
-            self.tree_pane.move_cursor_by(1)
-            self.selected_node_id = self.tree_pane.current_node_id()
-        elif self.focused_pane == "tabs":
-            self.tabs_pane.move_cursor_by(1)
-        self._refresh_detail()
+        move_cursor(self, 1)
 
     def action_cursor_up(self) -> None:
-        if self.focused_pane == "tree":
-            self.tree_pane.move_cursor_by(-1)
-            self.selected_node_id = self.tree_pane.current_node_id()
-        elif self.focused_pane == "tabs":
-            self.tabs_pane.move_cursor_by(-1)
-        self._refresh_detail()
+        move_cursor(self, -1)
 
     def action_pane_left(self) -> None:
-        if self.focused_pane == "tree":
-            self.tree_pane.collapse_current()
-            return
-        self.action_focus_prev_pane()
+        move_horizontal(self, -1)
 
     def action_pane_right(self) -> None:
-        if self.focused_pane == "tree":
-            self.tree_pane.expand_current()
-            return
-        self.action_focus_next_pane()
+        move_horizontal(self, 1)
 
     def action_jump_top(self) -> None:
-        if self.focused_pane == "tree":
-            self.tree_pane.move_cursor_to_top()
-            self.selected_node_id = self.tree_pane.current_node_id()
-        elif self.focused_pane == "tabs":
-            self.tabs_pane.move_cursor_to_top()
-        self._refresh_detail()
+        jump_cursor(self, "top")
 
     def action_jump_bottom(self) -> None:
-        if self.focused_pane == "tree":
-            self.tree_pane.move_cursor_to_bottom()
-            self.selected_node_id = self.tree_pane.current_node_id()
-        elif self.focused_pane == "tabs":
-            self.tabs_pane.move_cursor_to_bottom()
-        self._refresh_detail()
+        jump_cursor(self, "bottom")
 
     def action_cycle_right_tab(self) -> None:
-        self.tabs_pane.cycle_tab()
-        self._refresh_detail()
-
+        cycle_right_tab(self)
     async def action_export_report(self) -> None:
         """Open the ExportModal for the currently-selected node.
 
@@ -1469,6 +1420,14 @@ class CockpitApp(App[None]):
                     ("L", t(self.lang, "toggle_language")),
                     ("T", t(self.lang, "cycle_theme")),
                     ("q", t(self.lang, "quit")),
+                ],
+            ),
+            (
+                t(self.lang, "help_protection_strength"),
+                [
+                    ("enforced", t(self.lang, "protection_enforced_help")),
+                    ("agent-gated", t(self.lang, "protection_agent_gated_help")),
+                    ("advisory", t(self.lang, "protection_advisory_help")),
                 ],
             ),
         ]
@@ -2170,14 +2129,7 @@ class CockpitApp(App[None]):
         self._set_focus(self.focused_pane)
 
     def _queue_intervention(self, kind: str) -> None:
-        node_id = self._require_selected_node()
-        if node_id is None:
-            return
-        result = data.write_intervention(kind, node_id, "")
-        self._track_intervention(result, kind, node_id)
-        self._flash_intervention()
-        self.refresh_state(include_events=True)
-
+        queue_intervention(self, kind)
     def _flash_intervention(self) -> None:
         """Brief visual confirmation that an action key was registered.
 
@@ -2220,48 +2172,14 @@ class CockpitApp(App[None]):
         kind: str,
         target: str | None,
     ) -> None:
-        """Record the latest intervention for the `u` undo path AND toast.
-
-        ``result`` is the dict returned by ``data.write_intervention`` —
-        we read its ``intervention_id`` to seed the undo. For non-queued
-        actions (refute/pin) callers pass ``None`` so the undo pointer is
-        cleared (those mutations aren't reversible from the cockpit).
-        """
-        if result and "intervention_id" in result:
-            self._last_intervention_id = int(result["intervention_id"])
-            self._last_intervention_kind = kind
-            self._last_intervention_target = target
-        else:
-            # Non-undoable action — clear the pointer so the user doesn't
-            # press `u` thinking it'll roll back e.g. a refute.
-            self._last_intervention_id = None
-            self._last_intervention_kind = None
-            self._last_intervention_target = None
-        self._notify_intervention_queued(kind, target)
+        track_intervention(self, result, kind, target)
 
     def _notify_intervention_queued(self, kind: str, target: str | None) -> None:
-        """Confirm enqueue to the user. The hook (intervention_pump.py)
-        delivers on the next UserPromptSubmit — the cockpit can only
-        confirm enqueue, never delivery, so the toast wording stays honest.
-        """
-        if target:
-            display = self._short_node_label(target)
-            msg = t(self.lang, "intervention_queued", kind=kind, target=display)
-        else:
-            msg = t(self.lang, "intervention_queued_no_target", kind=kind)
-        # Append the undo hint when an undo pointer is live.
-        if self._last_intervention_id is not None:
-            msg = msg + " · " + t(self.lang, "intervention_undo_hint")
-        self.notify(msg)
+        notify_intervention_queued(self, kind, target)
 
     @staticmethod
     def _short_node_label(target: str) -> str:
-        """Format ``H_a3f1c2`` → ``H_a3f1`` for compact toast text."""
-        if "_" not in target:
-            return target[:10]
-        prefix, suffix = target.split("_", 1)
-        return f"{prefix}_{suffix[:4]}"
-
+        return short_node_label(target)
     def _require_selected_node(self) -> str | None:
         node_id = self.selected_node_id or self.tree_pane.current_node_id()
         if node_id is None:
@@ -2285,197 +2203,10 @@ class CockpitApp(App[None]):
         return row_detail(row, self.lang)
 
     def _execute_command(self, command: str) -> None:
-        if not command:
-            return
-        try:
-            parts = shlex.split(command)
-        except ValueError as exc:
-            self.notify(
-                t(self.lang, "command_parse_error", error=str(exc)),
-                severity="warning",
-            )
-            return
-        if not parts:
-            return
-        op, *args = parts
-        if op == "note":
-            # ``:note`` is the cockpit user's manual journal entry —
-            # tag it ``cockpit_user`` so the provenance line in the
-            # Detail pane reads "from cockpit (you)" instead of leaving
-            # the source as NULL / unknown.
-            data.record_event(
-                "note", {"text": " ".join(args)}, source="cockpit_user"
-            )
-        elif op in {"reject", "approve"}:
-            target = args[0] if args else self.selected_node_id
-            payload = " ".join(args[1:]) if len(args) > 1 else ""
-            result = data.write_intervention(op, target, payload)
-            self._track_intervention(result, op, target)
-        elif op in {"halt", "redirect", "constrain"}:
-            if op == "halt":
-                result = data.write_intervention(op, None, " ".join(args))
-                self._track_intervention(result, op, None)
-            else:
-                result = data.write_intervention(op, self.selected_node_id, " ".join(args))
-                self._track_intervention(result, op, self.selected_node_id)
-        elif op == "pin" and len(args) >= 3:
-            data.pin_metric_local(
-                claim=args[1],
-                value=args[2],
-                session_id=args[0],
-                source_command="cockpit",
-                note="pinned from command mode",
-            )
-        elif op == "goto" and args:
-            self._goto_node(args[0])
-            return  # _goto_node handles its own refresh; skip the global one
-        elif op == "pin":
-            self.notify(t(self.lang, "command_pin_usage"), severity="warning")
-            return
-        elif op == "theme":
-            # ``:theme <name>`` — direct jump rather than the cycle bound
-            # to T. Unknown names produce a localized warning, NOT a
-            # silent fallback (silent fallback hid the user's typo and
-            # then they wondered why the theme didn't change).
-            if not args:
-                self.notify(
-                    t(self.lang, "cmd_unknown_value", kind="theme", value=""),
-                    severity="warning",
-                )
-                return
-            name = args[0]
-            from .theme import theme_names as _theme_names
-
-            if name not in _theme_names():
-                self.notify(
-                    t(self.lang, "cmd_unknown_value", kind="theme", value=name),
-                    severity="warning",
-                )
-                return
-            self._apply_theme(name, persist=True, notify=True)
-            return
-        elif op == "lang":
-            # ``:lang <code>`` — switch language directly. ``L`` is the
-            # toggle; this is the explicit form for users with more
-            # than two languages in their muscle memory (and a way to
-            # set the language deterministically in a screencast).
-            if not args:
-                self.notify(
-                    t(self.lang, "cmd_unknown_value", kind="lang", value=""),
-                    severity="warning",
-                )
-                return
-            from .i18n import SUPPORTED_LANGS
-
-            code = args[0].lower()
-            if code not in SUPPORTED_LANGS:
-                self.notify(
-                    t(self.lang, "cmd_unknown_value", kind="lang", value=code),
-                    severity="warning",
-                )
-                return
-            if code != self.lang:
-                self.lang = code
-                self._apply_language()
-                self.refresh_state(include_events=True)
-                self.notify(t(self.lang, "language_notice"))
-                self._persist_settings()
-            return
-        elif op == "focus":
-            # ``:focus`` — alias for the F key. Useful when the user is
-            # in the middle of typing into the command line and doesn't
-            # want to bounce keys.
-            self._toggle_focus_impl()
-            return
-        elif op == "health":
-            # ``:health`` — clear the in-memory health-state counters
-            # AFTER the user has read the log. The chip vanishes on
-            # next tick (StatusBar re-reads the state every second).
-            reset_health()
-            self.notify(t(self.lang, "cmd_health_cleared"))
-            return
-        elif op == "timeline":
-            # ``:timeline`` — toggle the bottom event-density strip.
-            # Phase E4 ships visualisation only; an optional arg
-            # ``on`` / ``off`` lets a screencast force a specific
-            # state without depending on the previous toggle parity.
-            try:
-                pane = self.timeline_pane
-            except NoMatches:  # pragma: no cover - defensive
-                return
-            if args and args[0].lower() in {"on", "1", "show", "true"}:
-                target = True
-            elif args and args[0].lower() in {"off", "0", "hide", "false"}:
-                target = False
-            else:
-                target = not pane.is_visible
-            pane.set_visible(target)
-            if target:
-                # Push the current event tail in so the strip isn't
-                # blank on first open.
-                try:
-                    pane.set_events(data.fetch_new_events(0, limit=200))
-                except Exception:  # pragma: no cover - defensive
-                    _log.exception(":timeline fetch_events failed")
-            self.notify(
-                t(self.lang, "timeline_on" if target else "timeline_off")
-            )
-            return
-        else:
-            self.notify(
-                t(self.lang, "command_unknown", command=op),
-                severity="warning",
-            )
-            return
-        self.refresh_state(include_events=True)
+        execute_command(self, command)
 
     def _goto_node(self, target: str) -> None:
-        """Jump tree focus to a node by id or unique prefix.
-
-        Strategy:
-          1. Exact match wins immediately.
-          2. Otherwise treat ``target`` as a prefix; if exactly one node id
-             starts with it, jump. Multiple matches → warning toast listing
-             the first few candidates.
-          3. Zero matches → warning toast.
-
-        The match runs against the in-memory ``self.graph`` so we never
-        block the UI on a SQL round-trip — the snapshot is refreshed on
-        each tick anyway.
-        """
-        if not target:
-            return
-        nodes = self.graph.nodes
-        if target in nodes:
-            match = target
-        else:
-            candidates = [nid for nid in nodes if nid.startswith(target)]
-            if len(candidates) == 1:
-                match = candidates[0]
-            elif len(candidates) > 1:
-                preview = ", ".join(candidates[:3])
-                more = "" if len(candidates) <= 3 else f" (+{len(candidates) - 3})"
-                self.notify(
-                    t(
-                        self.lang,
-                        "goto_ambiguous",
-                        target=target,
-                        preview=preview + more,
-                    ),
-                    severity="warning",
-                )
-                return
-            else:
-                self.notify(
-                    t(self.lang, "goto_not_found", target=target),
-                    severity="warning",
-                )
-                return
-        self._set_focus("tree")
-        self.tree_pane.select_node_id(match)
-        self.selected_node_id = match
-        self._refresh_detail()
-
+        goto_node(self, target)
     def _handle_text_action(self, kind: str, node_id: str, payload: str | None) -> None:
         if payload:
             result = data.write_intervention(kind, node_id, payload)
@@ -2638,46 +2369,7 @@ class CockpitApp(App[None]):
                 _log.exception("_refresh_events: timeline.set_events failed")
 
     def _dispatch_events(self, rows: list[dict]) -> None:
-        kinds = {str(row.get("kind", "")) for row in rows}
-        if {"graph_delta", "judgement_recorded"} & kinds:
-            self._refresh_graph()
-        if "failure_added" in kinds:
-            self._refresh_failures()
-        if {"claim_pinned", "seed_run_recorded"} & kinds:
-            self._refresh_claims()
-        if "literature_ingested" in kinds:
-            self._refresh_literature()
-        if {"heldout_query_reserved", "heldout_query_finished"} & kinds:
-            self._refresh_risks()
-        # Proof-trunk per-pane refreshes (v4.1.0a0). Each event class maps
-        # to exactly one tab so we don't over-refresh on busy proof loops.
-        if "proof_corpus_ingested" in kinds:
-            self._refresh_corpus()
-        if {
-            "proof_segmented",
-            "proof_diagnosis_recorded",
-            "proof_diagnosis_complete",
-            "proof_correction_applied",
-        } & kinds:
-            self._refresh_diagnostics()
-        if {
-            "lean_proof_succeeded",
-            "lean_proof_failed",
-            "lean_proof_recorded",
-        } & kinds:
-            self._refresh_lean()
-        if "report_generated" in kinds:
-            self._refresh_reports()
-        self._refresh_counts()
-        self._refresh_detail()
-        # v5.0 derived surfaces: phase, activity, focus all recompute
-        # from the same recent-events window on every dispatch. Each
-        # call is one SELECT + a pure function, so the cost is bounded
-        # even when many events fire in a tick.
-        self._refresh_phase()
-        self._refresh_activity()
-        self._refresh_focus()
-
+        dispatch_events(self, rows)
     def _apply_filter(self, target: str, value: str) -> None:
         self._pane_filters[target] = value
         if target == "tree":

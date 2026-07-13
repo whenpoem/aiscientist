@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 
 def test_propose_hypothesis_seeds_bt_row(workspace):
     impl = workspace["memory_mcp.impl"]
@@ -116,7 +118,68 @@ def test_get_bt_leaderboard_orders_and_marks_insufficient(workspace):
     assert ids[-1] == c
     for row in board:
         assert row["lcb"] <= row["strength"] <= row["ucb"]
+        assert row["interval_method"] == "laplace_map_centered_approximate_posterior"
+        assert row["interval_calibrated"] is False
         assert row["insufficient_samples"] is False
+
+
+def test_batch_bt_fit_is_invariant_to_comparison_order(workspace):
+    impl = workspace["memory_mcp.impl"]
+    db = workspace["memory_mcp.db"]
+
+    a = impl.propose_hypothesis("A")["node_id"]
+    b = impl.propose_hypothesis("B")["node_id"]
+    sequence = [(a, b)] * 10 + [(b, a)] * 10
+    for winner, loser in sequence:
+        impl.update_bt_rating(winner, loser, source="llm_judge")
+    first = {row["node_id"]: row for row in impl.get_bt_leaderboard()}
+
+    con = db._connect()
+    try:
+        con.execute("DELETE FROM mem_bt_comparisons")
+        con.execute(
+            "UPDATE mem_bt_ratings SET strength=0, strength_var=1, n_comparisons=0"
+        )
+    finally:
+        con.close()
+
+    for winner, loser in reversed(sequence):
+        impl.update_bt_rating(winner, loser, source="llm_judge")
+    second = {row["node_id"]: row for row in impl.get_bt_leaderboard()}
+
+    for node_id in (a, b):
+        assert second[node_id]["strength"] == pytest.approx(first[node_id]["strength"])
+        assert second[node_id]["strength_var"] == pytest.approx(
+            first[node_id]["strength_var"]
+        )
+    assert first[a]["strength"] == pytest.approx(0.0, abs=1e-9)
+    assert first[b]["strength"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_batch_bt_refit_updates_all_connected_nodes(workspace):
+    impl = workspace["memory_mcp.impl"]
+
+    a = impl.propose_hypothesis("A")["node_id"]
+    b = impl.propose_hypothesis("B")["node_id"]
+    c = impl.propose_hypothesis("C")["node_id"]
+    impl.update_bt_rating(a, b, source="llm_judge")
+    before = {row["node_id"]: row for row in impl.get_bt_leaderboard()}
+    impl.update_bt_rating(b, c, source="llm_judge")
+    after = {row["node_id"]: row for row in impl.get_bt_leaderboard()}
+
+    assert after[a]["strength"] != pytest.approx(before[a]["strength"])
+    assert after[a]["n_comparisons"] == 1
+    assert after[b]["n_comparisons"] == 2
+    assert after[c]["n_comparisons"] == 1
+
+
+@pytest.mark.parametrize("weight", [float("nan"), float("inf"), float("-inf"), 0, -1])
+def test_update_bt_rating_rejects_non_finite_or_non_positive_weight(workspace, weight):
+    impl = workspace["memory_mcp.impl"]
+    a = impl.propose_hypothesis("A")["node_id"]
+    b = impl.propose_hypothesis("B")["node_id"]
+    with pytest.raises(ValueError, match="positive finite"):
+        impl.update_bt_rating(a, b, source="llm_judge", weight=weight)
 
 
 def test_update_bt_rating_rejects_unknown_source(workspace):

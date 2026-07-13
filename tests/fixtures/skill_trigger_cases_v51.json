@@ -1,0 +1,182 @@
+[
+  {
+    "prompt": "Investigate whether retrieval augmentation improves this classifier, compare plausible mechanisms, run the most informative experiment, and state only the claim the evidence supports.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Validate our empirical claim that the new sampler reduces variance across seeds; I need competing hypotheses and a confirmatory plan before we see the final result.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Continue yesterday's interrupted research task from its snapshot, inspect the open preregistration and manifests, then choose the next experiment without restarting.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Compare three explanations for the accuracy drop, search the relevant literature, rank the hypotheses, and design an experiment that can separate them.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Test whether the intervention caused the observed change rather than merely correlating with it, including a fair baseline and seed-robust verification.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Reproduce the central experiment from this paper in our repository and determine whether its main empirical conclusion survives on our data.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Explore several feature-selection ideas first, then preregister one confirmatory family and establish which method actually wins under equal compute.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Use the sequestered evaluation budget correctly to determine whether hypothesis H3 generalizes; do not inspect the held-out rows directly.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Build an auditable benchmark comparing these four algorithms and tell me which conclusion remains fresh after code, configuration, and seed checks.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "I have a broad question about whether calibration improves model selection; turn it into falsifiable hypotheses and carry the study through verification.",
+    "should_trigger": ["research-sop"],
+    "should_not_trigger": ["debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "This test fails about one run in twenty and sometimes hangs. Reproduce the intermittent behavior, find the real cause, fix it, and verify the original path.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Diagnose why this command crashes with WinError 5, but do not change any files yet; separate the observed error from your causal hypotheses.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "The MCP appears in the list but never starts outside the ClaudeScientist checkout. Check discovery, executable launch, protocol, workspace state, hooks, and UI boundaries.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Our metric suddenly jumped from 0.71 to 0.94 after a refactor. Treat the suspicious result as a possible bug and identify whether leakage, stale state, or code drift caused it.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "The process freezes only on Windows after several refresh cycles. Collect the smallest useful logs, vary one timing condition at a time, and repair the regression.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "After upgrading the dependency, the same input now produces a different result. Bound the first bad state and prove which boundary changed before editing.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "This parser exits successfully but returns the wrong rows for one dataset. Create a minimal reproduction and eliminate encoding, schema, and ordering hypotheses.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "CI fails only on Python 3.13 and the traceback points at SQLite locking. Diagnose and fix it without discarding the unrelated worktree changes.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "The shared state database may be malformed and protections silently became permissive. Confirm the failure mechanism safely and add a regression test for the recovery path.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "A third-party embedding service times out, but I am not sure whether our launcher or the provider is at fault. Prove the local boundary and give a safe fallback.",
+    "should_trigger": ["debug-sop"],
+    "should_not_trigger": ["research-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Write the results section reporting 91.2 percent accuracy and four planned comparisons, but verify every central number and avoid overstating significance.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Revise the manuscript after the reviewer questioned seed stability, baseline fairness, preregistration family size, and whether the claim is still fresh.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Add this theorem to the paper; the natural-language proof has been diagnosed but Lean is unavailable, so label the remaining verification status honestly.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Turn the BT leaderboard into a report paragraph, including comparison counts and calibration status, without calling non-overlapping approximate intervals significant.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Draft the abstract around our measured effect size and corrected p-value, but only after checking provenance, seeds, and the structured reviewer verdict.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Update results.md from the pinned metrics, clearly separating exploratory findings, confirmatory outcomes, limitations, and unresolved proof obligations.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Write a figure caption comparing the baseline and new method, preserving compute-budget parity and explaining the uncertainty without a stronger causal claim.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Prepare the final research report from this claim manifest and return accept, revise, or reject according to the reviewer JSON and all blocking checks.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Rewrite the discussion so it distinguishes what the data establish from plausible mechanisms, and retain explicit caveats for unverified theorem claims.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Create the conclusion from verified claims only, including the fixed Bonferroni family, seed verdict, provenance freshness, and proof status where relevant.",
+    "should_trigger": ["writeup-sop"],
+    "should_not_trigger": ["research-sop", "debug-sop"]
+  },
+  {
+    "prompt": "Look up the publication year and DOI of this paper and answer in one sentence; do not design or run any experiment.",
+    "should_trigger": [],
+    "should_not_trigger": ["research-sop", "debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Rename this local variable and update its unit test; there is no failure, experiment, metric, or research claim involved.",
+    "should_trigger": [],
+    "should_not_trigger": ["research-sop", "debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Explain in general terms what a stack trace is for a beginner; I am not asking you to diagnose a real crash.",
+    "should_trigger": [],
+    "should_not_trigger": ["research-sop", "debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Correct the spelling and punctuation in this README paragraph; it contains no experimental result or statistical conclusion.",
+    "should_trigger": [],
+    "should_not_trigger": ["research-sop", "debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Summarize the introduction of this paper for me without evaluating its claims, reproducing its study, or writing our own result section.",
+    "should_trigger": [],
+    "should_not_trigger": ["research-sop", "debug-sop", "writeup-sop"]
+  },
+  {
+    "prompt": "Add a changelog entry saying the command name changed; do not mention metrics, rankings, proofs, or research findings.",
+    "should_trigger": [],
+    "should_not_trigger": ["research-sop", "debug-sop", "writeup-sop"]
+  }
+]
