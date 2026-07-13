@@ -1,0 +1,24 @@
+name: Publish Python package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/claudescientist
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv build --out-dir dist
+      - run: uv run python scripts/check_wheel_contents.py dist/*.whl
+      - run: uv publish --trusted-publishing always dist/*
