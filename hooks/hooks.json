@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook leakage_guard --event PreToolUse",
+            "command": "uv tool run --from claudescientist==5.1.1 claudescientist hook leakage_guard --event PreToolUse",
             "timeout": 20,
             "statusMessage": "Checking sequestered-data and provenance guard"
           }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook destructive_bash_guard --event PreToolUse",
+            "command": "uv tool run --from claudescientist==5.1.1 claudescientist hook destructive_bash_guard --event PreToolUse",
             "timeout": 20,
             "statusMessage": "Checking destructive command guard"
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook provenance_log --event PostToolUse",
+            "command": "uv tool run --from claudescientist==5.1.1 claudescientist hook provenance_log --event PostToolUse",
             "timeout": 20,
             "statusMessage": "Recording numeric provenance"
           }
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook intervention_pump --event UserPromptSubmit",
+            "command": "uv tool run --from claudescientist==5.1.1 claudescientist hook intervention_pump --event UserPromptSubmit",
             "timeout": 20,
             "statusMessage": "Loading Cockpit interventions"
           }
@@ -54,13 +54,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook intervention_pump --event Stop",
+            "command": "uv tool run --from claudescientist==5.1.1 claudescientist hook intervention_pump --event Stop",
             "timeout": 20,
             "statusMessage": "Draining Cockpit interventions"
           },
           {
             "type": "command",
-            "command": "uv tool run --from claudescientist==5.1.0 claudescientist hook stop_flush --event Stop",
+            "command": "uv tool run --from claudescientist==5.1.1 claudescientist hook stop_flush --event Stop",
             "timeout": 20,
             "statusMessage": "Recording turn summary"
           }

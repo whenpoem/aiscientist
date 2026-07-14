@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = ROOT / ".claude" / "skills"
+BASELINE_ROOT = ROOT / "scripts" / "fixtures" / "skill_contract_v50"
 
 CHECKS: dict[str, list[list[tuple[str, ...]]]] = {
     "research-sop": [
@@ -69,16 +69,7 @@ CHECKS: dict[str, list[list[tuple[str, ...]]]] = {
 
 
 def _old_skill(name: str) -> str:
-    path = f".claude/skills/{name}/SKILL.md"
-    completed = subprocess.run(
-        ["git", "show", f"HEAD:{path}"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return completed.stdout
+    return (BASELINE_ROOT / f"{name}.md").read_text(encoding="utf-8")
 
 
 def _grade(text: str, expectations: list[str], checks: list[tuple[str, ...]]) -> dict:

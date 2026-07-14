@@ -89,7 +89,8 @@ Do not assume a PR exists unless you verify it. Do not force-push the branch unl
 
 This repository has shipped the v3.0 plan ([`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)). Do not casually rename that to "V1.0 complete" or "production-ready" without verifying the remaining product and operations expectations yourself.
 
-**v5.1.0 is the current version.** It adds order-invariant full-ledger BT MAP
+**v5.1.1 is the current version.** It fixes the public marketplace so the
+plugin source is pinned to the same release tag. The v5.1 line adds order-invariant full-ledger BT MAP
 refits with explicitly uncalibrated intervals, fixed preregistration families,
 automatic code/Git/runtime manifests, protection-strength labels, installation
 root versus workspace root separation, a portable public Codex plugin, the

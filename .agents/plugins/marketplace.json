@@ -8,7 +8,8 @@
       "name": "claudescientist",
       "source": {
         "source": "url",
-        "url": "https://github.com/whenpoem/aiscientist.git"
+        "url": "https://github.com/whenpoem/aiscientist.git",
+        "ref": "v5.1.1"
       },
       "policy": {
         "installation": "AVAILABLE",

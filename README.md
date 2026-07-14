@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-v5.1.0-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.1-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
@@ -10,7 +10,8 @@ ClaudeScientist plugs into Claude Code or Codex and adds what most AI scientist 
 
 You give the agent a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
 
-**Current version**: v5.1.0 is a trust-calibration and portability release.
+**Current version**: v5.1.1 is the public-plugin source-pin fix for the v5.1
+trust-calibration and portability release.
 Bradley-Terry rankings are refit from the complete ledger and no longer depend
 on comparison order; their intervals are honestly labelled as uncalibrated
 approximations. Bonferroni families are fixed when locked. Every central run
@@ -63,10 +64,10 @@ The plugin works from any research project; Codex does not need to start inside
 the ClaudeScientist source checkout.
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist setup --scope user
+uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
 ```
 
-This command installs the marketplace at the matching `v5.1.0` Git tag and
+This command installs the marketplace and root plugin at the matching `v5.1.1` Git tag and
 then installs the plugin. The Python package and Git tag must both be published
 before this public command can work; source-checkout testing does not replace
 that release step. See [docs/setup-codex-plugin.md](docs/setup-codex-plugin.md)
@@ -79,8 +80,8 @@ remain **monitor-only** until the hooks are trusted.
 From the research project you want to monitor:
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist doctor --workspace .
-uv tool run --from claudescientist==5.1.0 claudescientist cockpit --workspace . --lang zh
+uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
 ```
 
 Each project keeps independent state in its own `.research-agent/state.db`.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 from claudescientist import cli, doctor, plugin_setup
 
@@ -77,7 +78,7 @@ def test_doctor_parses_real_codex_plugin_json(monkeypatch):
             {
                 "pluginId": "claudescientist@personal",
                 "name": "claudescientist",
-                "version": "5.1.0",
+                "version": "5.1.1",
                 "installed": True,
                 "enabled": True,
             }
@@ -96,7 +97,7 @@ def test_doctor_parses_real_codex_plugin_json(monkeypatch):
     result = doctor._codex_plugin_status()  # noqa: SLF001
     assert result["installed"] is True
     assert result["enabled"] is True
-    assert result["versions"] == ["5.1.0"]
+    assert result["versions"] == ["5.1.1"]
 
 
 def test_doctor_hook_trust_honours_codex_home(tmp_path, monkeypatch):
@@ -123,7 +124,7 @@ def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch)
     result = plugin_setup.install_user_plugin(runner=fake_runner)
 
     assert result["ok"] is True
-    assert result["ref"] == "v5.1.0"
+    assert result["ref"] == "v5.1.1"
     assert commands == [
         [
             "codex.cmd",
@@ -132,7 +133,7 @@ def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch)
             "add",
             "whenpoem/aiscientist",
             "--ref",
-            "v5.1.0",
+            "v5.1.1",
             "--json",
         ],
         [
@@ -160,6 +161,65 @@ def test_user_setup_stops_after_marketplace_failure(monkeypatch):
     assert len(commands) == 1
 
 
+def test_user_setup_rejects_incomplete_installed_plugin_assets(tmp_path, monkeypatch):
+    installed = tmp_path / "stale-plugin"
+    (installed / ".codex-plugin").mkdir(parents=True)
+    (installed / ".codex-plugin" / "plugin.json").write_text(
+        '{"name":"claudescientist"}', encoding="utf-8"
+    )
+
+    def fake_runner(command, **_kwargs):
+        payload = (
+            {"marketplaceName": "claudescientist"}
+            if "marketplace" in command
+            else {"installedPath": str(installed)}
+        )
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(plugin_setup, "codex_command_prefix", lambda: ["codex.cmd"])
+    result = plugin_setup.install_user_plugin(runner=fake_runner)
+
+    assert result["ok"] is False
+    assert result["error"] == "codex_plugin_assets_missing"
+    assert set(result["missing_assets"]) == {
+        ".mcp.json",
+        str(Path("hooks") / "hooks.json"),
+        "skills",
+    }
+
+
+def test_user_setup_accepts_complete_installed_plugin_assets(tmp_path, monkeypatch):
+    installed = tmp_path / "complete-plugin"
+    (installed / ".codex-plugin").mkdir(parents=True)
+    (installed / ".codex-plugin" / "plugin.json").write_text(
+        '{"name":"claudescientist"}', encoding="utf-8"
+    )
+    (installed / ".mcp.json").write_text('{"mcpServers":{}}', encoding="utf-8")
+    (installed / "hooks").mkdir()
+    (installed / "hooks" / "hooks.json").write_text(
+        '{"hooks":{}}', encoding="utf-8"
+    )
+    (installed / "skills").mkdir()
+
+    def fake_runner(command, **_kwargs):
+        payload = (
+            {"marketplaceName": "claudescientist"}
+            if "marketplace" in command
+            else {"installedPath": str(installed)}
+        )
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(plugin_setup, "codex_command_prefix", lambda: ["codex.cmd"])
+    result = plugin_setup.install_user_plugin(runner=fake_runner)
+
+    assert result["ok"] is True
+    assert result["installed_path"] == str(installed)
+
+
 def test_user_setup_omits_git_ref_for_local_marketplace(tmp_path, monkeypatch):
     commands: list[list[str]] = []
 
@@ -179,7 +239,7 @@ def test_user_setup_omits_git_ref_for_local_marketplace(tmp_path, monkeypatch):
     assert "--ref" not in commands[0]
     assert commands[1][-2] == "claudescientist@local-research-tools"
     assert result["ref"] is None
-    assert result["requested_ref"] == "v5.1.0"
+    assert result["requested_ref"] == "v5.1.1"
 
 
 def test_project_setup_cli_forwards_wizard_flags(tmp_path, monkeypatch):

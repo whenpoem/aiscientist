@@ -6,18 +6,18 @@
 ## 安装
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist setup --scope user
+uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
 ```
 
 等价的手动命令是：
 
 ```powershell
-codex plugin marketplace add whenpoem/aiscientist --ref v5.1.0
+codex plugin marketplace add whenpoem/aiscientist --ref v5.1.1
 codex plugin add claudescientist@claudescientist
 ```
 
 公开安装依赖两个版本一致的发布物：运行本地 MCP 与 hooks 的
-`claudescientist==5.1.0` Python 包，以及分发插件的 `v5.1.0` Git 标签。新用户安装
+`claudescientist==5.1.1` Python 包，以及分发插件的 `v5.1.1` Git 标签。新用户安装
 之前，两者都必须已经发布。源码开发时可以通过 `--marketplace-source` 传入本地
 marketplace 路径；setup 会为本地路径自动省略只适用于 Git 的 `--ref` 参数。
 
@@ -27,7 +27,7 @@ Cockpit 干预交付和生命周期保护。
 ## 在任意项目中检查
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
 ```
 
 Doctor 会分别报告插件状态、核心模块、工作区与数据库路径、Cockpit 监控、hooks
@@ -37,8 +37,8 @@ Doctor 会分别报告插件状态、核心模块、工作区与数据库路径�
 ## 打开 Cockpit
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist cockpit --workspace .
-uv tool run --from claudescientist==5.1.0 claudescientist cockpit --workspace . --lang zh
+uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace .
+uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
 ```
 
 插件与 Cockpit 会解析到同一个工作区数据库。公开安装插件不会公开研究数据，也

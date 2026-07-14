@@ -1,4 +1,4 @@
-# MCP 工具参考（v5.1.0）
+# MCP 工具参考（v5.1.1）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。

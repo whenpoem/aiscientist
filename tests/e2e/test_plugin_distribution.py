@@ -15,7 +15,7 @@ def test_plugin_manifest_and_python_package_versions_match() -> None:
     manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text())
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert manifest["name"] == project["project"]["name"] == "claudescientist"
-    assert manifest["version"] == project["project"]["version"] == "5.1.0"
+    assert manifest["version"] == project["project"]["version"] == "5.1.1"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert (ROOT / "hooks" / "hooks.json").is_file()
@@ -30,9 +30,11 @@ def test_public_marketplace_points_to_repository_root_plugin() -> None:
     assert len(entries) == 1
     entry = entries[0]
     assert entry["name"] == "claudescientist"
+    manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text())
     assert entry["source"] == {
         "source": "url",
         "url": "https://github.com/whenpoem/aiscientist.git",
+        "ref": f"v{manifest['version']}",
     }
     assert entry["policy"] == {
         "installation": "AVAILABLE",
@@ -45,7 +47,7 @@ def test_plugin_enables_only_version_pinned_core_mcps() -> None:
     assert set(config) == {"memory", "verify", "prove", "cockpit"}
     for name, server in config.items():
         assert server["command"] == "uv"
-        assert "claudescientist==5.1.0" in server["args"]
+        assert "claudescientist==5.1.1" in server["args"]
         assert server["args"][-2:] == ["mcp", name]
 
 
@@ -58,7 +60,7 @@ def test_plugin_hooks_are_version_pinned_and_include_intervention_bridge() -> No
         for hook in group["hooks"]
     ]
     assert commands
-    assert all("claudescientist==5.1.0" in command for command in commands)
+    assert all("claudescientist==5.1.1" in command for command in commands)
     assert any("intervention_pump" in command for command in commands)
 
 

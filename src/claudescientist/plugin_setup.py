@@ -103,12 +103,51 @@ def install_user_plugin(
             "steps": steps,
         }
 
+    try:
+        plugin_payload = json.loads(plugin_result["stdout"] or "{}")
+    except json.JSONDecodeError:
+        plugin_payload = {}
+    installed_path_value = (
+        plugin_payload.get("installedPath")
+        if isinstance(plugin_payload, dict)
+        else None
+    )
+    if installed_path_value:
+        installed_path = Path(str(installed_path_value)).expanduser()
+        required_assets = (
+            Path(".codex-plugin") / "plugin.json",
+            Path(".mcp.json"),
+            Path("hooks") / "hooks.json",
+            Path("skills"),
+        )
+        missing_assets = [
+            str(relative)
+            for relative in required_assets
+            if not (installed_path / relative).exists()
+        ]
+        if missing_assets:
+            return {
+                "ok": False,
+                "error": "codex_plugin_assets_missing",
+                "source": source,
+                "ref": applied_ref,
+                "requested_ref": selected_ref,
+                "installed_path": str(installed_path),
+                "missing_assets": missing_assets,
+                "steps": steps,
+            }
+
     return {
         "ok": True,
         "source": source,
         "ref": applied_ref,
         "requested_ref": selected_ref,
         "plugin": plugin_selector,
+        "installed_path": (
+            str(Path(str(installed_path_value)).expanduser())
+            if installed_path_value
+            else None
+        ),
         "restart_required": True,
         "steps": steps,
     }

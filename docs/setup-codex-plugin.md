@@ -7,19 +7,19 @@ hooks, and Cockpit integration. Research state stays in the active project.
 ## Install
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist setup --scope user
+uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
 ```
 
 Equivalent manual commands:
 
 ```powershell
-codex plugin marketplace add whenpoem/aiscientist --ref v5.1.0
+codex plugin marketplace add whenpoem/aiscientist --ref v5.1.1
 codex plugin add claudescientist@claudescientist
 ```
 
 The public installation has two matching release artifacts: the
-`claudescientist==5.1.0` Python package that runs the local MCPs and hooks, and
-the `v5.1.0` Git tag that distributes the plugin. Both must exist before a new
+`claudescientist==5.1.1` Python package that runs the local MCPs and hooks, and
+the `v5.1.1` Git tag that distributes the plugin. Both must exist before a new
 user can install this release. During source development, pass a local
 marketplace path with `--marketplace-source`; the setup command deliberately
 omits Git-only `--ref` handling for local paths.
@@ -31,7 +31,7 @@ to enable Cockpit intervention delivery and lifecycle protections.
 ## Verify from any project
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
 ```
 
 Doctor reports plugin state, core imports, the workspace and database path,
@@ -43,8 +43,8 @@ enter the next Codex turn until the hooks are trusted.
 ## Open Cockpit
 
 ```powershell
-uv tool run --from claudescientist==5.1.0 claudescientist cockpit --workspace .
-uv tool run --from claudescientist==5.1.0 claudescientist cockpit --workspace . --lang zh
+uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace .
+uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
 ```
 
 The plugin and Cockpit resolve the same workspace database. Installing the
