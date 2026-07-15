@@ -1,6 +1,6 @@
-"""End-to-end realtime pruning smoke (V3.0 P3).
+"""End-to-end posterior-probability pruning smoke.
 
-Two trips through suggest_pause_low_strength:
+Two trips through suggest_pause_low_probability:
 1. Default (dry-run) emits ``branch_pause_suggested`` only.
 2. With ``RESEARCH_AGENT_AUTO_PRUNE=1`` it additionally flips status to
    ``paused`` and emits ``branch_paused``.
@@ -23,8 +23,8 @@ def test_realtime_prune_dry_run_then_auto(workspace, monkeypatch):
     _drive_round_robin(memory_impl, a, b)
 
     monkeypatch.delenv("RESEARCH_AGENT_AUTO_PRUNE", raising=False)
-    dry = memory_impl.suggest_pause_low_strength(
-        ucb_threshold=0.0, min_comparisons=4
+    dry = memory_impl.suggest_pause_low_probability(
+        max_probability_best=0.25, min_comparisons=4
     )
     assert dry["auto_prune"] is False
     assert any(row["node_id"] == b for row in dry["suggested"])
@@ -36,8 +36,8 @@ def test_realtime_prune_dry_run_then_auto(workspace, monkeypatch):
     assert "branch_paused" not in kinds
 
     monkeypatch.setenv("RESEARCH_AGENT_AUTO_PRUNE", "1")
-    auto = memory_impl.suggest_pause_low_strength(
-        ucb_threshold=0.0, min_comparisons=4
+    auto = memory_impl.suggest_pause_low_probability(
+        max_probability_best=0.25, min_comparisons=4
     )
     assert auto["auto_prune"] is True
     assert any(row["node_id"] == b for row in auto["paused"])

@@ -6,6 +6,7 @@ import pytest
 
 from claudescientist.runtime import (
     apply_schema_migration,
+    begin_immediate_with_retry,
     connect_existing_sqlite,
     connect_sqlite,
     installation_root,
@@ -189,6 +190,36 @@ def test_explicit_workspace_override_wins_over_host_directory(monkeypatch, tmp_p
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(host))
 
     assert workspace_root() == explicit.resolve()
+
+
+def test_documented_workspace_root_override_precedes_legacy_alias(monkeypatch, tmp_path):
+    documented = tmp_path / "documented"
+    legacy = tmp_path / "legacy"
+    documented.mkdir()
+    legacy.mkdir()
+    monkeypatch.setenv("RESEARCH_AGENT_WORKSPACE_ROOT", str(documented))
+    monkeypatch.setenv("RESEARCH_AGENT_WORKSPACE", str(legacy))
+
+    assert workspace_root() == documented.resolve()
+
+
+def test_begin_immediate_retries_only_lock_contention(monkeypatch):
+    class FakeConnection:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, _statement):
+            self.calls += 1
+            if self.calls < 3:
+                raise __import__("sqlite3").OperationalError("database is locked")
+
+    connection = FakeConnection()
+    monkeypatch.setattr("claudescientist.runtime.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("claudescientist.runtime.random.uniform", lambda _a, _b: 0.0)
+
+    begin_immediate_with_retry(connection)  # type: ignore[arg-type]
+
+    assert connection.calls == 3
 
 
 def test_installation_root_is_independent_from_workspace(monkeypatch, tmp_path):

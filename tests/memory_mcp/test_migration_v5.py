@@ -1,4 +1,4 @@
-"""Migration test: v3.0 (schema_version=4) → v4.0 (schema_version=5).
+"""Migration test: v3.0 (schema_version=4) to current schema_version=6.
 
 The v3.0 mem_nodes CHECK constraint did not include proof-trunk kinds,
 and mem_failures had no ``domain`` column. v4.0 widens both. The
@@ -11,12 +11,12 @@ migration must:
    CHECK takes effect, preserving every existing row and every foreign-key
    reference.
 
-Both migrations are idempotent — re-running bootstrap on an already-v5
+All migrations are idempotent; re-running bootstrap on a current
 database is a no-op.
 
 This test bypasses the standard ``workspace`` fixture because that fixture
 calls ``cockpit.db.ensure()`` which triggers ``memory_mcp.db.bootstrap()``
-immediately (jumping straight to v5). To exercise the migration path we
+immediately (jumping straight to the current schema). To exercise the migration path we
 build the v3.0 schema by hand and then call bootstrap.
 """
 
@@ -211,3 +211,32 @@ def test_v3_to_v5_preserves_foreign_key_integrity(migration_workspace):
         assert parent[0] == "hyp_v3legacy"
     finally:
         con.close()
+
+
+def test_current_migration_adds_bt_fit_state(migration_workspace):
+    loaded, db_path = migration_workspace
+    loaded["memory_mcp.db"].bootstrap()
+
+    con = sqlite3.connect(str(db_path), isolation_level=None)
+    try:
+        columns = {
+            row[1] for row in con.execute("PRAGMA table_info(mem_bt_fit_state)")
+        }
+        migration = con.execute(
+            "SELECT schema_version, status FROM ra_migrations "
+            "WHERE component = 'memory_mcp'"
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert {
+        "kind",
+        "node_order_json",
+        "covariance_json",
+        "comparison_count",
+        "converged",
+        "iterations",
+        "fit_error",
+        "fitted_at",
+    } <= columns
+    assert migration == (6, "applied")

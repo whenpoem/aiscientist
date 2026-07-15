@@ -156,13 +156,15 @@ mcp__verify__refresh_claim claim="vit_dropout_test_accuracy"
 mcp__memory__get_bt_leaderboard
 ```
 
-找出 UCB 明显低于 0 的假说。建议暂停它们：
+找出“成为最佳候选项的近似概率”很低的假说。建议暂停它们：
 
 ```
-mcp__memory__suggest_pause_low_strength ucb_threshold=-0.5
+mcp__memory__suggest_pause_low_probability max_probability_best=0.05
 ```
 
-默认情况下，这**只会发出建议**——并不真正暂停任何东西。如果设置了 `RESEARCH_AGENT_AUTO_PRUNE=1`，被建议的分支会立即暂停。无论哪种情况，都可以用 `resume_branch(node_id, reason)` 反转。
+默认情况下，这**只会发出建议**——并不真正暂停任何东西。如果设置了
+`RESEARCH_AGENT_AUTO_PRUNE=1`，这个基于概率的入口才会暂停被建议的分支。
+这些概率是未经校准的近似值；任何暂停都可以用 `resume_branch(node_id, reason)` 反转。
 
 ## 9. 交给 writeup
 

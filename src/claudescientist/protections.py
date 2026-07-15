@@ -52,10 +52,10 @@ PROTECTIONS: tuple[Protection, ...] = (
     ),
     Protection(
         "provenance_freshness",
-        "enforced",
+        "agent_gated",
         "refresh_claim re-hashes run files and compares Git and environment state",
         "the result was recorded with v5.1 run manifests",
-        "legacy results without a manifest are reported as unchecked",
+        "legacy results are unchecked and direct prose edits can bypass the workflow gate",
     ),
     Protection(
         "confirmatory_preregistration",
@@ -79,11 +79,11 @@ PROTECTIONS: tuple[Protection, ...] = (
         "Lean is optional and direct prose edits remain possible",
     ),
     Protection(
-        "baseline_fairness",
+        "baseline_budget_parity",
         "advisory",
-        "baseline_fairness reports resource-ratio violations",
+        "baseline_fairness reports budget-parity ratio violations",
         "the comparison logs contain parseable budget fields",
-        "the tool reports a verdict but does not stop later commands",
+        "the check is not a complete fairness proof and does not stop later commands",
     ),
     Protection(
         "bt_pause",

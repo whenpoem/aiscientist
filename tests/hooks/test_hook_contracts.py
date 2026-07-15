@@ -155,6 +155,54 @@ def test_leakage_guard_blocks_unproven_labeled_markdown_metrics(tmp_path, monkey
     assert "91.2%" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_leakage_guard_covers_all_default_publication_roots(tmp_path, monkeypatch):
+    module = _load_hook("leakage_guard")
+    module.DB = tmp_path / "state.db"
+
+    for root in ("reports", "writeup", "paper", "submission", "manuscript"):
+        payload = _run_hook(
+            module,
+            {
+                "tool_input": {
+                    "file_path": f"{root}/result.md",
+                    "content": "Validation Accuracy: 91.2%",
+                }
+            },
+            monkeypatch,
+        )
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_publication_roots_environment_replaces_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("RESEARCH_AGENT_PUBLICATION_ROOTS", "deliverables;camera-ready")
+    module = _load_hook("leakage_guard")
+    module.DB = tmp_path / "state.db"
+
+    ordinary = _run_hook(
+        module,
+        {
+            "tool_input": {
+                "file_path": "reports/result.md",
+                "content": "Validation Accuracy: 91.2%",
+            }
+        },
+        monkeypatch,
+    )
+    protected = _run_hook(
+        module,
+        {
+            "tool_input": {
+                "file_path": "deliverables/result.md",
+                "content": "Validation Accuracy: 91.2%",
+            }
+        },
+        monkeypatch,
+    )
+
+    assert ordinary == {}
+    assert protected["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_leakage_guard_accepts_matching_claim_value_provenance(tmp_path, monkeypatch):
     module = _load_hook("leakage_guard")
     module.DB = tmp_path / "state.db"

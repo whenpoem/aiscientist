@@ -1,16 +1,18 @@
 """Bradley-Terry ranking tools and the underlying batch MAP fit.
 
 Contains the canonical BT comparison primitive (`_bt_apply_comparison`) plus
-the seven public tools that exercise it: judge / record_judgement /
-update_bt_rating / get_bt_leaderboard / suggest_pause_low_strength /
-resume_branch / expected_information_gain.
+the public judging, posterior-comparison, ranking, pause, resume, and
+information-gain tools that exercise it.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import os
 import sqlite3
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -26,6 +28,7 @@ BT_MIN_VAR = 1e-4
 BT_FIT_TOL = 1e-10
 BT_FIT_MAX_ITER = 100
 BT_MIN_COMPARISONS_FOR_RANK = 3
+BT_PROBABILITY_SAMPLES = 8192
 BT_VALID_SOURCES = {
     "llm_judge",
     "metric_diff",
@@ -36,6 +39,15 @@ BT_VALID_SOURCES = {
 # Kinds that may participate in a BT comparison. Cross-kind comparison is
 # forbidden to keep semantics clean (architecture.md §13, ADR 0008).
 BT_RANKABLE_KINDS = ("hypothesis", "proof_skeleton")
+
+
+@dataclass(frozen=True)
+class _BTFitResult:
+    theta: np.ndarray
+    covariance: np.ndarray
+    counts: np.ndarray
+    converged: bool
+    iterations: int
 
 
 def _expected_score(rating_a: float, rating_b: float) -> float:
@@ -70,10 +82,10 @@ def _ensure_bt_row(con: sqlite3.Connection, node_id: str) -> sqlite3.Row:
     ).fetchone()
 
 
-def _fit_bt_arrays(
+def _fit_bt_arrays_with_state(
     node_ids: list[str],
     comparisons: list[tuple[str, str, float]],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> _BTFitResult:
     """Fit the joint MAP model without depending on SQLite.
 
     The database tool and the deterministic calibration simulator share this
@@ -83,7 +95,13 @@ def _fit_bt_arrays(
     """
     if not node_ids:
         empty_float = np.zeros(0, dtype=float)
-        return empty_float, np.zeros((0, 0), dtype=float), np.zeros(0, dtype=int)
+        return _BTFitResult(
+            theta=empty_float,
+            covariance=np.zeros((0, 0), dtype=float),
+            counts=np.zeros(0, dtype=int),
+            converged=True,
+            iterations=0,
+        )
     if len(set(node_ids)) != len(node_ids):
         raise ValueError("node_ids must be unique")
 
@@ -120,24 +138,80 @@ def _fit_bt_arrays(
             precision[loser, winner] -= fisher
         return gradient, precision
 
-    for _ in range(BT_FIT_MAX_ITER):
+    def log_posterior(values: np.ndarray) -> float:
+        total = -0.5 * prior_precision * float(values @ values)
+        for winner_id, loser_id, raw_weight in comparisons:
+            diff = float(values[index[winner_id]] - values[index[loser_id]])
+            total += float(raw_weight) * -float(np.logaddexp(0.0, -diff))
+        return total
+
+    previous_objective = log_posterior(theta)
+    iterations = 0
+    for iteration in range(1, BT_FIT_MAX_ITER + 1):
         gradient, precision = gradient_and_precision(theta)
-        step = np.linalg.solve(precision, gradient)
-        theta = np.clip(theta + step, -BT_STRENGTH_CLIP, BT_STRENGTH_CLIP)
-        if float(np.max(np.abs(step))) < BT_FIT_TOL:
+        try:
+            raw_step = np.linalg.solve(precision, gradient)
+        except np.linalg.LinAlgError:
+            raw_step = np.linalg.pinv(precision) @ gradient
+
+        scale = 1.0
+        accepted_theta = theta
+        accepted_objective = previous_objective
+        while scale >= 2.0**-20:
+            candidate = np.clip(
+                theta + scale * raw_step,
+                -BT_STRENGTH_CLIP,
+                BT_STRENGTH_CLIP,
+            )
+            candidate_objective = log_posterior(candidate)
+            if candidate_objective >= previous_objective - 1e-12:
+                accepted_theta = candidate
+                accepted_objective = candidate_objective
+                break
+            scale *= 0.5
+        else:
+            raise RuntimeError("Bradley-Terry MAP line search failed")
+
+        step = accepted_theta - theta
+        theta = accepted_theta
+        iterations = iteration
+        objective_change = abs(accepted_objective - previous_objective)
+        previous_objective = accepted_objective
+        if float(np.max(np.abs(step))) < BT_FIT_TOL or objective_change < BT_FIT_TOL:
             break
     else:
         raise RuntimeError("Bradley-Terry MAP fit did not converge")
 
     _, precision = gradient_and_precision(theta)
-    covariance = np.linalg.inv(precision)
+    try:
+        covariance = np.linalg.inv(precision)
+    except np.linalg.LinAlgError:
+        covariance = np.linalg.pinv(precision)
     centerer = np.eye(len(node_ids), dtype=float) - (
         np.ones((len(node_ids), len(node_ids)), dtype=float) / len(node_ids)
     )
-    return theta, centerer @ covariance @ centerer, counts
+    return _BTFitResult(
+        theta=theta,
+        covariance=centerer @ covariance @ centerer,
+        counts=counts,
+        converged=True,
+        iterations=iterations,
+    )
 
 
-def _fit_bt_kind(con: sqlite3.Connection, kind: str) -> dict[str, tuple[float, float, int]]:
+def _fit_bt_arrays(
+    node_ids: list[str],
+    comparisons: list[tuple[str, str, float]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compatibility wrapper shared by the deterministic simulator."""
+    result = _fit_bt_arrays_with_state(node_ids, comparisons)
+    return result.theta, result.covariance, result.counts
+
+
+def _fit_bt_kind(
+    con: sqlite3.Connection,
+    kind: str,
+) -> tuple[dict[str, tuple[float, float, int]], _BTFitResult]:
     """Refit one rankable kind from its complete comparison ledger.
 
     A zero-centred Gaussian prior makes the model identifiable even when the
@@ -157,7 +231,8 @@ def _fit_bt_kind(con: sqlite3.Connection, kind: str) -> dict[str, tuple[float, f
     ).fetchall()
     node_ids = [str(row["node_id"]) for row in rows]
     if not node_ids:
-        return {}
+        empty = _fit_bt_arrays_with_state([], [])
+        return {}, empty
 
     comparison_rows = con.execute(
         """
@@ -179,11 +254,11 @@ def _fit_bt_kind(con: sqlite3.Connection, kind: str) -> dict[str, tuple[float, f
         )
         for row in comparison_rows
     ]
-    theta, centered_covariance, counts = _fit_bt_arrays(node_ids, comparisons)
+    fit = _fit_bt_arrays_with_state(node_ids, comparisons)
     fitted: dict[str, tuple[float, float, int]] = {}
     for idx, node_id in enumerate(node_ids):
-        variance = max(BT_MIN_VAR, float(centered_covariance[idx, idx]))
-        fitted[node_id] = (float(theta[idx]), variance, int(counts[idx]))
+        variance = max(BT_MIN_VAR, float(fit.covariance[idx, idx]))
+        fitted[node_id] = (float(fit.theta[idx]), variance, int(fit.counts[idx]))
         con.execute(
             """
             UPDATE mem_bt_ratings
@@ -193,7 +268,94 @@ def _fit_bt_kind(con: sqlite3.Connection, kind: str) -> dict[str, tuple[float, f
             """,
             (*fitted[node_id], node_id),
         )
-    return fitted
+    con.execute(
+        """
+        INSERT INTO mem_bt_fit_state(
+          kind, node_order_json, covariance_json, comparison_count,
+          converged, iterations, fit_error, fitted_at
+        ) VALUES(?,?,?,?,1,?,'',CURRENT_TIMESTAMP)
+        ON CONFLICT(kind) DO UPDATE SET
+          node_order_json = excluded.node_order_json,
+          covariance_json = excluded.covariance_json,
+          comparison_count = excluded.comparison_count,
+          converged = 1,
+          iterations = excluded.iterations,
+          fit_error = '',
+          fitted_at = CURRENT_TIMESTAMP
+        """,
+        (
+            kind,
+            json.dumps(node_ids, ensure_ascii=True),
+            json.dumps(fit.covariance.tolist(), ensure_ascii=True),
+            len(comparisons),
+            fit.iterations,
+        ),
+    )
+    return fitted, fit
+
+
+def _record_bt_fit_failure(
+    con: sqlite3.Connection,
+    *,
+    kind: str,
+    error: Exception,
+) -> dict:
+    node_ids = [
+        str(row["node_id"])
+        for row in con.execute(
+            """
+            SELECT r.node_id
+            FROM mem_bt_ratings r
+            JOIN mem_nodes n ON n.node_id = r.node_id
+            WHERE n.kind = ?
+            ORDER BY r.node_id
+            """,
+            (kind,),
+        ).fetchall()
+    ]
+    comparison_count = int(
+        con.execute(
+            """
+            SELECT COUNT(*)
+            FROM mem_bt_comparisons c
+            JOIN mem_nodes w ON w.node_id = c.winner_id
+            JOIN mem_nodes l ON l.node_id = c.loser_id
+            WHERE w.kind = ? AND l.kind = ?
+            """,
+            (kind, kind),
+        ).fetchone()[0]
+    )
+    error_text = str(error)[:500]
+    con.execute(
+        """
+        INSERT INTO mem_bt_fit_state(
+          kind, node_order_json, covariance_json, comparison_count,
+          converged, iterations, fit_error, fitted_at
+        ) VALUES(?,?,?, ?,0,0,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(kind) DO UPDATE SET
+          comparison_count = excluded.comparison_count,
+          converged = 0,
+          iterations = 0,
+          fit_error = excluded.fit_error,
+          fitted_at = CURRENT_TIMESTAMP
+        """,
+        (
+            kind,
+            json.dumps(node_ids, ensure_ascii=True),
+            "[]",
+            comparison_count,
+            error_text,
+        ),
+    )
+    payload = {
+        "kind": kind,
+        "comparison_count": comparison_count,
+        "converged": False,
+        "error": error_text,
+        "ratings_preserved": True,
+    }
+    _emit_event(con, "bt_fit_failed", payload)
+    return payload
 
 
 def _bt_apply_comparison(
@@ -247,9 +409,33 @@ def _bt_apply_comparison(
         (winner_id, loser_id, float(weight), source, provenance_id),
     )
     comparison_id = int(cur.lastrowid)
-    fitted = _fit_bt_kind(con, str(winner_kind))
+    try:
+        fitted, fit = _fit_bt_kind(con, str(winner_kind))
+    except (RuntimeError, np.linalg.LinAlgError) as exc:
+        failure = _record_bt_fit_failure(
+            con,
+            kind=str(winner_kind),
+            error=exc,
+        )
+        winner_rating = _ensure_bt_row(con, winner_id)
+        loser_rating = _ensure_bt_row(con, loser_id)
+        return {
+            "comparison_id": comparison_id,
+            "fit": failure,
+            "winner": {
+                "node_id": winner_id,
+                "strength": round(float(winner_rating["strength"]), 6),
+                "strength_var": round(float(winner_rating["strength_var"]), 6),
+            },
+            "loser": {
+                "node_id": loser_id,
+                "strength": round(float(loser_rating["strength"]), 6),
+                "strength_var": round(float(loser_rating["strength_var"]), 6),
+            },
+        }
     new_theta_w, new_var_w, _ = fitted[winner_id]
     new_theta_l, new_var_l, _ = fitted[loser_id]
+    fit_state = _load_fit_state(con, str(winner_kind))
     _emit_event(
         con,
         "bt_rating_updated",
@@ -265,6 +451,14 @@ def _bt_apply_comparison(
     )
     return {
         "comparison_id": comparison_id,
+        "fit": {
+            "kind": str(winner_kind),
+            "comparison_count": (
+                int(fit_state["comparison_count"]) if fit_state else 0
+            ),
+            "converged": fit.converged,
+            "iterations": fit.iterations,
+        },
         "winner": {
             "node_id": winner_id,
             "strength": round(new_theta_w, 6),
@@ -280,6 +474,86 @@ def _bt_apply_comparison(
 
 def _auto_prune_enabled() -> bool:
     return os.environ.get(AUTO_PRUNE_ENV, "0") not in {"", "0", "false", "False"}
+
+
+def _load_fit_state(con: sqlite3.Connection, kind: str) -> dict | None:
+    row = con.execute(
+        """
+        SELECT kind, node_order_json, covariance_json, comparison_count,
+               converged, iterations, fit_error, fitted_at
+        FROM mem_bt_fit_state
+        WHERE kind = ?
+        """,
+        (kind,),
+    ).fetchone()
+    if row is None:
+        return None
+    node_order = json.loads(str(row["node_order_json"]))
+    covariance = np.asarray(json.loads(str(row["covariance_json"])), dtype=float)
+    return {
+        "kind": str(row["kind"]),
+        "node_order": [str(node_id) for node_id in node_order],
+        "covariance": covariance,
+        "comparison_count": int(row["comparison_count"]),
+        "converged": bool(row["converged"]),
+        "iterations": int(row["iterations"]),
+        "fit_error": str(row["fit_error"]),
+        "fitted_at": str(row["fitted_at"]),
+    }
+
+
+def _probability_best_by_node(
+    con: sqlite3.Connection,
+    *,
+    kind: str,
+    eligible_node_ids: list[str],
+) -> tuple[dict[str, float | None], dict | None]:
+    fit_state = _load_fit_state(con, kind)
+    unavailable = {node_id: None for node_id in eligible_node_ids}
+    if fit_state is None or not fit_state["node_order"]:
+        return unavailable, fit_state
+
+    node_order = fit_state["node_order"]
+    covariance = fit_state["covariance"]
+    if covariance.shape != (len(node_order), len(node_order)):
+        return unavailable, fit_state
+    index = {node_id: idx for idx, node_id in enumerate(node_order)}
+    selected = [node_id for node_id in eligible_node_ids if node_id in index]
+    if not selected:
+        return unavailable, fit_state
+    if len(selected) == 1:
+        return {**unavailable, selected[0]: 1.0}, fit_state
+
+    rating_rows = con.execute(
+        f"""
+        SELECT node_id, strength
+        FROM mem_bt_ratings
+        WHERE node_id IN ({','.join('?' for _ in selected)})
+        """,
+        selected,
+    ).fetchall()
+    strengths = {str(row["node_id"]): float(row["strength"]) for row in rating_rows}
+    selected_indices = [index[node_id] for node_id in selected]
+    means = np.asarray([strengths[node_id] for node_id in selected], dtype=float)
+    selected_covariance = covariance[np.ix_(selected_indices, selected_indices)]
+    seed_material = (
+        f"{kind}|{fit_state['comparison_count']}|{'|'.join(selected)}".encode("utf-8")
+    )
+    seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:8], "big")
+    rng = np.random.default_rng(seed)
+    samples = rng.multivariate_normal(
+        means,
+        selected_covariance,
+        size=BT_PROBABILITY_SAMPLES,
+        check_valid="ignore",
+    )
+    winners = np.argmax(samples, axis=1)
+    counts = np.bincount(winners, minlength=len(selected))
+    probabilities = {
+        node_id: float(counts[idx] / BT_PROBABILITY_SAMPLES)
+        for idx, node_id in enumerate(selected)
+    }
+    return {**unavailable, **probabilities}, fit_state
 
 
 # ---------- public tools ----------
@@ -471,6 +745,26 @@ def get_bt_leaderboard(
             """,
             (*statuses, kind, top_k),
         ).fetchall()
+        eligible_ids = [
+            str(row["node_id"])
+            for row in con.execute(
+                f"""
+                SELECT r.node_id
+                FROM mem_bt_ratings r
+                JOIN mem_nodes n ON n.node_id = r.node_id
+                WHERE r.status IN ({placeholders})
+                  AND n.kind = ?
+                  AND n.state = 'active'
+                ORDER BY r.node_id
+                """,
+                (*statuses, kind),
+            ).fetchall()
+        ]
+        probability_best, fit_state = _probability_best_by_node(
+            con,
+            kind=kind,
+            eligible_node_ids=eligible_ids,
+        )
     finally:
         con.close()
 
@@ -491,8 +785,20 @@ def get_bt_leaderboard(
                 "lcb": round(strength - 1.96 * sd, 6),
                 "ucb": round(strength + 1.96 * sd, 6),
                 "interval_level": 0.95,
+                "interval_kind": "laplace_credible",
                 "interval_method": "laplace_map_centered_approximate_posterior",
                 "interval_calibrated": False,
+                "probability_best": (
+                    round(float(probability_best[str(row["node_id"])]), 6)
+                    if probability_best[str(row["node_id"])] is not None
+                    else None
+                ),
+                "probability_best_method": "laplace_monte_carlo",
+                "probability_best_calibrated": False,
+                "fit_converged": bool(fit_state["converged"]) if fit_state else None,
+                "fit_comparison_count": (
+                    int(fit_state["comparison_count"]) if fit_state else 0
+                ),
                 "n_comparisons": int(row["n_comparisons"]),
                 "elo_score": float(row["elo_score"] or 1500.0),
                 "last_updated": row["last_updated"],
@@ -502,18 +808,97 @@ def get_bt_leaderboard(
     return leaderboard
 
 
+def compare_bt_candidates(a_node_id: str, b_node_id: str) -> dict:
+    """Return the approximate posterior contrast between two candidates.
+
+    The calculation uses the full centred covariance from the latest joint
+    Laplace-MAP fit. The probability and interval are approximate posterior
+    summaries, not calibrated frequentist guarantees.
+    """
+    if a_node_id == b_node_id:
+        raise ValueError("a_node_id and b_node_id must differ")
+    con = _connect()
+    try:
+        a_node = _get_node(con, a_node_id)
+        b_node = _get_node(con, b_node_id)
+        if a_node is None or b_node is None:
+            missing = a_node_id if a_node is None else b_node_id
+            raise ValueError(f"unknown BT candidate: {missing}")
+        a_kind = str(a_node["kind"])
+        b_kind = str(b_node["kind"])
+        if a_kind not in BT_RANKABLE_KINDS or b_kind not in BT_RANKABLE_KINDS:
+            raise ValueError(f"BT candidates must have kinds in {BT_RANKABLE_KINDS}")
+        if a_kind != b_kind:
+            raise ValueError("BT candidate comparison forbids cross-kind contrasts")
+
+        fit_state = _load_fit_state(con, a_kind)
+        if fit_state is None:
+            raise RuntimeError(f"no Bradley-Terry fit state is available for {a_kind}")
+        node_order = fit_state["node_order"]
+        covariance = fit_state["covariance"]
+        index = {node_id: idx for idx, node_id in enumerate(node_order)}
+        if a_node_id not in index or b_node_id not in index:
+            raise RuntimeError("latest Bradley-Terry fit does not contain both candidates")
+        if covariance.shape != (len(node_order), len(node_order)):
+            raise RuntimeError("latest Bradley-Terry covariance is unavailable")
+
+        rating_rows = con.execute(
+            """
+            SELECT node_id, strength
+            FROM mem_bt_ratings
+            WHERE node_id IN (?, ?)
+            """,
+            (a_node_id, b_node_id),
+        ).fetchall()
+        strengths = {str(row["node_id"]): float(row["strength"]) for row in rating_rows}
+        a_idx = index[a_node_id]
+        b_idx = index[b_node_id]
+        difference = strengths[a_node_id] - strengths[b_node_id]
+        difference_variance = max(
+            BT_MIN_VAR,
+            float(
+                covariance[a_idx, a_idx]
+                + covariance[b_idx, b_idx]
+                - 2.0 * covariance[a_idx, b_idx]
+            ),
+        )
+        difference_sd = math.sqrt(difference_variance)
+        z_score = difference / difference_sd
+        probability = 0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0)))
+        radius = 1.96 * difference_sd
+        return {
+            "a_node_id": a_node_id,
+            "b_node_id": b_node_id,
+            "kind": a_kind,
+            "strength_difference_a_minus_b": round(difference, 6),
+            "difference_variance": round(difference_variance, 6),
+            "credible_interval_95": [
+                round(difference - radius, 6),
+                round(difference + radius, 6),
+            ],
+            "probability_a_beats_b": round(probability, 6),
+            "interval_kind": "laplace_credible",
+            "posterior_method": "laplace_map_centered_approximate_posterior",
+            "posterior_calibrated": False,
+            "fit_converged": bool(fit_state["converged"]),
+            "fit_comparison_count": int(fit_state["comparison_count"]),
+            "fit_error": str(fit_state["fit_error"]),
+        }
+    finally:
+        con.close()
+
+
 def suggest_pause_low_strength(
     ucb_threshold: float,
     min_comparisons: int = 6,
     kind: str | None = None,
 ) -> dict:
-    """Suggest pausing branches whose Bradley-Terry UCB lies below a threshold.
+    """Compatibility-only UCB suggestion; never changes branch state.
 
-    By default this is **dry-run**: it only emits ``branch_pause_suggested``
-    events and returns the candidates. When the ``RESEARCH_AGENT_AUTO_PRUNE``
-    environment variable is truthy we additionally flip ``mem_bt_ratings.status``
-    to ``paused`` and emit ``branch_paused`` events. The dry-run default keeps
-    the system safe: pause is reversible via :func:`resume_branch`.
+    This legacy heuristic remains available to old callers, but it is always
+    advisory even when ``RESEARCH_AGENT_AUTO_PRUNE`` is set. New callers should
+    use :func:`suggest_pause_low_probability`, which is the only BT path allowed
+    to perform an automatic pause.
 
     ``kind`` filters which BT-rankable kinds participate. ``None`` (default)
     walks both ``hypothesis`` and ``proof_skeleton`` so the proof-trunk
@@ -521,9 +906,8 @@ def suggest_pause_low_strength(
     trunk.
     """
     min_n = max(1, int(min_comparisons))
-    auto = _auto_prune_enabled()
+    auto = False
     suggested: list[dict] = []
-    paused: list[dict] = []
 
     if kind is not None and kind not in BT_RANKABLE_KINDS:
         raise ValueError(
@@ -566,20 +950,111 @@ def suggest_pause_low_strength(
             }
             suggested.append(payload)
             _emit_event(con, "branch_pause_suggested", payload)
-            if auto:
-                con.execute(
-                    "UPDATE mem_bt_ratings SET status = 'paused' WHERE node_id = ?",
-                    (row["node_id"],),
-                )
-                paused.append(payload)
-                _emit_event(con, "branch_paused", payload)
 
     return {
         "auto_prune": auto,
+        "deprecated": True,
+        "deprecation_message": (
+            "suggest_pause_low_strength is advisory-only; use "
+            "suggest_pause_low_probability for posterior-based auto-pause"
+        ),
         "ucb_threshold": float(ucb_threshold),
         "min_comparisons": min_n,
         "suggested": suggested,
-        "paused": paused if auto else [],
+        "paused": [],
+    }
+
+
+def suggest_pause_low_probability(
+    max_probability_best: float = 0.05,
+    min_comparisons: int = 6,
+    kind: str | None = None,
+) -> dict:
+    """Suggest, and optionally apply, posterior-probability branch pauses.
+
+    ``probability_best`` comes from deterministic Monte Carlo draws from the
+    latest joint Laplace approximation. It is explicitly uncalibrated. The
+    function is dry-run unless ``RESEARCH_AGENT_AUTO_PRUNE`` is truthy; this is
+    the only BT pause-suggestion API that honors that environment flag.
+    """
+    threshold = float(max_probability_best)
+    if not math.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+        raise ValueError("max_probability_best must be between 0 and 1")
+    min_n = max(1, int(min_comparisons))
+    if kind is not None and kind not in BT_RANKABLE_KINDS:
+        raise ValueError(
+            f"suggest_pause_low_probability kind must be in {BT_RANKABLE_KINDS} "
+            f"or None; got {kind!r}"
+        )
+    target_kinds = (kind,) if kind is not None else BT_RANKABLE_KINDS
+    auto = _auto_prune_enabled()
+    suggested: list[dict] = []
+    paused: list[dict] = []
+
+    with tx() as con:
+        for target_kind in target_kinds:
+            rows = con.execute(
+                """
+                SELECT r.node_id, r.strength, r.n_comparisons, r.status,
+                       n.kind, n.text
+                FROM mem_bt_ratings r
+                JOIN mem_nodes n ON n.node_id = r.node_id
+                WHERE r.status = 'active'
+                  AND n.kind = ?
+                  AND n.state = 'active'
+                ORDER BY r.node_id
+                """,
+                (target_kind,),
+            ).fetchall()
+            node_ids = [str(row["node_id"]) for row in rows]
+            probabilities, fit_state = _probability_best_by_node(
+                con,
+                kind=target_kind,
+                eligible_node_ids=node_ids,
+            )
+            for row in rows:
+                node_id = str(row["node_id"])
+                probability = probabilities[node_id]
+                if probability is None or int(row["n_comparisons"]) < min_n:
+                    continue
+                if float(probability) > threshold:
+                    continue
+                payload = {
+                    "node_id": node_id,
+                    "kind": str(row["kind"]),
+                    "text": str(row["text"]),
+                    "strength": round(float(row["strength"]), 6),
+                    "probability_best": round(float(probability), 6),
+                    "max_probability_best": threshold,
+                    "probability_method": "laplace_monte_carlo",
+                    "probability_calibrated": False,
+                    "fit_converged": (
+                        bool(fit_state["converged"]) if fit_state else None
+                    ),
+                    "fit_comparison_count": (
+                        int(fit_state["comparison_count"]) if fit_state else 0
+                    ),
+                    "n_comparisons": int(row["n_comparisons"]),
+                    "auto_prune": auto,
+                }
+                suggested.append(payload)
+                _emit_event(con, "branch_pause_suggested", payload)
+                if auto:
+                    con.execute(
+                        "UPDATE mem_bt_ratings SET status = 'paused' WHERE node_id = ?",
+                        (node_id,),
+                    )
+                    paused.append(payload)
+                    _emit_event(con, "branch_paused", payload)
+
+    return {
+        "auto_prune": auto,
+        "max_probability_best": threshold,
+        "min_comparisons": min_n,
+        "probability_method": "laplace_monte_carlo",
+        "probability_calibrated": False,
+        "suggested": suggested,
+        "paused": paused,
     }
 
 

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 
 from claudescientist.runtime import (
     apply_schema_migration,
+    begin_immediate_with_retry,
     cache_key,
     connect_sqlite,
     ensure_columns,
@@ -233,7 +234,7 @@ def _connect() -> sqlite3.Connection:
 def tx() -> sqlite3.Connection:
     con = _connect()
     try:
-        con.execute("BEGIN IMMEDIATE")
+        begin_immediate_with_retry(con)
         yield con
         con.execute("COMMIT")
     except Exception:

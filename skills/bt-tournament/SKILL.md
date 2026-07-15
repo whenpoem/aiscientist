@@ -21,13 +21,17 @@ are not calibrated frequentist confidence intervals or strict LUCB bounds.
 1. Gather the candidate hypothesis node ids and texts from `mcp__memory__get_active_frontier`.
 2. For each pair you intend to compare, call `mcp__memory__judge_hypotheses` to fetch the canonical comparison prompt. Evaluate inline (do not spawn a sub-agent just to judge).
 3. Decide a winner. Call `mcp__memory__record_judgement(a, b, winner, reason)`. Internally this records the comparison and updates the BT leaderboard; you do not need to call `update_bt_rating` separately.
-4. Pull the leaderboard via `mcp__memory__get_bt_leaderboard(top_k=10)`. Look at `strength`, `lcb`, `ucb`, `n_comparisons`, and `insufficient_samples`.
-5. Decide whether to run another comparison. Interval separation is supporting
-   evidence, not proof of a clear winner. Stop when every serious candidate
-   has at least 3 relevant comparisons, the ranking is stable to reasonable
-   judging criteria, the budget is exhausted, or the user chooses.
+4. Pull the leaderboard via `mcp__memory__get_bt_leaderboard(top_k=10)`. Look at
+   `strength`, `probability_best`, `n_comparisons`, `fit_converged`, and
+   `insufficient_samples`.
+5. Compare the top two with `mcp__memory__compare_bt_candidates(top_id,
+   runner_up_id)`. Stop when every serious candidate has at least 3 relevant
+   comparisons and `probability_a_beats_b >= 0.95`. Also stop if the budget is
+   exhausted or the user chooses. If `fit_converged` is false, do not use the
+   posterior probability as a stopping rule; report the fit risk instead.
 6. Hand off the top-2. Quote strength, approximate interval, comparison count,
-   and `interval_calibrated=False`. If `insufficient_samples` is true, say so.
+   `probability_best`, the top-vs-runner-up probability, and the explicit
+   `posterior_calibrated=False` caveat. If `insufficient_samples` is true, say so.
 
 ## Default judging criteria
 
@@ -39,5 +43,6 @@ are not calibrated frequentist confidence intervals or strict LUCB bounds.
 
 - Only compare hypothesis nodes against hypothesis nodes (the MCP enforces this and will raise).
 - Keep reasons short and concrete; they are stored with the comparison and re-surfaced in the cockpit.
-- Do **not** call `mcp__memory__suggest_pause_low_strength` from inside this skill. That is a separate decision the user (or P3 hooks) takes.
+- Do **not** call either pause-suggestion tool from inside this skill. Pausing is
+  a separate user or lifecycle-policy decision.
 - If the cockpit is running, the BT update emits a `bt_rating_updated` event so the TUI's leaderboard updates without a manual refresh.

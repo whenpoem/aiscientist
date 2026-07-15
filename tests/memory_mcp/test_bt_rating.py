@@ -119,8 +119,93 @@ def test_get_bt_leaderboard_orders_and_marks_insufficient(workspace):
     for row in board:
         assert row["lcb"] <= row["strength"] <= row["ucb"]
         assert row["interval_method"] == "laplace_map_centered_approximate_posterior"
+        assert row["interval_kind"] == "laplace_credible"
         assert row["interval_calibrated"] is False
+        assert row["probability_best"] is not None
+        assert row["probability_best_calibrated"] is False
+        assert row["fit_converged"] is True
+        assert row["fit_comparison_count"] == 15
         assert row["insufficient_samples"] is False
+    assert sum(row["probability_best"] for row in board) == pytest.approx(1.0)
+
+
+def test_bt_fit_state_persists_full_covariance(workspace):
+    impl = workspace["memory_mcp.impl"]
+    db = workspace["memory_mcp.db"]
+    a = impl.propose_hypothesis("A")["node_id"]
+    b = impl.propose_hypothesis("B")["node_id"]
+
+    result = impl.update_bt_rating(a, b, source="llm_judge")
+    assert result["fit"]["converged"] is True
+    assert result["fit"]["comparison_count"] == 1
+
+    con = db._connect()
+    try:
+        row = con.execute(
+            "SELECT * FROM mem_bt_fit_state WHERE kind = 'hypothesis'"
+        ).fetchone()
+    finally:
+        con.close()
+    assert row is not None
+    assert row["converged"] == 1
+    assert row["comparison_count"] == 1
+    assert row["iterations"] >= 1
+    assert a in row["node_order_json"]
+    assert b in row["node_order_json"]
+
+
+def test_compare_bt_candidates_uses_joint_covariance(workspace):
+    impl = workspace["memory_mcp.impl"]
+    a = impl.propose_hypothesis("A")["node_id"]
+    b = impl.propose_hypothesis("B")["node_id"]
+    for _ in range(8):
+        impl.update_bt_rating(a, b, source="llm_judge")
+
+    contrast = impl.compare_bt_candidates(a, b)
+    assert contrast["strength_difference_a_minus_b"] > 0
+    assert contrast["difference_variance"] > 0
+    assert contrast["probability_a_beats_b"] > 0.95
+    assert contrast["credible_interval_95"][0] < contrast["credible_interval_95"][1]
+    assert contrast["posterior_calibrated"] is False
+    assert contrast["fit_converged"] is True
+
+
+def test_bt_fit_failure_preserves_last_good_ratings(workspace, monkeypatch):
+    impl = workspace["memory_mcp.impl"]
+    db = workspace["memory_mcp.db"]
+    bt_module = __import__("memory_mcp.tools.bt", fromlist=["_fit_bt_arrays_with_state"])
+    a = impl.propose_hypothesis("A")["node_id"]
+    b = impl.propose_hypothesis("B")["node_id"]
+    impl.update_bt_rating(a, b, source="llm_judge")
+    before = {row["node_id"]: row["strength"] for row in impl.get_bt_leaderboard()}
+
+    def fail_fit(*args, **kwargs):
+        raise RuntimeError("synthetic non-convergence")
+
+    monkeypatch.setattr(bt_module, "_fit_bt_arrays_with_state", fail_fit)
+    result = impl.update_bt_rating(a, b, source="llm_judge")
+    after = {row["node_id"]: row for row in impl.get_bt_leaderboard()}
+
+    assert result["fit"]["converged"] is False
+    assert result["fit"]["ratings_preserved"] is True
+    assert {node_id: row["strength"] for node_id, row in after.items()} == before
+    assert all(row["fit_converged"] is False for row in after.values())
+
+    con = db._connect()
+    try:
+        comparison_count = con.execute(
+            "SELECT COUNT(*) FROM mem_bt_comparisons"
+        ).fetchone()[0]
+        state = con.execute(
+            "SELECT converged, comparison_count, fit_error FROM mem_bt_fit_state "
+            "WHERE kind = 'hypothesis'"
+        ).fetchone()
+    finally:
+        con.close()
+    assert comparison_count == 2
+    assert state["converged"] == 0
+    assert state["comparison_count"] == 2
+    assert "synthetic non-convergence" in state["fit_error"]
 
 
 def test_batch_bt_fit_is_invariant_to_comparison_order(workspace):

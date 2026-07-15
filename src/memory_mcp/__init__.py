@@ -2,7 +2,7 @@
 
 Owns the hypothesis graph, the batch-refit BT tournament, the failure ledger, the
 compressed literature index, the calibration ledger, and the snapshot /
-counterfactual replay surface. Exposes 24 MCP tools through ``impl.py``;
+counterfactual replay surface. Exposes 26 MCP tools through ``impl.py``;
 implementations live under ``tools/`` and are domain-grouped.
 
 Public surface
@@ -24,6 +24,8 @@ mem_judgements         [core]      Legacy pairwise-judgement ledger (kept for co
 mem_bt_ratings         [core]      Canonical Bradley-Terry strength + posterior
                                    variance. Same-kind comparison only.
 mem_bt_comparisons     [core]      Append-only ledger of every BT comparison applied.
+mem_bt_fit_state       [core]      Joint candidate order, centred covariance, fit
+                                   convergence, comparison count, and diagnostics.
 mem_failures           [core]      Cross-domain trigger / symptom / cause / resolution
                                    + signature dedup. ``domain`` column gates filtering;
                                    matching itself is domain-free.
@@ -65,8 +67,9 @@ Critical invariants
   ``expected_information_gain(kind=...)`` default to ``hypothesis`` for
   v3.0 backward compat. Pass ``kind='proof_skeleton'`` for the proof
   leaderboard.
-- ``suggest_pause_low_strength`` is dry-run by default. The env var
-  ``RESEARCH_AGENT_AUTO_PRUNE=1`` is the only way to flip status to paused.
+- ``suggest_pause_low_strength`` is permanently advisory for compatibility.
+  ``suggest_pause_low_probability`` is the only BT API that honors
+  ``RESEARCH_AGENT_AUTO_PRUNE=1`` and may flip status to paused.
 - ``replay_counterfactual`` MUST NOT mutate ``mem_nodes`` or
   ``mem_bt_ratings``; it only writes ``mem_replay_branches``.
 - ``mem_failures.domain`` (``empirical`` | ``proof``) gates filtering;

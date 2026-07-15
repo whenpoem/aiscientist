@@ -5,7 +5,7 @@
 
 ## 快速索引
 
-- **memory MCP** — 23 个工具，覆盖假说图、BT 排名、校准、回放、失败记忆、文献
+- **memory MCP** — 26 个工具，覆盖假说图、BT 排名、校准、回放、失败记忆、文献
   - [假说图](#假说图) · [失败记忆](#失败记忆) · [BT 排名](#bradley-terry-排名) · [校准](#校准) · [回放](#回放) · [快照](#快照) · [文献](#文献)
 - **verify MCP** — 13 个工具，覆盖泄漏、溯源、指标、预注册、held-out、预算
   - [泄漏检测](#泄漏检测) · [溯源](#溯源) · [指标 pin](#指标-pin) · [种子与公平性](#种子与公平性) · [Held-out](#held-out) · [预注册](#预注册) · [资源预算](#资源预算)
@@ -145,22 +145,39 @@
 
 **何时使用**：当比较的来源不是 LLM judge 时——例如某个实验结果直接证明一个假说更优。
 
-#### `get_bt_leaderboard(top_k=20, include_paused=False, kind="hypothesis", interval_level=0.95)`
+#### `get_bt_leaderboard(top_k=20, include_paused=False, kind="hypothesis")`
 按完整比较账本的 BT MAP 拟合返回候选项。`lcb`、`ucb` 是兼容字段，表示未经
 校准的中心化 Laplace 后验近似，不是严格 LUCB 或频率学置信界。响应同时给出
-`interval_method` 和 `interval_calibrated=False`。比较少于 3 次的候选项会标记
+`probability_best`、拟合收敛状态与比较数、`interval_kind="laplace_credible"`
+和 `interval_calibrated=False`。`probability_best` 是对同一个未经校准的近似分布
+进行固定随机种子抽样得到的结果。比较少于 3 次的候选项会标记
 `insufficient_samples=True`。
 
 **返回**：排行榜行的列表。
 
 **何时使用**：锦标赛一轮结束后，在决定哪些假说继续推进之前。
 
+#### `compare_bt_candidates(a_node_id, b_node_id)`
+使用完整联合协方差比较两个同 kind 候选项，返回强度差、差值方差、95% 近似
+可信区间和 `probability_a_beats_b`。
+
+**何时使用**：判断榜首是否已明显领先第二名；BT Skill 默认用 0.95 作为停止阈值。
+
 #### `suggest_pause_low_strength(ucb_threshold=-0.5, min_comparisons=6)`
-找出所有 `n_comparisons >= min_comparisons` 且 `ucb < ucb_threshold` 的活跃假说。默认只发出 `branch_pause_suggested` 事件。设置 `RESEARCH_AGENT_AUTO_PRUNE=1` 后，它还会把 `mem_bt_ratings.status` 翻到 `paused` 并发出 `branch_paused`。
+旧版兼容接口。找出近似 UCB 低于阈值的活跃候选项，但现在永久只提供建议；即使
+设置 `RESEARCH_AGENT_AUTO_PRUNE=1`，它也不会再改变分支状态。
 
-**返回**：`{"candidates": [...], "auto_pruned": bool}`
+**返回**：带弃用说明的建议结果；`paused` 始终为空。
 
-**何时使用**：长研究 session 中周期性运行，识别已经在锦标赛中败北的方向。
+**何时使用**：只用于兼容旧集成。
+
+#### `suggest_pause_low_probability(max_probability_best=0.05, min_comparisons=6, kind=None)`
+找出“成为最佳候选项的近似后验概率”不高于阈值的活跃候选项。默认只建议；设置
+`RESEARCH_AGENT_AUTO_PRUNE=1` 后，只有这个 BT 接口可以把状态改为 `paused`。
+
+**返回**：`{"suggested": [...], "paused": [...], "probability_calibrated": false}`
+
+**何时使用**：长锦标赛中周期性运行；使用前先检查拟合是否收敛和比较覆盖是否足够。
 
 #### `resume_branch(node_id, reason)`
 反转一次暂停：状态回到 `active`，发出 `branch_promoted`。

@@ -3,6 +3,16 @@
 - **Status**: Accepted (v3.0)
 - **Date**: 2026-04
 
+## v5.1.2 amendment
+
+The opt-in safety boundary remains, but the mutating entry point changed after
+the full-ledger BT calibration work. `suggest_pause_low_strength` is now a
+permanently advisory compatibility API. `suggest_pause_low_probability` uses
+the candidate's approximate `probability_best` and is the only BT suggestion
+API that honors `RESEARCH_AGENT_AUTO_PRUNE`. This avoids automatically changing
+research state from a threshold on two marginal interval fields. The posterior
+probability is still explicitly uncalibrated, so dry-run remains the default.
+
 ## Context
 
 Once the Bradley-Terry layer (ADR 0004) gave us 95% intervals on

@@ -53,6 +53,23 @@ def test_leakage_guard_blocks_direct_heldout_path(tmp_path, monkeypatch):
     _assert_heldout_deny(payload)
 
 
+def test_leakage_guard_cannot_be_bypassed_by_verify_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("RESEARCH_AGENT_VERIFY", "1")
+    module = _load_hook("leakage_guard")
+    module.DB = tmp_path / "state.db"
+
+    heldout_path = tmp_path / ".research-agent" / "heldout" / "eval.csv"
+    payload = _run_hook(
+        module,
+        {"tool_input": {"path": str(heldout_path)}},
+        monkeypatch,
+    )
+
+    _assert_heldout_deny(payload)
+
+
 def test_leakage_guard_blocks_custom_heldout_root_from_env(tmp_path, monkeypatch):
     custom_root = tmp_path / "private-heldout"
     monkeypatch.setenv("RESEARCH_AGENT_HELDOUT_DIR", str(custom_root))

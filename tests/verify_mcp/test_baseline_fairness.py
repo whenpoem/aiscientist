@@ -10,6 +10,9 @@ def test_baseline_fairness_accepts_equal_budgets(workspace):
     fixture = Path(__file__).with_name("fixtures") / "budget_equal.log"
 
     result = impl.baseline_fairness(str(fixture), str(fixture))
+    assert result["check"] == "budget_parity"
+    assert result["protection_level"] == "advisory"
+    assert "not a complete fairness proof" in result["interpretation"]
 
     assert result["ok"] is True
     assert result["verdict"] == "fair"

@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 import re
 import sqlite3
+import time
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +18,9 @@ DEFAULT_STATE_DIR = Path(".research-agent")
 DEFAULT_DB_NAME = "state.db"
 HELDOUT_DIR_ENV = "RESEARCH_AGENT_HELDOUT_DIR"
 CLAUDE_PROJECT_DIR_ENV = "CLAUDE_PROJECT_DIR"
+# ``RESEARCH_AGENT_WORKSPACE_ROOT`` is the documented v5.1 name. Keep the
+# shorter spelling as a compatibility alias for v5.1.0/5.1.1 callers.
+RESEARCH_AGENT_WORKSPACE_ROOT_ENV = "RESEARCH_AGENT_WORKSPACE_ROOT"
 RESEARCH_AGENT_WORKSPACE_ENV = "RESEARCH_AGENT_WORKSPACE"
 MIGRATION_SCHEMA = """
 CREATE TABLE IF NOT EXISTS ra_migrations (
@@ -93,13 +98,16 @@ def _looks_like_workspace_root(path: Path) -> bool:
 def workspace_root(start: Path | None = None) -> Path:
     """Resolve the active research workspace independently of installation.
 
-    Explicit ``RESEARCH_AGENT_WORKSPACE`` wins. Agent hosts commonly provide
+    Explicit ``RESEARCH_AGENT_WORKSPACE_ROOT`` wins, followed by the legacy
+    ``RESEARCH_AGENT_WORKSPACE`` alias. Agent hosts commonly provide
     ``CLAUDE_PROJECT_DIR`` and that directory is accepted even when it is an
     ordinary research repository with no ClaudeScientist source files.
     Otherwise the nearest recognizable project ancestor is used, falling back
     to the supplied start directory (or current working directory).
     """
-    explicit = os.environ.get(RESEARCH_AGENT_WORKSPACE_ENV)
+    explicit = os.environ.get(RESEARCH_AGENT_WORKSPACE_ROOT_ENV) or os.environ.get(
+        RESEARCH_AGENT_WORKSPACE_ENV
+    )
     if explicit:
         return Path(explicit).expanduser().resolve()
     host_workspace = os.environ.get(CLAUDE_PROJECT_DIR_ENV)
@@ -154,6 +162,35 @@ def connect_sqlite(path: Path | None = None, *, timeout: float = 5.0) -> sqlite3
     con.execute("PRAGMA journal_mode=WAL;")
     con.execute("PRAGMA foreign_keys=ON;")
     return con
+
+
+def begin_immediate_with_retry(
+    con: sqlite3.Connection,
+    *,
+    attempts: int = 3,
+    base_delay: float = 0.02,
+) -> None:
+    """Acquire SQLite's write lock with a short bounded jittered retry.
+
+    The project remains a single-user local SQLite system, but Codex hooks and
+    MCP processes can briefly overlap. Retrying only ``locked``/``busy``
+    errors avoids losing otherwise valid writes without masking other database
+    failures or turning contention into an unbounded hang.
+    """
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    for attempt in range(attempts):
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            return
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            if not any(marker in message for marker in ("locked", "busy")):
+                raise
+            if attempt == attempts - 1:
+                raise
+            delay = base_delay * (2**attempt) + random.uniform(0.0, base_delay)
+            time.sleep(delay)
 
 
 def connect_existing_sqlite(

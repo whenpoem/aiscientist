@@ -111,6 +111,87 @@ def test_doctor_hook_trust_honours_codex_home(tmp_path, monkeypatch):
     assert doctor._trusted_claudescientist_hooks() is True  # noqa: SLF001
 
 
+def test_doctor_reports_optional_runtime_readiness(tmp_path, monkeypatch):
+    workspace = tmp_path / "research-project"
+    config = workspace / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        """
+[mcp_servers.arxiv]
+enabled = true
+[mcp_servers.openalex]
+enabled = true
+[mcp_servers.lean]
+enabled = true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
+    real_find_spec = doctor.importlib.util.find_spec
+    monkeypatch.setattr(
+        doctor.importlib.util,
+        "find_spec",
+        lambda name: None if name == "sentence_transformers" else real_find_spec(name),
+    )
+    monkeypatch.setattr(
+        doctor,
+        "_codex_plugin_status",
+        lambda: {"available": True, "installed": True, "enabled": True},
+    )
+    monkeypatch.setattr(doctor, "_trusted_claudescientist_hooks", lambda: True)
+
+    checks = doctor.run_doctor(workspace)["checks"]
+    assert checks["node_runtime"]["status"] == "optional"
+    assert checks["literature_arxiv"]["status"] == "degraded"
+    assert checks["literature_openalex"]["status"] == "degraded"
+    assert checks["lean_reinsurance"]["status"] == "degraded"
+    assert checks["embedding_backend"]["status"] == "degraded"
+
+
+def test_doctor_optional_tools_do_not_degrade_when_disabled(tmp_path, monkeypatch):
+    workspace = tmp_path / "research-project"
+    workspace.mkdir()
+    monkeypatch.setenv("RESEARCH_AGENT_EMBED_BACKEND", "mock")
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        doctor,
+        "_codex_plugin_status",
+        lambda: {"available": True, "installed": True, "enabled": True},
+    )
+    monkeypatch.setattr(doctor, "_trusted_claudescientist_hooks", lambda: True)
+
+    checks = doctor.run_doctor(workspace)["checks"]
+    assert checks["literature_arxiv"]["status"] == "ok"
+    assert checks["literature_openalex"]["status"] == "ok"
+    assert checks["lean_reinsurance"]["status"] == "ok"
+    assert checks["embedding_backend"]["status"] == "ok"
+
+
+def test_doctor_rejects_state_database_inside_separate_installation(
+    tmp_path, monkeypatch
+):
+    workspace = tmp_path / "research-project"
+    installation = tmp_path / "installed-package"
+    workspace.mkdir()
+    installation.mkdir()
+    misplaced = installation / ".research-agent" / "state.db"
+    monkeypatch.setenv("RESEARCH_AGENT_DB_PATH", str(misplaced))
+    monkeypatch.setenv("RESEARCH_AGENT_EMBED_BACKEND", "mock")
+    monkeypatch.setattr(doctor, "installation_root", lambda: installation)
+    monkeypatch.setattr(
+        doctor,
+        "_codex_plugin_status",
+        lambda: {"available": True, "installed": True, "enabled": True},
+    )
+    monkeypatch.setattr(doctor, "_trusted_claudescientist_hooks", lambda: True)
+
+    result = doctor.run_doctor(workspace)
+    database = result["checks"]["state_database"]
+    assert result["overall"] == "error"
+    assert database["misplaced"] is True
+    assert database["inside_installation_root"] is True
+
+
 def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch):
     commands: list[list[str]] = []
 

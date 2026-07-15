@@ -144,9 +144,10 @@ The cockpit can always be manually refreshed, but normal workflows should not de
 The hypothesis-ranking system that replaced the v0.2 Elo layer.
 
 - **`mem_bt_ratings` is the canonical hypothesis ranking.** Prefer `strength`, `strength_var`, and `n_comparisons`.
+- **`mem_bt_fit_state` stores the joint fit contract.** It preserves candidate order, the centred covariance, comparison count, convergence state, iterations, error text, and fit time for each rankable kind.
 - **`mem_nodes.elo_score` is kept only for backwards compatibility.** Existing v0.2 readers can still read it, but the cockpit no longer displays it and no new feature should depend on it.
 - **`record_judgement` is the only tool that dual-writes** to both the legacy `mem_judgements` ledger and the new `mem_bt_comparisons` ledger. `update_bt_rating` writes only to the new ledger but accepts a broader source set: `llm_judge`, `metric_diff`, `user_intervention`, `reviewer_critic`.
-- **`suggest_pause_low_strength` is dry-run by default.** The env var `RESEARCH_AGENT_AUTO_PRUNE=1` is the only way to flip `mem_bt_ratings.status` to `paused`. `resume_branch` is the only allowed reversal path.
+- **`suggest_pause_low_strength` is compatibility-only and permanently advisory.** `suggest_pause_low_probability` is the only BT suggestion path that honors `RESEARCH_AGENT_AUTO_PRUNE=1` and may flip `mem_bt_ratings.status` to `paused`. `resume_branch` is the only allowed reversal path.
 - **`replay_counterfactual` must not mutate `mem_nodes` or `mem_bt_ratings`.** It only writes a row to `mem_replay_branches`.
 
 #### The math, briefly
@@ -160,11 +161,16 @@ log posterior(theta) = sum_c weight_c * log sigmoid(theta_w - theta_l)
                        - 0.5 * sum_i theta_i^2 / prior_var
 ```
 
-Newton solves use the full precision matrix, so the fitted ranking is invariant
-to comparison insertion order. The inverse observed precision is centred to
+Backtracking Newton solves use the full precision matrix, so the fitted ranking
+is invariant to comparison insertion order. A failed fit preserves the last
+valid ratings, records `converged=false`, and emits `bt_fit_failed`. The inverse observed precision is centred to
 remove the unidentifiable common translation mode. `strength_var` stores the
 resulting marginal variance. The compatibility fields `lcb` and `ucb` are
 `strength +/- z * sqrt(strength_var)` for the requested interval level.
+
+`compare_bt_candidates` uses the stored joint covariance for pairwise posterior
+contrasts. `probability_best` is estimated with deterministic Monte Carlo draws
+from the same Laplace approximation. Both remain explicitly uncalibrated.
 
 These intervals are an **uncalibrated Laplace approximation to a MAP posterior**.
 They are not frequentist confidence intervals, strict LUCB bounds, or a

@@ -237,7 +237,11 @@ def baseline_fairness(
     baseline_log: str,
     threshold_ratio: float = 3.0,
 ) -> dict:
-    """Compare training budget between a proposed method and a baseline."""
+    """Run the compatibility-named advisory budget-parity check.
+
+    This compares only the budget fields recoverable from the two logs. It is
+    not evidence that the methods are fair in every scientific sense.
+    """
 
     proposed_text = _read_text(proposed_log)
     baseline_text = _read_text(baseline_log)
@@ -253,6 +257,8 @@ def baseline_fairness(
     verdict = "fair" if not unfair_axes else "unfair"
     return {
         "ok": True,
+        "check": "budget_parity",
+        "protection_level": "advisory",
         "verdict": verdict,
         "threshold_ratio": threshold_ratio,
         "proposed": proposed,
@@ -260,4 +266,7 @@ def baseline_fairness(
         "ratios": ratios,
         "unfair_axes": unfair_axes,
         "total_ratio": ratios.get("total_budget"),
+        "interpretation": (
+            "Budget parity check only; this is not a complete fairness proof."
+        ),
     }

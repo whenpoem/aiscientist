@@ -41,6 +41,14 @@ PATH_FRAGMENT_RE = re.compile(
 )
 HELDOUT_POINTER_SUFFIXES = (".heldout-pointer", ".held_out-pointer", ".held-out-pointer")
 STRIP_CHARS = "`'\"()[]{}.,;"
+PUBLICATION_ROOTS_ENV = "RESEARCH_AGENT_PUBLICATION_ROOTS"
+DEFAULT_PUBLICATION_ROOTS = (
+    "reports",
+    "writeup",
+    "paper",
+    "submission",
+    "manuscript",
+)
 
 
 def _iter_strings(value) -> Iterator[str]:
@@ -209,7 +217,28 @@ def _should_verify_markdown(path_value: str) -> bool:
     if not normalized.endswith(".md"):
         return False
     parts = [part for part in normalized.split("/") if part]
-    return any(part in {"reports", "writeup"} for part in parts)
+    configured = os.environ.get(PUBLICATION_ROOTS_ENV, "").strip()
+    roots = (
+        tuple(
+            root.strip().replace("\\", "/").lower().strip("/")
+            for root in re.split(r"[;,]", configured)
+            if root.strip()
+        )
+        if configured
+        else DEFAULT_PUBLICATION_ROOTS
+    )
+    for root in roots:
+        if "/" not in root and ":" not in root:
+            if root in parts:
+                return True
+            continue
+        candidate = str(Path(path_value).expanduser().resolve(strict=False))
+        root_path = str(Path(root).expanduser().resolve(strict=False))
+        if candidate.lower().replace("\\", "/").startswith(
+            root_path.lower().replace("\\", "/").rstrip("/") + "/"
+        ):
+            return True
+    return False
 
 
 def _metric_records_from_text(text: str) -> list[tuple[str, str]]:
@@ -218,9 +247,6 @@ def _metric_records_from_text(text: str) -> list[tuple[str, str]]:
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
-    if os.environ.get("RESEARCH_AGENT_VERIFY") == "1":
-        print("{}")
-        return
     tool_input = payload.get("tool_input", {})
     strings = list(_iter_strings(tool_input))
     if _should_block_heldout(strings):

@@ -136,9 +136,10 @@ cockpit 始终允许手动刷新，但常规工作流不应当依赖手动刷新
 替换了 v0.2 Elo 层的假说排名系统。
 
 - **`mem_bt_ratings` 是假说排名的权威来源。** 优先使用 `strength`、`strength_var`、`n_comparisons` 三列。
+- **`mem_bt_fit_state` 保存联合拟合契约。** 它按可排名 kind 保存候选顺序、中心化协方差、比较数、收敛状态、迭代次数、错误文本和拟合时间。
 - **`mem_nodes.elo_score` 仅作为向后兼容保留。** 已有的 v0.2 读者仍然可以读取它，但 cockpit 不再展示它，任何新功能都不应依赖它。
 - **`record_judgement` 是唯一进行双写的工具**——它同时写入旧的 `mem_judgements` 和新的 `mem_bt_comparisons`。`update_bt_rating` 只写新表，但接受更广泛的来源类型：`llm_judge`、`metric_diff`、`user_intervention`、`reviewer_critic`。
-- **`suggest_pause_low_strength` 默认是 dry-run。** 环境变量 `RESEARCH_AGENT_AUTO_PRUNE=1` 是唯一能把 `mem_bt_ratings.status` 改为 `paused` 的方式。`resume_branch` 是唯一允许的反向操作。
+- **`suggest_pause_low_strength` 是永久只建议的兼容接口。** `suggest_pause_low_probability` 是唯一会响应 `RESEARCH_AGENT_AUTO_PRUNE=1` 并可能把状态改为 `paused` 的 BT 建议入口。`resume_branch` 是唯一允许的反向操作。
 - **`replay_counterfactual` 不得修改 `mem_nodes` 或 `mem_bt_ratings`。** 它只向 `mem_replay_branches` 写入一行。
 
 #### 数学简述
@@ -151,9 +152,14 @@ log posterior(theta) = sum_c weight_c * log sigmoid(theta_w - theta_l)
                        - 0.5 * sum_i theta_i^2 / prior_var
 ```
 
-Newton 求解使用完整精度矩阵，因此拟合结果不依赖比较写入顺序。观测精度矩阵的
+带回溯的 Newton 求解使用完整精度矩阵，因此拟合结果不依赖比较写入顺序。拟合
+失败时，系统保留上一次有效排名，记录 `converged=false`，并发出 `bt_fit_failed`。
+观测精度矩阵的
 逆在报告前会去掉所有强度共同平移的不可识别方向；`strength_var` 保存对应边际方差。
 兼容字段 `lcb`、`ucb` 按请求的区间水平计算 `strength +/- z * sqrt(var)`。
+
+`compare_bt_candidates` 使用保存的联合协方差计算两两后验差；`probability_best`
+通过同一 Laplace 近似上的固定随机种子抽样估计。两者都明确标记为未经校准。
 
 这些区间只是**未经校准的 Laplace-MAP 后验近似**，不是频率学置信区间、严格
 LUCB 界或显著性检验。剪枝和停止还必须考虑比较覆盖、排名稳定性和领域证据。

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from claudescientist.runtime import (
     apply_schema_migration,
+    begin_immediate_with_retry,
     cache_key,
     connect_sqlite,
     ensure_columns,
@@ -84,7 +85,7 @@ def _migrate_kind_check(con: sqlite3.Connection) -> None:
     # after ALTER TABLE ... RENAME; DROP TABLE removes attached objects.
     con.execute("PRAGMA foreign_keys=OFF")
     try:
-        con.execute("BEGIN IMMEDIATE")
+        begin_immediate_with_retry(con)
         con.execute(
             """
             CREATE TABLE mem_nodes_new (
@@ -144,7 +145,7 @@ def bootstrap() -> None:
             con,
             "memory_mcp",
             SCHEMA_PATH.read_text(encoding="utf-8"),
-            schema_version=5,
+            schema_version=6,
         )
         _ensure_elo_column(con)
         _ensure_failures_domain(con)
@@ -164,7 +165,7 @@ def _connect() -> sqlite3.Connection:
 def tx() -> sqlite3.Connection:
     con = _connect()
     try:
-        con.execute("BEGIN IMMEDIATE")
+        begin_immediate_with_retry(con)
         yield con
         con.execute("COMMIT")
     except Exception:

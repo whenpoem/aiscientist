@@ -5,7 +5,7 @@
 
 ## Quick index
 
-- **memory MCP** — 23 tools for the hypothesis graph, BT ranking, calibration, replay, failure ledger, and literature
+- **memory MCP** — 26 tools for the hypothesis graph, BT ranking, calibration, replay, failure ledger, and literature
   - [Hypothesis graph](#hypothesis-graph) · [Failures](#failures) · [BT ranking](#bradley-terry-ranking) · [Calibration](#calibration) · [Replay](#replay) · [Snapshots](#snapshots) · [Literature](#literature)
 - **verify MCP** — 13 tools for leakage, provenance, metrics, preregistration, held-out, and budget
   - [Leakage](#leakage) · [Provenance](#provenance) · [Pinned metrics](#pinned-metrics) · [Seed and fairness](#seed-and-fairness) · [Held-out](#held-out) · [Preregistration](#preregistration) · [Resource budget](#resource-budget)
@@ -145,23 +145,47 @@ A direct BT update path that does **not** dual-write to the Elo ledger. Accepts 
 
 **When to use**: when the source of the comparison is something other than an LLM judge — e.g. an experimental result that directly favored one hypothesis.
 
-#### `get_bt_leaderboard(top_k=20, include_paused=False, kind="hypothesis", interval_level=0.95)`
+#### `get_bt_leaderboard(top_k=20, include_paused=False, kind="hypothesis")`
 Return candidates ranked by the full-ledger BT MAP fit. `lcb` and `ucb` are
 compatibility names for an uncalibrated centred Laplace posterior
 approximation, not strict LUCB or frequentist confidence bounds. The response
-also reports `interval_method` and `interval_calibrated=False`. Candidates with
-fewer than 3 comparisons are flagged `insufficient_samples=True`.
+also reports `probability_best`, fit convergence/count metadata,
+`interval_kind="laplace_credible"`, and `interval_calibrated=False`.
+`probability_best` is a deterministic Monte Carlo summary of the same
+uncalibrated approximation. Candidates with fewer than 3 comparisons are
+flagged `insufficient_samples=True`.
 
 **Returns**: list of leaderboard rows.
 
 **When to use**: at the end of a tournament round, before deciding which hypotheses to advance.
 
+#### `compare_bt_candidates(a_node_id, b_node_id)`
+Compare two candidates of the same rankable kind using the full joint
+covariance. Returns the strength difference, its variance, a 95% approximate
+credible interval, and `probability_a_beats_b`.
+
+**When to use**: to decide whether the current leader is sufficiently ahead of
+the runner-up; the tournament Skill uses 0.95 as its default stopping threshold.
+
 #### `suggest_pause_low_strength(ucb_threshold=-0.5, min_comparisons=6)`
-Find every active hypothesis whose `n_comparisons >= min_comparisons` and `ucb < ucb_threshold`. By default emits only `branch_pause_suggested` events. With `RESEARCH_AGENT_AUTO_PRUNE=1` it additionally flips `mem_bt_ratings.status` to `paused` and emits `branch_paused`.
+Legacy compatibility heuristic. Finds active candidates whose approximate UCB
+is below the threshold, but is now permanently advisory and never changes
+branch status, even when `RESEARCH_AGENT_AUTO_PRUNE=1`.
 
-**Returns**: `{"candidates": [...], "auto_pruned": bool}`
+**Returns**: a deprecated advisory result with `suggested` and an empty `paused` list.
 
-**When to use**: periodically during a long research session, to identify branches that have lost the tournament.
+**When to use**: only for compatibility with an older integration.
+
+#### `suggest_pause_low_probability(max_probability_best=0.05, min_comparisons=6, kind=None)`
+Find active candidates whose approximate posterior probability of being best
+is at or below the threshold. It is dry-run by default. With
+`RESEARCH_AGENT_AUTO_PRUNE=1`, this is the only BT suggestion path that may set
+status to `paused`; every pause remains reversible with `resume_branch`.
+
+**Returns**: `{"suggested": [...], "paused": [...], "probability_calibrated": false}`
+
+**When to use**: periodically during a long tournament, after checking fit
+convergence and comparison coverage.
 
 #### `resume_branch(node_id, reason)`
 Reverse a paused branch: status back to `active`, emits `branch_promoted`.

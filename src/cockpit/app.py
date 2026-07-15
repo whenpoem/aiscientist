@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 
 from textual import events, work
@@ -13,22 +12,14 @@ from textual.binding import Binding
 from textual.containers import Container
 from textual.css.query import NoMatches
 from textual.reactive import reactive
-from textual.widgets import Input, Static
+from textual.widgets import Input
 
 from . import data
-from .action_router import (
-    FOCUS_ORDER,
-    cycle_right_tab,
-    focus_relative,
-    jump_cursor,
-    move_cursor,
-    move_horizontal,
-)
+from .action_router import FOCUS_ORDER
 from .activity import ActivityCard, aggregate_from_db
-from .bars import progress_bar
 from .command_handler import execute_command, goto_node
 from .commands import CockpitCommands, ThemeSwitcherCommands
-from .diagnostics import get_logger, health_state, reset_health
+from .diagnostics import get_logger, reset_health
 from .i18n import normalize_lang, t, toggle_lang
 from .intervention_controller import (
     notify_intervention_queued,
@@ -51,6 +42,7 @@ from .modals import (
     PinMetricModal,
     TextInputModal,
 )
+from .navigation_controller import NavigationController
 from .panes import (
     EventStreamPane,
     HypothesisTreePane,
@@ -62,8 +54,8 @@ from .panes.activity_pane import ActivityPane
 from .panes.focus_pane import FocusState, derive_focus_from_db
 from .panes.phase_strip import PhaseStripPane
 from .phase import Phase, derive_phase_from_db
-from .refresh_coordinator import dispatch_events
 from .refresh_coordinator import refresh_state as coordinate_refresh
+from .refresh_mixin import CockpitRefreshMixin
 from .row_detail import row_detail
 from .screens.splash import SplashScreen
 from .screens.welcome import WelcomeScreen
@@ -73,6 +65,7 @@ from .settings import (
     save_settings,
     should_show_splash,
 )
+from .status_widgets import ContextBar, StatusBar, pane_label
 from .theme import (
     ALL_THEMES,
     default_theme_name,
@@ -89,293 +82,20 @@ from .theme import (
 # eager initialisation; see cockpit/diagnostics.py for the rewrite.
 _log = get_logger("app")
 
+
+def _pane_label(lang: str, pane: str) -> str:
+    """Compatibility wrapper for callers that imported the old app helper."""
+    return pane_label(lang, pane)
+
 # v5.0 Activity Streaming migrated the canonical "events" pane to
 # "activity" in the body grid; the original RichLog moved to a bottom-
 # docked "audit log". Settings persisted under the legacy name are healed
 # to the new name on load (see :func:`_normalize_focus_pane`).
-def _pane_label(lang: str, pane: str) -> str:
-    """Localized pane name for the HUD focus-mode chip and breadcrumb.
-
-    The cockpit's pane titles are already translated (``tree_title``,
-    ``detail_title``, etc.), but they carry the "1 Hypothesis Tree"
-    numeric prefix and "Activity" capitalization that don't fit the
-    inline chip layout. This helper extracts a clean short label per
-    language.
-    """
-    table_en = {
-        "tree": "Tree",
-        "detail": "Detail",
-        "activity": "Activity",
-        "tabs": "Tabs",
-        "events": "Audit log",
-    }
-    table_zh = {
-        "tree": "假设树",
-        "detail": "详情",
-        "activity": "活动",
-        "tabs": "表格",
-        "events": "审计日志",
-    }
-    table = table_zh if str(lang).startswith("zh") else table_en
-    return table.get(pane, pane or "?")
 
 
-class StatusBar(Static):
-    """Single-line status header."""
-
-    def __init__(self, *, lang: str = "en", theme: str = "claude-warm-dark") -> None:
-        super().__init__("")
-        self.id = "status-bar"
-        self.lang = normalize_lang(lang)
-        # Theme name shown next to the language code in the HUD so users have
-        # a constant reminder of which theme is active (the T-key notification
-        # is transient).
-        self.theme_name = theme
-        self.current_text = ""
-        self._summary = {
-            "active_hypotheses": 0,
-            "refuted_nodes": 0,
-            "pinned_claims": 0,
-            "unverified_claims": 0,
-            "heldout_budgets": [],
-            "risks": 0,
-            "latest_event_at": None,
-        }
-        self._clock = "--:--"
-        # Phase D: heartbeat phase counter. Bumped once per second by
-        # ``_tick`` so the leftmost heartbeat chip alternates colour
-        # while the cockpit has recent activity — a peripheral-vision
-        # "is the agent alive" signal that does not need the user to
-        # look at the right-side "last event" text.
-        self._heartbeat_phase = 0
-
-    def on_mount(self) -> None:
-        self.set_interval(1.0, self._tick)
-        self._refresh_display()
-
-    def set_language(self, lang: str) -> None:
-        self.lang = normalize_lang(lang)
-        self._refresh_display()
-
-    def set_theme_name(self, theme: str) -> None:
-        self.theme_name = theme
-        self._refresh_display()
-
-    def set_summary(self, summary: dict) -> None:
-        self._summary = dict(summary)
-        self._refresh_display()
-
-    def _tick(self) -> None:
-        self._clock = datetime.now().strftime("%H:%M")
-        # Bump the heartbeat phase so _format_heartbeat alternates colour
-        # on each tick. We only care about the parity, so the counter can
-        # wrap freely without an explicit modulo.
-        self._heartbeat_phase = (self._heartbeat_phase + 1) & 0xFFFF
-        self._refresh_display()
-
-    def _refresh_display(self) -> None:
-        # Compact theme tag (drops the "claude-" prefix) so the HUD doesn't
-        # bloat. e.g. "claude-warm-dark" -> "warm-dark".
-        compact_theme = self.theme_name.removeprefix("claude-") or self.theme_name
-        try:
-            hud_key = "hud_compact" if self.size.width < 100 else "hud"
-        except Exception:  # pragma: no cover - pre-mount path
-            hud_key = "hud"
-        self.current_text = t(
-            self.lang,
-            hud_key,
-            heartbeat=self._format_heartbeat(),
-            app=t(self.lang, "app_name"),
-            health=self._format_health(),
-            focus_mode=self._format_focus_mode(),
-            action_target=self._format_action_target(),
-            active_hypotheses=self._summary.get("active_hypotheses", 0),
-            refuted_nodes=self._summary.get("refuted_nodes", 0),
-            pinned_claims=self._summary.get("pinned_claims", 0),
-            unverified_claims=self._summary.get("unverified_claims", 0),
-            heldout=self._format_heldout(),
-            risks=self._summary.get("risks", 0),
-            last_event=self._format_last_event(),
-            theme=compact_theme,
-            lang_code=self.lang.upper(),
-            clock=self._clock,
-        )
-        # Static.update parses Rich markup unless explicitly disabled. The
-        # heartbeat chip relies on markup (``[$accent]●[/]``) for its
-        # breath colour swap — without markup parsing the user would see
-        # the literal tags. The rest of the HUD is plain text, so the
-        # markup-enabled mode is the right default.
-        self.update(self.current_text)
-
-    def _format_heartbeat(self) -> str:
-        """Render the leftmost heartbeat chip with a 2-state colour breath.
-
-        Reads ``self._summary["latest_event_at"]`` to decide between
-        "warm" (event in the last ~10 s — bright dot, breath active)
-        and "cold" (no recent event — muted ring, no breath). The colour
-        swap on each ``_tick`` is what makes the chip feel "alive" in
-        peripheral vision; it does NOT require a sub-second timer.
-
-        The chip is rendered with Rich markup so the surrounding HUD
-        text stays plain. Static.update() parses markup by default.
-        """
-        raw = self._summary.get("latest_event_at")
-        # Parse the last-event timestamp to decide warm vs cold. Errors
-        # fall through to "cold" — the dot still shows, it just stops
-        # breathing.
-        warm = False
-        if raw:
-            try:
-                parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-                if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=timezone.utc)
-                age = (datetime.now(timezone.utc) - parsed).total_seconds()
-                warm = age >= 0 and age < 10
-            except ValueError:
-                warm = False
-        if not warm:
-            return "[$foreground-muted]○[/]"
-        # Warm: alternate between accent (full intensity) and foreground
-        # (slightly dimmer) each tick so the eye perceives a slow breath.
-        if self._heartbeat_phase & 1:
-            return "[$accent]●[/]"
-        return "[$foreground]●[/]"
-
-    def _format_action_target(self) -> str:
-        """Render the "▶ acts on: <node>" chip on the right side of the HUD.
-
-        Peeks at the running App's ``selected_node_id`` (the same node
-        every y/n/r/c/m/p binding targets, regardless of which pane has
-        keyboard focus). The chip is empty when nothing is selected so
-        the HUD spacing flows naturally on cold start.
-
-        The peek is defensive: during the StatusBar's first mount the
-        widget exists before the App's ``selected_node_id`` attribute
-        does, and during shutdown the App may be partially torn down.
-        Either edge returns the empty chip rather than raising.
-        """
-        try:
-            node_id = getattr(self.app, "selected_node_id", None)
-        except Exception:  # pragma: no cover - defensive: app accessor edge
-            return t(self.lang, "action_target_empty")
-        if not node_id:
-            return t(self.lang, "action_target_empty")
-        return t(self.lang, "action_target", target=node_id)
-
-    def _format_focus_mode(self) -> str:
-        """Render the "[FOCUS: <pane>]" chip on the left side of the HUD.
-
-        Lights up only when the user has entered single-pane focus mode
-        (layout_preset = "focus"). The chip names the currently visible
-        pane in the user's language so they know which pane the F-key
-        will hide on next press.
-        """
-        try:
-            preset = self.app._settings.layout_preset  # type: ignore[attr-defined]
-            focused = self.app.focused_pane  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - defensive: app accessor edge
-            return t(self.lang, "focus_mode_off")
-        if preset not in ("focus", "single"):
-            return t(self.lang, "focus_mode_off")
-        pane_label = _pane_label(self.lang, focused)
-        return t(self.lang, "focus_mode_on", pane=pane_label)
-
-    def _format_health(self) -> str:
-        """Render the health chip from the cockpit diagnostics state.
-
-        Empty string when no warnings/errors have been logged this
-        session — the HUD format string then renders flush, identical
-        to the pre-Phase-A layout. When the cockpit has logged anything
-        at WARNING or above, a ``⚠{n}`` chip appears between ``{app}``
-        and the first metric so the user has a visible tell that the
-        cockpit's log file is worth checking.
-
-        The chip uses *total events ≥ warning* rather than separating
-        warnings from errors: at the chip's 1-cell visual budget the
-        nuance is invisible. The exact split lives in ``cockpit.log``.
-        """
-        try:
-            state = health_state()
-        except Exception:  # pragma: no cover - defensive: diagnostics import path
-            return t(self.lang, "health_clean")
-        total = int(state.get("errors", 0) or 0) + int(state.get("warnings", 0) or 0)
-        if total <= 0:
-            return t(self.lang, "health_clean")
-        return t(self.lang, "health_warning", count=total)
-
-    def _format_heldout(self) -> str:
-        budgets = self._summary.get("heldout_budgets") or []
-        if not budgets:
-            return t(self.lang, "heldout_none")
-        # Compact bar (6 cells) keeps the HUD honest on narrow terminals
-        # while still giving a real fill cue. Two datasets max — anything
-        # beyond that belongs in the risks tab, not the status bar.
-        parts: list[str] = []
-        for row in budgets[:2]:
-            used = int(row.get("budget_used", 0) or 0)
-            total = int(row.get("budget_total", 0) or 0)
-            bar = progress_bar(used, total, width=6)
-            parts.append(f"{row.get('dataset', '-')} {bar} {used}/{total}")
-        return ", ".join(parts)
-
-    def _format_last_event(self) -> str:
-        raw = self._summary.get("latest_event_at")
-        if not raw:
-            # Hollow dot conveys "no signal yet" without alarming the user.
-            return f"○ {t(self.lang, 'last_never')}"
-        try:
-            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        except ValueError:
-            return f"● {str(raw)[:8]}"
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)
-        seconds = max(int(delta.total_seconds()), 0)
-        # Filled dot for fresh events (< 2s) so the user gets a low-effort
-        # "system is alive" cue in their peripheral vision; we drop to a
-        # hollow ring once the trail goes cold.
-        dot = "●" if seconds < 2 else "○"
-        if seconds < 5:
-            return f"{dot} {t(self.lang, 'just_now')}"
-        if seconds < 60:
-            return f"{dot} {t(self.lang, 'seconds_ago', value=seconds)}"
-        minutes = seconds // 60
-        if minutes < 60:
-            return f"{dot} {t(self.lang, 'minutes_ago', value=minutes)}"
-        return f"{dot} {t(self.lang, 'hours_ago', value=minutes // 60)}"
 
 
-class ContextBar(Static):
-    """Localized one-line hint for the focused pane."""
-
-    def __init__(self, *, lang: str = "en") -> None:
-        super().__init__("")
-        self.id = "context-bar"
-        self.lang = normalize_lang(lang)
-        self.pane = "tree"
-        self.current_text = ""
-        self.refresh_text()
-
-    def set_language(self, lang: str) -> None:
-        self.lang = normalize_lang(lang)
-        self.refresh_text()
-
-    def set_pane(self, pane: str) -> None:
-        self.pane = pane
-        self.refresh_text()
-
-    def refresh_text(self) -> None:
-        key = {
-            "tree": "context_tree",
-            "tabs": "context_tabs",
-            "events": "context_events",
-            "detail": "context_detail",
-        }.get(self.pane, "context_tree")
-        self.current_text = t(self.lang, key)
-        self.update(self.current_text)
-
-
-class CockpitApp(App[None]):
+class CockpitApp(CockpitRefreshMixin, App[None]):
     """Textual-based cockpit for live research state."""
 
     CSS_PATH = str(Path(__file__).with_name("theme").joinpath("cockpit.tcss"))
@@ -562,6 +282,7 @@ class CockpitApp(App[None]):
         # v5.0: cached focus state for the cooldown / anti-flicker
         # check in derive_focus_from_db(prev=...).
         self._prev_focus_state: FocusState = FocusState()
+        self.navigation = NavigationController(self)
 
     def compose(self) -> ComposeResult:
         yield StatusBar(lang=self.lang, theme=self._settings.theme)
@@ -1305,31 +1026,31 @@ class CockpitApp(App[None]):
         self._set_focus("tabs")
 
     def action_focus_next_pane(self) -> None:
-        focus_relative(self, 1)
+        self.navigation.focus_relative(1)
 
     def action_focus_prev_pane(self) -> None:
-        focus_relative(self, -1)
+        self.navigation.focus_relative(-1)
 
     def action_cursor_down(self) -> None:
-        move_cursor(self, 1)
+        self.navigation.move_cursor(1)
 
     def action_cursor_up(self) -> None:
-        move_cursor(self, -1)
+        self.navigation.move_cursor(-1)
 
     def action_pane_left(self) -> None:
-        move_horizontal(self, -1)
+        self.navigation.move_horizontal(-1)
 
     def action_pane_right(self) -> None:
-        move_horizontal(self, 1)
+        self.navigation.move_horizontal(1)
 
     def action_jump_top(self) -> None:
-        jump_cursor(self, "top")
+        self.navigation.jump("top")
 
     def action_jump_bottom(self) -> None:
-        jump_cursor(self, "bottom")
+        self.navigation.jump("bottom")
 
     def action_cycle_right_tab(self) -> None:
-        cycle_right_tab(self)
+        self.navigation.cycle_right_tab()
     async def action_export_report(self) -> None:
         """Open the ExportModal for the currently-selected node.
 
@@ -1914,36 +1635,7 @@ class CockpitApp(App[None]):
         # nothing deeper to drill into from a detail view.
 
     def _resolve_drill_pane(self) -> str:
-        """Walk the focus chain back to a known pane, or fall back to the
-        reactive. Returns one of "tree" / "tabs" / "events" / "detail".
-        """
-        try:
-            focused = self.focused
-        except Exception:  # pragma: no cover - defensive
-            focused = None
-        widget = focused
-        # Cap the walk so a corrupt parent chain can't loop forever.
-        for _ in range(32):
-            if widget is None:
-                break
-            try:
-                if widget is self.tree_pane:
-                    return "tree"
-                if widget is self.detail_pane:
-                    return "detail"
-                if widget is self.events_pane:
-                    return "events"
-                try:
-                    if widget is self.activity_pane:
-                        return "activity"
-                except NoMatches:  # pragma: no cover - defensive
-                    pass
-                if widget is self.tabs_pane:
-                    return "tabs"
-            except Exception:  # pragma: no cover
-                break
-            widget = getattr(widget, "parent", None)
-        return self.focused_pane
+        return self.navigation.resolve_drill_pane()
 
     def _open_detail_for_tree(self) -> None:
         node_id = self.tree_pane.current_node_id() or self.selected_node_id
@@ -2055,30 +1747,7 @@ class CockpitApp(App[None]):
             await asyncio.sleep(1.0)
 
     def _set_focus(self, pane_name: str) -> None:
-        # v5.0: "events" → "activity" alias for legacy settings / actions.
-        if pane_name == "events":
-            pane_name = "activity"
-        self.focused_pane = pane_name
-        target_map = {
-            "tree": lambda: self.tree_pane,
-            "detail": lambda: self.detail_pane,
-            "events": lambda: self.events_pane,  # legacy alias kept for safety
-            "activity": lambda: self.activity_pane,
-            "tabs": lambda: self.tabs_pane.current_table(),
-        }
-        target_factory = target_map.get(pane_name)
-        if target_factory is None:
-            return
-        try:
-            target_factory().focus()
-        except (NoMatches, AttributeError):
-            # The 'tabs' case can hit NoMatches if the user presses '4'
-            # before TabbedContent has finished injecting its ContentTabs
-            # / ContentSwitcher children (which it does lazily). Reactive
-            # state is already updated, so the cockpit stays consistent;
-            # the user can press '4' again after a moment and it will
-            # work. Better than crashing the whole app.
-            pass
+        self.navigation.focus(pane_name)
 
     def _apply_language(self) -> None:
         self.status_bar.set_language(self.lang)
@@ -2242,149 +1911,6 @@ class CockpitApp(App[None]):
             self._track_intervention(result, "halt", None)
             self.refresh_state(include_events=True)
 
-    def _refresh_graph(self) -> None:
-        previous_node_id = self.selected_node_id or self.tree_pane.current_node_id()
-        self.graph = data.fetch_graph()
-        # Phase E3: push the bookmark set into the tree pane BEFORE
-        # ``load_graph`` rebuilds the labels — that's the point where
-        # ``_label_for`` reads ``self._bookmarks`` to decide whether to
-        # prefix each row with ``✦``. Out-of-order would leave the
-        # first paint without the indicator.
-        self.tree_pane.set_bookmarks(self._settings.bookmarks)
-        self.selected_node_id = self.tree_pane.load_graph(
-            self.graph,
-            show_refuted=self.show_refuted,
-            filter_text=self._pane_filters["tree"],
-            selected_node_id=previous_node_id,
-        )
-
-    def _refresh_tabs(self) -> None:
-        failures = data.fetch_failures()
-        claims = data.fetch_claims()
-        graph = data.fetch_graph()
-        heldout_budgets = data.fetch_heldout_budgets()
-        self._set_tab_rows(
-            risks=data.fetch_risks(
-                claims=claims,
-                failures=failures,
-                graph=graph,
-                heldout_budgets=heldout_budgets,
-            ),
-            failures=failures,
-            claims=claims,
-            literature=data.fetch_literature(),
-            reports=data.fetch_reports(),
-            corpus=data.fetch_corpus_problems(),
-            diagnostics=data.fetch_diagnostic_manifests(),
-            lean=data.fetch_lean_attempts(),
-        )
-
-    def _refresh_risks(self) -> None:
-        self._set_tab_rows(risks=data.fetch_risks())
-
-    def _refresh_failures(self) -> None:
-        failures = data.fetch_failures()
-        self._set_tab_rows(failures=failures, risks=data.fetch_risks(failures=failures))
-
-    def _refresh_claims(self) -> None:
-        claims = data.fetch_claims()
-        self._set_tab_rows(claims=claims, risks=data.fetch_risks(claims=claims))
-
-    def _refresh_literature(self) -> None:
-        self._set_tab_rows(literature=data.fetch_literature())
-
-    def _refresh_corpus(self) -> None:
-        self._set_tab_rows(corpus=data.fetch_corpus_problems())
-
-    def _refresh_diagnostics(self) -> None:
-        self._set_tab_rows(diagnostics=data.fetch_diagnostic_manifests())
-
-    def _refresh_lean(self) -> None:
-        self._set_tab_rows(lean=data.fetch_lean_attempts())
-
-    def _refresh_reports(self) -> None:
-        self._set_tab_rows(reports=data.fetch_reports())
-
-    def _set_tab_rows(
-        self,
-        *,
-        risks: list[dict] | None = None,
-        failures: list[dict] | None = None,
-        claims: list[dict] | None = None,
-        literature: list[dict] | None = None,
-        corpus: list[dict] | None = None,
-        diagnostics: list[dict] | None = None,
-        lean: list[dict] | None = None,
-        reports: list[dict] | None = None,
-    ) -> None:
-        self.tabs_pane.set_filter_text(self._pane_filters["tabs"])
-        self.tabs_pane.set_rows(
-            risks=risks if risks is not None else self.tabs_pane.risks_rows,
-            failures=failures if failures is not None else self.tabs_pane.failures_rows,
-            claims=claims if claims is not None else self.tabs_pane.claims_rows,
-            literature=literature if literature is not None else self.tabs_pane.literature_rows,
-            corpus=corpus if corpus is not None else self.tabs_pane.corpus_rows,
-            diagnostics=(
-                diagnostics if diagnostics is not None else self.tabs_pane.diagnostics_rows
-            ),
-            lean=lean if lean is not None else self.tabs_pane.lean_rows,
-            reports=reports if reports is not None else self.tabs_pane.reports_rows,
-        )
-
-    def _refresh_counts(self) -> None:
-        summary = data.fetch_dashboard()
-        self.status_bar.set_summary(summary)
-        # Tree border title shows live counts so users get scale info
-        # without scanning the HUD. Filter mode takes precedence inside
-        # tree_pane.set_counts (see its docstring).
-        self.tree_pane.set_counts(
-            {
-                "active": int(summary.get("active_hypotheses", 0)),
-                "refuted": int(summary.get("refuted_nodes", 0)),
-            }
-        )
-
-    def _refresh_events(self) -> None:
-        rows = data.fetch_new_events(self.last_event_id)
-        if self.last_event_id <= 0:
-            self.events_pane.set_rows(rows)
-        elif rows:
-            self.events_pane.append_rows(rows)
-        self.last_event_id = int(rows[-1]["id"]) if rows else int(data.fetch_latest_event_id())
-        self.events_pane.set_filter_text(self._pane_filters["events"])
-        self.events_pane.set_relative_timestamps(self.relative_timestamps)
-        # Phase E4: push the recent-events tail into the timeline strip
-        # only when it is visible. The strip uses ``fetch_events`` (not
-        # the delta cursor) because it always wants the most-recent
-        # ``max_cells`` rows in chronological order — even if the user
-        # just opened the strip after thousands of events have passed.
-        try:
-            timeline = self.timeline_pane
-        except NoMatches:  # pragma: no cover - defensive
-            timeline = None
-        if timeline is not None and timeline.is_visible:
-            try:
-                timeline.set_events(data.fetch_new_events(0, limit=200))
-            except Exception:  # pragma: no cover - defensive
-                _log.exception("_refresh_events: timeline.set_events failed")
-
-    def _dispatch_events(self, rows: list[dict]) -> None:
-        dispatch_events(self, rows)
-    def _apply_filter(self, target: str, value: str) -> None:
-        self._pane_filters[target] = value
-        if target == "tree":
-            self.selected_node_id = self.tree_pane.load_graph(
-                self.graph,
-                show_refuted=self.show_refuted,
-                filter_text=value,
-                selected_node_id=self.selected_node_id,
-            )
-        elif target == "events":
-            self.events_pane.set_filter_text(value)
-        elif target == "activity":
-            self.activity_pane.set_filter_text(value)
-        else:
-            self.tabs_pane.set_filter_text(value)
 
 
 def render_snapshot(*, lang: str = "en") -> str:

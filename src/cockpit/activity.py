@@ -47,66 +47,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from cockpit import data
+from cockpit.event_registry import EVENT_REGISTRY, FAMILIES
 
-# ---------------------------------------------------------------------------
-# Vocab tables — single source of truth for kind → (family, severity).
-# ---------------------------------------------------------------------------
-
-FAMILIES: tuple[str, ...] = (
-    "graph",
-    "bt",
-    "verify",
-    "prove",
-    "lean",
-    "intervention",
-    "narrate",
-    "risk",
-)
-
+# Event family, severity, terminal-state, grouping, and refresh semantics all
+# derive from one registry so a newly emitted kind cannot silently diverge
+# between Activity rendering and pane refresh routing.
 KIND_FAMILY: dict[str, str] = {
-    # graph (memory_mcp)
-    "graph_delta": "graph",
-    "branch_paused": "graph",
-    "branch_pause_suggested": "graph",
-    "branch_promoted": "graph",
-    "auto_prune": "graph",
-    # bt
-    "bt_rating_updated": "bt",
-    "judgement_recorded": "bt",
-    # verify
-    "seed_run_recorded": "verify",
-    "prereg_locked": "verify",
-    "prereg_resolved": "verify",
-    "heldout_query_reserved": "verify",
-    "heldout_query_finished": "verify",
-    "claim_pinned": "verify",
-    # prove
-    "proof_corpus_ingested": "prove",
-    "proof_corpus_reindex_progress": "prove",
-    "proof_segmented": "prove",
-    "proof_diagnosis_recorded": "prove",
-    "proof_diagnosis_complete": "prove",
-    "proof_correction_applied": "prove",
-    # lean (separate from prove because rendering is different — source preview)
-    "lean_proof_succeeded": "lean",
-    "lean_proof_failed": "lean",
-    "lean_proof_recorded": "lean",
-    # intervention
-    "intervention": "intervention",
-    "intervention_undone": "intervention",
-    # narrate
-    "agent_narration": "narrate",
-    "note": "narrate",
-    "phase_set": "narrate",
-    # risk
-    "budget_exceeded": "risk",
-    "prov_dag_stale": "risk",
-    "failure_added": "risk",
-    # artifact (review)
-    "snapshot_created": "verify",
-    "report_generated": "verify",
-    "replay_branch_created": "verify",
-    "literature_ingested": "graph",
+    kind: spec.family for kind, spec in EVENT_REGISTRY.items()
 }
 
 # Glyph for the card's family chip. Plain Unicode — no emoji.
@@ -151,27 +98,7 @@ SEVERITY_ORDER: tuple[str, ...] = (
 )
 
 KIND_SEVERITY: dict[str, str] = {
-    # critical — user must look
-    "budget_exceeded": "critical",
-    "prov_dag_stale": "critical",
-    # high — pay attention
-    "lean_proof_failed": "high",
-    "branch_paused": "high",
-    "failure_added": "high",  # see _payload_severity for halt detection
-    # medium — decision / inflection
-    "prereg_resolved": "medium",
-    "proof_diagnosis_recorded": "medium",
-    "heldout_query_finished": "medium",
-    "branch_pause_suggested": "medium",
-    "intervention_undone": "medium",
-    "intervention": "medium",
-    # low — high-volume / passive
-    "note": "low",
-    "agent_narration": "low",
-    "proof_corpus_reindex_progress": "low",
-    "bt_rating_updated": "low",
-    "report_generated": "low",
-    "phase_set": "low",
+    kind: spec.severity for kind, spec in EVENT_REGISTRY.items()
 }
 
 # Glyph + style for severity. Pairs with color via cockpit.theme.color().
@@ -201,20 +128,14 @@ SEVERITY_COLOR_TOKEN: dict[str, str] = {
 # Terminal kinds — push card → done. Failure / blocker kinds handled
 # below in _terminal_state.
 TERMINAL_KINDS: frozenset[str] = frozenset(
-    {
-        "lean_proof_succeeded",
-        "proof_diagnosis_complete",
-        "heldout_query_finished",
-        "prereg_resolved",
-        "branch_promoted",
-        "snapshot_created",
-        "proof_correction_applied",
-    }
+    kind for kind, spec in EVENT_REGISTRY.items() if spec.terminal_state == "done"
 )
-
-# Failure / blocker — push card → failed / blocked.
-FAILURE_KINDS: frozenset[str] = frozenset({"lean_proof_failed", "branch_paused"})
-BLOCKED_KINDS: frozenset[str] = frozenset({"budget_exceeded", "prov_dag_stale"})
+FAILURE_KINDS: frozenset[str] = frozenset(
+    kind for kind, spec in EVENT_REGISTRY.items() if spec.terminal_state == "failed"
+)
+BLOCKED_KINDS: frozenset[str] = frozenset(
+    kind for kind, spec in EVENT_REGISTRY.items() if spec.terminal_state == "blocked"
+)
 
 # Card status order for display sort (running first, then issues, then done).
 STATUS_ORDER: dict[str, int] = {
@@ -226,18 +147,13 @@ STATUS_ORDER: dict[str, int] = {
 
 # Kinds that should always be a singleton card.
 SINGLETON_KINDS: frozenset[str] = frozenset(
-    {
-        "budget_exceeded",
-        "prov_dag_stale",
-        "failure_added",
-        "agent_narration",
-        "phase_set",
-        "note",
-    }
+    kind for kind, spec in EVENT_REGISTRY.items() if spec.singleton
 )
 
 # Time bucket fallback for events without a node target.
-TIME_BUCKET_KINDS: frozenset[str] = frozenset({"proof_corpus_reindex_progress"})
+TIME_BUCKET_KINDS: frozenset[str] = frozenset(
+    kind for kind, spec in EVENT_REGISTRY.items() if spec.time_bucket
+)
 
 # How long a terminal card stays in the active list before being
 # considered "closed". The activity pane may dim closed cards or move

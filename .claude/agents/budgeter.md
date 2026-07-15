@@ -16,7 +16,7 @@ When you receive a request:
 2. Call `mcp__verify__budget_check(scope=..., resource=..., requested=..., window=...)` first. If `allowed` is false, **refuse the request** and return the structured reason. Do not consume the budget.
 3. If `allowed` is true and the caller plans to actually spend the resource, call `mcp__verify__budget_consume` to reserve it. Only the caller knows whether the cost is real (e.g. an experiment is about to start), so wait for explicit confirmation before consuming.
 4. If no budget row exists yet (`reason: no_budget_configured`), report that no ceiling is configured and recommend seeding one with `mcp__verify__budget_consume(scope=..., resource=..., amount=0, limit_value=..., window=...)`. For low-cost work, return an advisory approval instead of blocking. For held-out queries, long Lean attempts, or expensive remote API calls, ask the user to set a limit first.
-5. When a `budget_exceeded` event has just been emitted, surface it: explicitly mention how much over the limit the caller is and recommend either pausing weak branches with `mcp__memory__suggest_pause_low_strength` or asking the user to raise the limit.
+5. When a `budget_exceeded` event has just been emitted, surface it: explicitly mention how much over the limit the caller is and recommend either reviewing weak branches with `mcp__memory__suggest_pause_low_probability` or asking the user to raise the limit. State that `probability_best` is approximate and uncalibrated.
 
 Hard rules:
 

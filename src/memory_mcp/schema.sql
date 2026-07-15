@@ -164,6 +164,17 @@ CREATE INDEX IF NOT EXISTS idx_mem_bt_comparisons_winner
 CREATE INDEX IF NOT EXISTS idx_mem_bt_comparisons_loser
   ON mem_bt_comparisons(loser_id);
 
+CREATE TABLE IF NOT EXISTS mem_bt_fit_state (
+  kind TEXT PRIMARY KEY CHECK(kind IN ('hypothesis', 'proof_skeleton')),
+  node_order_json TEXT NOT NULL DEFAULT '[]',
+  covariance_json TEXT NOT NULL DEFAULT '[]',
+  comparison_count INTEGER NOT NULL DEFAULT 0,
+  converged INTEGER NOT NULL DEFAULT 0 CHECK(converged IN (0, 1)),
+  iterations INTEGER NOT NULL DEFAULT 0,
+  fit_error TEXT NOT NULL DEFAULT '',
+  fitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS meta_calibration (
   agent_name TEXT NOT NULL,
   predicted_p REAL NOT NULL,

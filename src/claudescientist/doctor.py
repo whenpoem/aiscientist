@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .codex_cli import codex_command_prefix, codex_home
-from .runtime import state_db_path, workspace_root
+from .runtime import installation_root, state_db_path, workspace_root
 
 CORE_IMPORTS = (
     "memory_mcp.server",
@@ -112,6 +114,114 @@ def _trusted_claudescientist_hooks() -> bool:
     )
 
 
+def _module_errors() -> dict[str, str]:
+    errors: dict[str, str] = {}
+    for module_name in CORE_IMPORTS:
+        try:
+            available = importlib.util.find_spec(module_name) is not None
+        except (ImportError, ModuleNotFoundError, ValueError) as exc:
+            errors[module_name] = f"{type(exc).__name__}: {exc}"
+            continue
+        if not available:
+            errors[module_name] = "module not found"
+    return errors
+
+
+def _project_mcp_enabled(root: Path, server_name: str) -> bool:
+    config = _read_toml(root / ".codex" / "config.toml")
+    servers = config.get("mcp_servers", {})
+    if not isinstance(servers, dict):
+        return False
+    server = servers.get(server_name)
+    if not isinstance(server, dict):
+        return False
+    return bool(server.get("enabled", True))
+
+
+def _optional_runtime_checks(root: Path) -> dict[str, dict[str, Any]]:
+    node_path = shutil.which("node")
+    npm_path = shutil.which("npm") or shutil.which("npm.cmd")
+    npx_path = shutil.which("npx") or shutil.which("npx.cmd")
+    uv_path = shutil.which("uv") or shutil.which("uv.exe")
+
+    arxiv_enabled = _project_mcp_enabled(root, "arxiv")
+    openalex_enabled = _project_mcp_enabled(root, "openalex")
+    lean_enabled = _project_mcp_enabled(root, "lean")
+
+    lean_tools = {
+        name: shutil.which(name)
+        for name in ("elan", "lake", "lean")
+    }
+    lean_ready = all(lean_tools.values())
+
+    backend = os.environ.get("RESEARCH_AGENT_EMBED_BACKEND", "local").strip().lower()
+    model = os.environ.get("RESEARCH_AGENT_EMBED_MODEL", "")
+    if backend == "mock":
+        embedding_ready = True
+        embedding_detail = "Deterministic mock backend selected."
+    elif backend == "local":
+        embedding_ready = importlib.util.find_spec("sentence_transformers") is not None
+        embedding_detail = (
+            "Local sentence-transformers backend is importable."
+            if embedding_ready
+            else "Install the proof extra or select another embedding backend."
+        )
+    elif backend == "openai":
+        client_ready = importlib.util.find_spec("openai") is not None
+        credential_present = bool(os.environ.get("OPENAI_API_KEY"))
+        embedding_ready = client_ready and credential_present
+        embedding_detail = (
+            "OpenAI-compatible client and credential are present."
+            if embedding_ready
+            else "The OpenAI-compatible backend needs the client and OPENAI_API_KEY."
+        )
+    else:
+        embedding_ready = False
+        embedding_detail = f"Unknown embedding backend: {backend!r}."
+
+    return {
+        "node_runtime": {
+            "status": "ok" if node_path and npm_path and npx_path else "optional",
+            "node": node_path,
+            "npm": npm_path,
+            "npx": npx_path,
+            "detail": "Required only for the opt-in OpenAlex MCP.",
+        },
+        "literature_arxiv": {
+            "status": "ok" if (uv_path or not arxiv_enabled) else "degraded",
+            "enabled": arxiv_enabled,
+            "launcher": uv_path,
+            "version_pin": "arxiv-mcp-server==0.5.0",
+            "network_checked": False,
+        },
+        "literature_openalex": {
+            "status": (
+                "ok"
+                if (node_path and npm_path and npx_path) or not openalex_enabled
+                else "degraded"
+            ),
+            "enabled": openalex_enabled,
+            "launcher": npx_path,
+            "version_pin": "openalex-research-mcp@0.5.0",
+            "network_checked": False,
+        },
+        "lean_reinsurance": {
+            "status": "ok" if lean_ready or not lean_enabled else "degraded",
+            "enabled": lean_enabled,
+            "ready": lean_ready,
+            "tools": lean_tools,
+            "detail": "Lean is optional; the natural-language proof trunk remains usable.",
+        },
+        "embedding_backend": {
+            "status": "ok" if embedding_ready else "degraded",
+            "backend": backend,
+            "model": model or None,
+            "ready": embedding_ready,
+            "detail": embedding_detail,
+        },
+    }
+
+
 def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
     root = (
         Path(workspace).expanduser().resolve()
@@ -128,18 +238,16 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
     else:
         database = state_db_path().resolve()
 
-    import_errors: dict[str, str] = {}
-    for module_name in CORE_IMPORTS:
-        try:
-            importlib.import_module(module_name)
-        except Exception as exc:  # pragma: no cover - defensive dependency report
-            import_errors[module_name] = f"{type(exc).__name__}: {exc}"
+    import_errors = _module_errors()
 
     plugin = _codex_plugin_status()
     project_hooks = _project_hook_config(root)
     hook_trusted = _trusted_claudescientist_hooks()
     hook_configured = project_hooks or bool(plugin.get("enabled"))
     intervention_ok = hook_configured and hook_trusted
+    install_root = installation_root().resolve()
+    database_in_installation = database.is_relative_to(install_root)
+    misplaced_database = database_in_installation and root != install_root
 
     checks = {
         "workspace": {
@@ -148,9 +256,17 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
             "writable": os.access(root, os.W_OK) if root.exists() else False,
         },
         "state_database": {
-            "status": "ok",
+            "status": "error" if misplaced_database else "ok",
             "path": str(database),
             "exists": database.is_file(),
+            "installation_root": str(install_root),
+            "inside_installation_root": database_in_installation,
+            "misplaced": misplaced_database,
+        },
+        "python_package": {
+            "status": "ok",
+            "version": __version__,
+            "installation_root": str(install_root),
         },
         "core_imports": {
             "status": "ok" if not import_errors else "error",
@@ -177,6 +293,7 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
             "status": "ok" if not import_errors else "error",
             "database": str(database),
         },
+        **_optional_runtime_checks(root),
     }
     statuses = {check["status"] for check in checks.values()}
     overall = "error" if "error" in statuses else ("degraded" if "degraded" in statuses else "ok")

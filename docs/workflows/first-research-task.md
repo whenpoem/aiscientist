@@ -156,13 +156,18 @@ Look at the leaderboard one more time:
 mcp__memory__get_bt_leaderboard
 ```
 
-Identify hypotheses whose UCB is well below zero. Suggest pausing them:
+Identify hypotheses whose approximate probability of being best is very low.
+Suggest pausing them:
 
 ```
-mcp__memory__suggest_pause_low_strength ucb_threshold=-0.5
+mcp__memory__suggest_pause_low_probability max_probability_best=0.05
 ```
 
-By default this **only emits suggestions** — it does not actually pause anything. If you have set `RESEARCH_AGENT_AUTO_PRUNE=1`, the suggested branches are paused immediately. Either way, you can reverse with `resume_branch(node_id, reason)`.
+By default this **only emits suggestions** — it does not actually pause
+anything. If you have set `RESEARCH_AGENT_AUTO_PRUNE=1`, this probability-based
+entry point pauses the suggested branches. The probabilities are approximate
+and uncalibrated, and every pause remains reversible with
+`resume_branch(node_id, reason)`.
 
 ## 9. Hand off to writeup
 

@@ -12,11 +12,13 @@ from .db import bootstrap as bootstrap
 
 # ruff: noqa: F401  (every import below is an intentional re-export)
 from .tools.bt import (
+    compare_bt_candidates,
     expected_information_gain,
     get_bt_leaderboard,
     judge_hypotheses,
     record_judgement,
     resume_branch,
+    suggest_pause_low_probability,
     suggest_pause_low_strength,
     update_bt_rating,
 )
@@ -50,7 +52,9 @@ TOOL_NAMES = [
     "find_baselines_for",
     "update_bt_rating",
     "get_bt_leaderboard",
+    "compare_bt_candidates",
     "suggest_pause_low_strength",
+    "suggest_pause_low_probability",
     "resume_branch",
     "expected_information_gain",
     "record_calibration",
