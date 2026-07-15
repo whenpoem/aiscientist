@@ -138,15 +138,39 @@ def _project_mcp_enabled(root: Path, server_name: str) -> bool:
     return bool(server.get("enabled", True))
 
 
+def _plugin_mcp_enabled(server_name: str) -> bool:
+    """Read user overrides for ClaudeScientist's plugin-provided MCPs."""
+    config = _read_toml(codex_home() / "config.toml")
+    plugins = config.get("plugins", {})
+    if not isinstance(plugins, dict):
+        return False
+    for plugin_id, plugin in plugins.items():
+        if not str(plugin_id).lower().startswith("claudescientist@"):
+            continue
+        if not isinstance(plugin, dict):
+            continue
+        servers = plugin.get("mcp_servers", {})
+        if not isinstance(servers, dict):
+            continue
+        server = servers.get(server_name)
+        if isinstance(server, dict) and bool(server.get("enabled", True)):
+            return True
+    return False
+
+
+def _mcp_enabled(root: Path, server_name: str) -> bool:
+    return _project_mcp_enabled(root, server_name) or _plugin_mcp_enabled(server_name)
+
+
 def _optional_runtime_checks(root: Path) -> dict[str, dict[str, Any]]:
     node_path = shutil.which("node")
     npm_path = shutil.which("npm") or shutil.which("npm.cmd")
     npx_path = shutil.which("npx") or shutil.which("npx.cmd")
     uv_path = shutil.which("uv") or shutil.which("uv.exe")
 
-    arxiv_enabled = _project_mcp_enabled(root, "arxiv")
-    openalex_enabled = _project_mcp_enabled(root, "openalex")
-    lean_enabled = _project_mcp_enabled(root, "lean")
+    arxiv_enabled = _mcp_enabled(root, "arxiv")
+    openalex_enabled = _mcp_enabled(root, "openalex")
+    lean_enabled = _mcp_enabled(root, "lean")
 
     lean_tools = {
         name: shutil.which(name)

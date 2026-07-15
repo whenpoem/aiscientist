@@ -42,13 +42,28 @@ def test_public_marketplace_points_to_repository_root_plugin() -> None:
     }
 
 
-def test_plugin_enables_only_version_pinned_core_mcps() -> None:
+def test_plugin_enables_core_mcps_and_bundles_disabled_literature_mcps() -> None:
     config = json.loads((ROOT / ".mcp.json").read_text())["mcpServers"]
-    assert set(config) == {"memory", "verify", "prove", "cockpit"}
-    for name, server in config.items():
+    core_names = {"memory", "verify", "prove", "cockpit"}
+    assert set(config) == {*core_names, "arxiv", "openalex"}
+    for name in core_names:
+        server = config[name]
         assert server["command"] == "uv"
         assert "claudescientist==5.1.1" in server["args"]
         assert server["args"][-2:] == ["mcp", name]
+        assert server.get("enabled", True) is True
+
+    arxiv = config["arxiv"]
+    assert arxiv["command"] == "uv"
+    assert arxiv["args"] == ["tool", "run", "arxiv-mcp-server==0.5.0"]
+    assert arxiv["enabled"] is False
+    assert arxiv["required"] is False
+
+    openalex = config["openalex"]
+    assert openalex["command"] == "npx"
+    assert openalex["args"] == ["-y", "openalex-research-mcp@0.5.0"]
+    assert openalex["enabled"] is False
+    assert openalex["required"] is False
 
 
 def test_plugin_hooks_are_version_pinned_and_include_intervention_bridge() -> None:

@@ -569,12 +569,14 @@ Write an `agent_narration` event. `text` is 1–500 characters after stripping w
 
 ## External MCPs
 
-These are installed as third-party packages; we do not own their schemas. They are listed here for completeness.
+These run as third-party packages; we do not own their schemas. The current
+development plugin bundles both definitions in the disabled state; they become
+available to public installs with the next tagged release.
 
 | Server | Source | Use |
 |---|---|---|
-| `arxiv` | `arxiv-mcp-server==0.5.0` | Optional search and fetch for arXiv papers |
-| `openalex` | `openalex-research-mcp@0.5.0` (npx) | Optional search and fetch for OpenAlex works |
+| `arxiv` | `arxiv-mcp-server==0.5.0` | Plugin-bundled, disabled by default; search and fetch arXiv papers |
+| `openalex` | `openalex-research-mcp@0.5.0` (npx) | Plugin-bundled, disabled by default; search and fetch OpenAlex works |
 
 ---
 

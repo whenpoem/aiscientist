@@ -111,6 +111,24 @@ def test_doctor_hook_trust_honours_codex_home(tmp_path, monkeypatch):
     assert doctor._trusted_claudescientist_hooks() is True  # noqa: SLF001
 
 
+def test_doctor_reads_plugin_mcp_enable_overrides(tmp_path, monkeypatch):
+    codex_home = tmp_path / "isolated-codex"
+    codex_home.mkdir()
+    (codex_home / "config.toml").write_text(
+        """
+[plugins."claudescientist@claudescientist".mcp_servers.arxiv]
+enabled = true
+[plugins."claudescientist@claudescientist".mcp_servers.openalex]
+enabled = false
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    assert doctor._plugin_mcp_enabled("arxiv") is True  # noqa: SLF001
+    assert doctor._plugin_mcp_enabled("openalex") is False  # noqa: SLF001
+
+
 def test_doctor_reports_optional_runtime_readiness(tmp_path, monkeypatch):
     workspace = tmp_path / "research-project"
     config = workspace / ".codex" / "config.toml"

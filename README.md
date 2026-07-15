@@ -85,8 +85,12 @@ uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . 
 ```
 
 Each project keeps independent state in its own `.research-agent/state.db`.
-The public plugin enables only the four local core MCPs (`memory`, `verify`,
-`prove`, `cockpit`). arXiv, OpenAlex, and Lean remain explicit opt-ins.
+The plugin enables only the four local core MCPs (`memory`, `verify`, `prove`,
+`cockpit`) by default. The current development branch also bundles
+version-pinned arXiv and OpenAlex MCP definitions in the disabled state, so the
+next tagged plugin release will let users enable either source from Codex MCP
+settings without adding a server by hand. The already-published v5.1.1 plugin
+does not contain those two entries. Lean remains a separate explicit opt-in.
 
 ### Develop from this checkout
 
@@ -110,7 +114,9 @@ generates `.codex/config.toml`, `.codex/agents/*.toml`, and repo skills under
 Literature search uses two external MCPs. arXiv is launched through
 `uv tool run arxiv-mcp-server==0.5.0`; OpenAlex is launched through
 `npx -y openalex-research-mcp@0.5.0`, so install Node.js/npm if you want the
-OpenAlex-backed librarian tools.
+OpenAlex-backed librarian tools. The current development plugin carries both
+definitions but keeps them disabled until selected; see
+[docs/setup-codex-plugin.md](docs/setup-codex-plugin.md#optional-literature-integrations).
 
 <details><summary>Manual setup (without the wizard)</summary>
 

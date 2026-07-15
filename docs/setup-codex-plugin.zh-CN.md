@@ -1,7 +1,8 @@
 # Codex 插件安装
 
-公开插件是 Codex CLI 与 Codex 桌面端的可移植安装方式。它打包四个本地 MCP、
-七个 Skills、hooks 和 Cockpit 接入；研究状态仍保存在当前项目中。
+公开插件是 Codex CLI 与 Codex 桌面端的可移植安装方式。当前开发分支中的下一版插件
+定义打包四个默认启用的本地 MCP、两个默认关闭的文献 MCP 定义、七个 Skills、hooks
+和 Cockpit 接入；研究状态仍保存在当前项目中。
 
 ## 安装
 
@@ -44,16 +45,34 @@ uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . 
 插件与 Cockpit 会解析到同一个工作区数据库。公开安装插件不会公开研究数据，也
 不会启动 Web 服务。
 
-## 可选集成
+## 可选文献集成
 
-公开插件默认只启用 `memory`、`verify`、`prove`、`cockpit`：
+插件默认只启用 `memory`、`verify`、`prove`、`cockpit`。当前开发分支同时提供已固定
+版本、默认关闭的 `arxiv` 和 `openalex` MCP。下一次带标签的插件发布后，可以在
+**设置 > MCP 服务器** 中开启其中任意一个，然后新建 Codex 任务。已经发布的 v5.1.1
+插件尚不包含这两项；在下一版发布前，v5.1.1 用户可以使用兼容命令：
 
 ```powershell
 codex mcp add arxiv -- uv tool run arxiv-mcp-server==0.5.0
 codex mcp add openalex -- npx -y openalex-research-mcp@0.5.0
 ```
 
-Lean 需要按 [setup-lean.zh-CN.md](setup-lean.zh-CN.md) 安装工具链。外部 MCP
+对于下一版公开安装的 `claudescientist@claudescientist`，等价的
+`~/.codex/config.toml` 用户配置是：
+
+```toml
+[plugins."claudescientist@claudescientist".mcp_servers.arxiv]
+enabled = true
+
+[plugins."claudescientist@claudescientist".mcp_servers.openalex]
+enabled = true
+```
+
+arXiv 需要 `uv`，首次使用会下载 `arxiv-mcp-server==0.5.0`。OpenAlex 需要
+Node.js/npm，并通过 `npx` 启动 `openalex-research-mcp@0.5.0`。如果缺少对应启动器，
+应保持该服务器关闭。Doctor 会同时读取项目级 MCP 和这些插件开关来报告就绪状态。
+
+Lean 仍需要按 [setup-lean.zh-CN.md](setup-lean.zh-CN.md) 单独安装工具链。外部 MCP
 锁定版本，避免同一 ClaudeScientist 版本随时间静默改变行为。
 
 ## 项目本地兼容模式

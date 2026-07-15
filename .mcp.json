@@ -19,6 +19,20 @@
     "command": "uv",
     "args": ["tool", "run", "--from", "claudescientist==5.1.1", "claudescientist", "mcp", "cockpit"],
     "startup_timeout_sec": 30
+  },
+  "arxiv": {
+    "command": "uv",
+    "args": ["tool", "run", "arxiv-mcp-server==0.5.0"],
+    "startup_timeout_sec": 60,
+    "enabled": false,
+    "required": false
+  },
+  "openalex": {
+    "command": "npx",
+    "args": ["-y", "openalex-research-mcp@0.5.0"],
+    "startup_timeout_sec": 60,
+    "enabled": false,
+    "required": false
   }
   }
 }

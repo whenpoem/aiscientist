@@ -1,8 +1,10 @@
 # Codex plugin setup
 
 The public plugin is the portable installation path for Codex CLI and the Codex
-desktop app. It bundles ClaudeScientist's four local MCP servers, seven Skills,
-hooks, and Cockpit integration. Research state stays in the active project.
+desktop app. The next plugin definition on this development branch bundles four
+enabled local MCP servers, two disabled literature MCP definitions, seven
+Skills, hooks, and Cockpit integration. Research state stays in the active
+project.
 
 ## Install
 
@@ -50,17 +52,40 @@ uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . 
 The plugin and Cockpit resolve the same workspace database. Installing the
 plugin publicly does not publish research state or start a web service.
 
-## Optional integrations
+## Optional literature integrations
 
-The public plugin enables only `memory`, `verify`, `prove`, and `cockpit`.
+The plugin enables only `memory`, `verify`, `prove`, and `cockpit` by default.
+The current development branch also provides `arxiv` and `openalex` as
+disabled, version-pinned MCP servers. After the next tagged release, enable
+either server from **Settings > MCP servers**, then start a new Codex task.
+The already-published v5.1.1 plugin does not contain these entries; until the
+next release, v5.1.1 users can use the compatibility commands below:
 
 ```powershell
 codex mcp add arxiv -- uv tool run arxiv-mcp-server==0.5.0
 codex mcp add openalex -- npx -y openalex-research-mcp@0.5.0
 ```
 
-Lean requires the steps in [setup-lean.md](setup-lean.md). External MCPs are
-version-pinned so a ClaudeScientist release does not silently change behavior.
+For the next public `claudescientist@claudescientist` installation, the
+equivalent user configuration in `~/.codex/config.toml` is:
+
+```toml
+[plugins."claudescientist@claudescientist".mcp_servers.arxiv]
+enabled = true
+
+[plugins."claudescientist@claudescientist".mcp_servers.openalex]
+enabled = true
+```
+
+arXiv needs `uv` and downloads `arxiv-mcp-server==0.5.0` on first use.
+OpenAlex needs Node.js/npm and launches
+`openalex-research-mcp@0.5.0` through `npx`. Keep a server disabled if its
+launcher is unavailable. Doctor reads both project-local MCPs and these plugin
+overrides when reporting readiness.
+
+Lean requires the separate steps in [setup-lean.md](setup-lean.md). External
+MCPs are version-pinned so a ClaudeScientist release does not silently change
+behavior.
 
 ## Project-local compatibility mode
 

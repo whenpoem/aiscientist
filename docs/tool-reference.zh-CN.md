@@ -554,12 +554,13 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ## 外部 MCP
 
-下列服务器以第三方包的形式安装，我们不拥有它们的 schema。在这里列出仅为完整性。
+下列服务器以第三方包的形式运行，我们不拥有它们的 schema。当前开发分支的插件已
+携带这两个定义，但默认关闭；它们会随下一次带标签的版本进入公开安装。
 
 | 服务器 | 来源 | 用途 |
 |---|---|---|
-| `arxiv` | `arxiv-mcp-server==0.5.0` | 可选：搜索和拉取 arXiv 论文 |
-| `openalex` | `openalex-research-mcp@0.5.0`（npx） | 可选：搜索和拉取 OpenAlex 文献 |
+| `arxiv` | `arxiv-mcp-server==0.5.0` | 插件已携带、默认关闭；搜索和拉取 arXiv 论文 |
+| `openalex` | `openalex-research-mcp@0.5.0`（npx） | 插件已携带、默认关闭；搜索和拉取 OpenAlex 文献 |
 
 ---
 

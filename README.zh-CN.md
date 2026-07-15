@@ -74,8 +74,11 @@ uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
 uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
 ```
 
-每个项目都使用自己的 `.research-agent/state.db`。公开插件默认只启用 `memory`、
-`verify`、`prove`、`cockpit` 四个本地核心 MCP；arXiv、OpenAlex、Lean 均为显式可选。
+每个项目都使用自己的 `.research-agent/state.db`。插件默认只启用 `memory`、
+`verify`、`prove`、`cockpit` 四个本地核心 MCP。当前开发分支同时携带已固定版本、
+默认关闭的 arXiv 和 OpenAlex MCP 定义；下一次带标签的插件发布后，用户可以直接在
+Codex 的 MCP 设置中开启，不必手工新增服务器。已经发布的 v5.1.1 插件尚不包含这两项。
+Lean 仍为单独的显式可选项。
 
 ### 从源码仓库开发
 
@@ -95,7 +98,9 @@ uv run python -m claudescientist.setup
 
 文献检索依赖两个外部 MCP。arXiv 通过 `uv tool run arxiv-mcp-server==0.5.0`
 启动；OpenAlex 通过 `npx -y openalex-research-mcp@0.5.0` 启动，所以如果要用
-OpenAlex 相关 librarian 工具，需要先安装 Node.js/npm。
+OpenAlex 相关 librarian 工具，需要先安装 Node.js/npm。当前开发分支的插件已携带
+这两个定义，但默认保持关闭；启用方法见
+[docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md#可选文献集成)。
 
 <details><summary>手动安装（不用向导）</summary>
 
