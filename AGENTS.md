@@ -89,15 +89,17 @@ Do not assume a PR exists unless you verify it. Do not force-push the branch unl
 
 This repository has shipped the v3.0 plan ([`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)). Do not casually rename that to "V1.0 complete" or "production-ready" without verifying the remaining product and operations expectations yourself.
 
-**v5.1.1 is the current version.** It fixes the public marketplace so the
-plugin source is pinned to the same release tag. The v5.1 line adds order-invariant full-ledger BT MAP
+**v5.1.2 is the current version.** It retains the public marketplace source-pin
+fix and bundles opt-in arXiv and OpenAlex MCP definitions in the public plugin.
+The v5.1 line adds order-invariant full-ledger BT MAP
 refits with explicitly uncalibrated intervals, fixed preregistration families,
 automatic code/Git/runtime manifests, protection-strength labels, installation
 root versus workspace root separation, a portable public Codex plugin, the
 `claudescientist` CLI/doctor, and expanded core Skills. The public plugin keeps
 Cockpit monitoring and intervention; intervention is monitor-only until Codex
-trusts its hooks. Core MCPs are enabled by default; arXiv, OpenAlex, and Lean are
-opt-in. v5.0's activity-streaming Cockpit remains the current UI architecture;
+trusts its hooks. Core MCPs are enabled by default; bundled arXiv and OpenAlex
+definitions and the separate Lean integration are opt-in. v5.0's
+activity-streaming Cockpit remains the current UI architecture;
 see [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md).
 
 **v4.2.0 was the prior version.** v4.2 landed across four alphas: a0 added multi-provider support to the vector backend and polished the setup wizard; a1 refitted the cockpit's information architecture (tab grouping, collapsible detail sections, pane-scoped keys); a2 added reports infrastructure (`cockpit.export` module with five report kinds × two formats, Reports tab, ExportModal, `verify_mcp.export_report` tool); a3 added a cold-start Welcome screen. Dense content (closure certificates, full drafts, diagnostic manifests, portfolio comparisons, cascade traces) is exported as markdown / HTML files under `reports/` per [ADR 0009](docs/adr/0009-reports-as-files-monitoring-as-tui.md). The vector backend accepts any OpenAI-compatible endpoint via `RESEARCH_AGENT_EMBED_BASE_URL` (DashScope / Jina / Voyage / GLM tested) per [ADR 0010](docs/adr/0010-multi-provider-embeddings.md); the default local model is `Qwen/Qwen3-Embedding-0.6B`; corpus rows carry a `(backend, model, dim)` triple. The proof trunk shipped in v4.0: `prove_mcp` MCP server, `prove-sop` skill, `prover` agent definition, cold-start seed scripts in `scripts/`, and the reviewer dual checklist. Lean reinsurance remains opt-in: `_lean` in `.claude/settings.json` is disabled until the user manually installs elan + mathlib + lean-lsp-mcp per [`docs/setup-lean.md`](docs/setup-lean.md). See [ADR 0008](docs/adr/0008-two-trunk-domain-architecture.md) for the two-trunk architecture, [ADR 0007](docs/adr/0007-tools-skills-hooks-layering.md) for the layering doctrine, and [architecture.md §13](docs/architecture.md#13-core-vs-domain-trunks-v40) for the core/trunk split.

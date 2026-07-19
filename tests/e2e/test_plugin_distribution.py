@@ -15,7 +15,7 @@ def test_plugin_manifest_and_python_package_versions_match() -> None:
     manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text())
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert manifest["name"] == project["project"]["name"] == "claudescientist"
-    assert manifest["version"] == project["project"]["version"] == "5.1.1"
+    assert manifest["version"] == project["project"]["version"] == "5.1.2"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert (ROOT / "hooks" / "hooks.json").is_file()
@@ -49,7 +49,7 @@ def test_plugin_enables_core_mcps_and_bundles_disabled_literature_mcps() -> None
     for name in core_names:
         server = config[name]
         assert server["command"] == "uv"
-        assert "claudescientist==5.1.1" in server["args"]
+        assert "claudescientist==5.1.2" in server["args"]
         assert server["args"][-2:] == ["mcp", name]
         assert server.get("enabled", True) is True
 
@@ -75,7 +75,7 @@ def test_plugin_hooks_are_version_pinned_and_include_intervention_bridge() -> No
         for hook in group["hooks"]
     ]
     assert commands
-    assert all("claudescientist==5.1.1" in command for command in commands)
+    assert all("claudescientist==5.1.2" in command for command in commands)
     assert any("intervention_pump" in command for command in commands)
 
 

@@ -2,22 +2,22 @@
   "mcpServers": {
   "memory": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.1", "claudescientist", "mcp", "memory"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.2", "claudescientist", "mcp", "memory"],
     "startup_timeout_sec": 30
   },
   "verify": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.1", "claudescientist", "mcp", "verify"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.2", "claudescientist", "mcp", "verify"],
     "startup_timeout_sec": 30
   },
   "prove": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.1", "claudescientist", "mcp", "prove"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.2", "claudescientist", "mcp", "prove"],
     "startup_timeout_sec": 30
   },
   "cockpit": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.1", "claudescientist", "mcp", "cockpit"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.2", "claudescientist", "mcp", "cockpit"],
     "startup_timeout_sec": 30
   },
   "arxiv": {

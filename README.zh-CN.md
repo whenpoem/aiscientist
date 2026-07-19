@@ -2,7 +2,7 @@
 
 **A research co-pilot that remembers, verifies, and lets you steer.**
 
-[![version](https://img.shields.io/badge/version-v5.1.1-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.2-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > English version: [README.md](README.md)
 
@@ -10,7 +10,7 @@ ClaudeScientist 给 Claude Code 或 Codex 装上了 AI 科研系统普遍缺少�
 
 你丢给 agent 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
 
-**当前版本**：v5.1.1 修正了 v5.1 公开插件的源码标签固定问题；v5.1 是一次可信性校准与可移植性升级。BT 排名改为从完整
+**当前版本**：v5.1.2 在 v5.1.1 源码标签固定修复的基础上，把默认关闭的 arXiv 和 OpenAlex MCP 定义正式加入公开插件；v5.1 是一次可信性校准与可移植性升级。BT 排名改为从完整
 比较账本联合拟合，不再依赖写入顺序；区间明确标记为未经校准的近似。Bonferroni
 family 在锁定时固定。核心运行会自动记录代码、输入、Git 状态、依赖、种子和运行
 环境。公开 Codex 插件把核心 MCP、Skills、hooks 和本地 Cockpit 打包在一起，
@@ -57,10 +57,10 @@ family 在锁定时固定。核心运行会自动记录代码、输入、Git 状
 插件可以在任意研究项目中使用，不需要从 ClaudeScientist 源码仓库启动 Codex。
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
+uv tool run --from claudescientist==5.1.2 claudescientist setup --scope user
 ```
 
-这条命令会安装与 Python 包版本一致的 `v5.1.1` Git 标签，并让插件源码固定在同一标签。公开命令
+这条命令会安装与 Python 包版本一致的 `v5.1.2` Git 标签，并让插件源码固定在同一标签。公开命令
 生效前，Python 包和 Git 标签必须都已正式发布；只在源码仓库中验证通过不能代替发布。
 等价的手动命令见 [docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md)。
 
@@ -70,15 +70,14 @@ uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
 在要研究的项目目录运行：
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
-uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
+uv tool run --from claudescientist==5.1.2 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace . --lang zh
 ```
 
 每个项目都使用自己的 `.research-agent/state.db`。插件默认只启用 `memory`、
-`verify`、`prove`、`cockpit` 四个本地核心 MCP。当前开发分支同时携带已固定版本、
-默认关闭的 arXiv 和 OpenAlex MCP 定义；下一次带标签的插件发布后，用户可以直接在
-Codex 的 MCP 设置中开启，不必手工新增服务器。已经发布的 v5.1.1 插件尚不包含这两项。
-Lean 仍为单独的显式可选项。
+`verify`、`prove`、`cockpit` 四个本地核心 MCP。v5.1.2 同时携带已固定版本、
+默认关闭的 arXiv 和 OpenAlex MCP 定义；用户可以直接在 Codex 的 MCP 设置中开启，
+不必手工新增服务器。Lean 仍为单独的显式可选项。
 
 ### 从源码仓库开发
 

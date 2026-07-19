@@ -1,7 +1,7 @@
 # Codex plugin setup
 
 The public plugin is the portable installation path for Codex CLI and the Codex
-desktop app. The next plugin definition on this development branch bundles four
+desktop app. v5.1.2 bundles four
 enabled local MCP servers, two disabled literature MCP definitions, seven
 Skills, hooks, and Cockpit integration. Research state stays in the active
 project.
@@ -9,19 +9,19 @@ project.
 ## Install
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
+uv tool run --from claudescientist==5.1.2 claudescientist setup --scope user
 ```
 
 Equivalent manual commands:
 
 ```powershell
-codex plugin marketplace add whenpoem/aiscientist --ref v5.1.1
+codex plugin marketplace add whenpoem/aiscientist --ref v5.1.2
 codex plugin add claudescientist@claudescientist
 ```
 
 The public installation has two matching release artifacts: the
-`claudescientist==5.1.1` Python package that runs the local MCPs and hooks, and
-the `v5.1.1` Git tag that distributes the plugin. Both must exist before a new
+`claudescientist==5.1.2` Python package that runs the local MCPs and hooks, and
+the `v5.1.2` Git tag that distributes the plugin. Both must exist before a new
 user can install this release. During source development, pass a local
 marketplace path with `--marketplace-source`; the setup command deliberately
 omits Git-only `--ref` handling for local paths.
@@ -33,7 +33,7 @@ to enable Cockpit intervention delivery and lifecycle protections.
 ## Verify from any project
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.2 claudescientist doctor --workspace .
 ```
 
 Doctor reports plugin state, core imports, the workspace and database path,
@@ -45,8 +45,8 @@ enter the next Codex turn until the hooks are trusted.
 ## Open Cockpit
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace .
-uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
+uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace .
+uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace . --lang zh
 ```
 
 The plugin and Cockpit resolve the same workspace database. Installing the
@@ -55,19 +55,9 @@ plugin publicly does not publish research state or start a web service.
 ## Optional literature integrations
 
 The plugin enables only `memory`, `verify`, `prove`, and `cockpit` by default.
-The current development branch also provides `arxiv` and `openalex` as
-disabled, version-pinned MCP servers. After the next tagged release, enable
-either server from **Settings > MCP servers**, then start a new Codex task.
-The already-published v5.1.1 plugin does not contain these entries; until the
-next release, v5.1.1 users can use the compatibility commands below:
-
-```powershell
-codex mcp add arxiv -- uv tool run arxiv-mcp-server==0.5.0
-codex mcp add openalex -- npx -y openalex-research-mcp@0.5.0
-```
-
-For the next public `claudescientist@claudescientist` installation, the
-equivalent user configuration in `~/.codex/config.toml` is:
+v5.1.2 also provides `arxiv` and `openalex` as disabled, version-pinned MCP
+servers. Enable either server from **Settings > MCP servers**, then start a new
+Codex task. The equivalent user configuration in `~/.codex/config.toml` is:
 
 ```toml
 [plugins."claudescientist@claudescientist".mcp_servers.arxiv]

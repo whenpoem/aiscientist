@@ -1,4 +1,4 @@
-# MCP Tool Reference (v5.1.1)
+# MCP Tool Reference (v5.1.2)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -569,9 +569,8 @@ Write an `agent_narration` event. `text` is 1–500 characters after stripping w
 
 ## External MCPs
 
-These run as third-party packages; we do not own their schemas. The current
-development plugin bundles both definitions in the disabled state; they become
-available to public installs with the next tagged release.
+These run as third-party packages; we do not own their schemas. The v5.1.2
+public plugin bundles both definitions in the disabled state.
 
 | Server | Source | Use |
 |---|---|---|

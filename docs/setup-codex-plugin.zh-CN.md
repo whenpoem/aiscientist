@@ -1,24 +1,24 @@
 # Codex 插件安装
 
-公开插件是 Codex CLI 与 Codex 桌面端的可移植安装方式。当前开发分支中的下一版插件
+公开插件是 Codex CLI 与 Codex 桌面端的可移植安装方式。v5.1.2 插件
 定义打包四个默认启用的本地 MCP、两个默认关闭的文献 MCP 定义、七个 Skills、hooks
 和 Cockpit 接入；研究状态仍保存在当前项目中。
 
 ## 安装
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist setup --scope user
+uv tool run --from claudescientist==5.1.2 claudescientist setup --scope user
 ```
 
 等价的手动命令是：
 
 ```powershell
-codex plugin marketplace add whenpoem/aiscientist --ref v5.1.1
+codex plugin marketplace add whenpoem/aiscientist --ref v5.1.2
 codex plugin add claudescientist@claudescientist
 ```
 
 公开安装依赖两个版本一致的发布物：运行本地 MCP 与 hooks 的
-`claudescientist==5.1.1` Python 包，以及分发插件的 `v5.1.1` Git 标签。新用户安装
+`claudescientist==5.1.2` Python 包，以及分发插件的 `v5.1.2` Git 标签。新用户安装
 之前，两者都必须已经发布。源码开发时可以通过 `--marketplace-source` 传入本地
 marketplace 路径；setup 会为本地路径自动省略只适用于 Git 的 `--ref` 参数。
 
@@ -28,7 +28,7 @@ Cockpit 干预交付和生命周期保护。
 ## 在任意项目中检查
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist doctor --workspace .
+uv tool run --from claudescientist==5.1.2 claudescientist doctor --workspace .
 ```
 
 Doctor 会分别报告插件状态、核心模块、工作区与数据库路径、Cockpit 监控、hooks
@@ -38,8 +38,8 @@ Doctor 会分别报告插件状态、核心模块、工作区与数据库路径�
 ## 打开 Cockpit
 
 ```powershell
-uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace .
-uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . --lang zh
+uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace .
+uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace . --lang zh
 ```
 
 插件与 Cockpit 会解析到同一个工作区数据库。公开安装插件不会公开研究数据，也
@@ -47,18 +47,9 @@ uv tool run --from claudescientist==5.1.1 claudescientist cockpit --workspace . 
 
 ## 可选文献集成
 
-插件默认只启用 `memory`、`verify`、`prove`、`cockpit`。当前开发分支同时提供已固定
-版本、默认关闭的 `arxiv` 和 `openalex` MCP。下一次带标签的插件发布后，可以在
-**设置 > MCP 服务器** 中开启其中任意一个，然后新建 Codex 任务。已经发布的 v5.1.1
-插件尚不包含这两项；在下一版发布前，v5.1.1 用户可以使用兼容命令：
-
-```powershell
-codex mcp add arxiv -- uv tool run arxiv-mcp-server==0.5.0
-codex mcp add openalex -- npx -y openalex-research-mcp@0.5.0
-```
-
-对于下一版公开安装的 `claudescientist@claudescientist`，等价的
-`~/.codex/config.toml` 用户配置是：
+插件默认只启用 `memory`、`verify`、`prove`、`cockpit`。v5.1.2 同时提供已固定
+版本、默认关闭的 `arxiv` 和 `openalex` MCP。可以在 **设置 > MCP 服务器** 中开启
+其中任意一个，然后新建 Codex 任务。等价的 `~/.codex/config.toml` 用户配置是：
 
 ```toml
 [plugins."claudescientist@claudescientist".mcp_servers.arxiv]

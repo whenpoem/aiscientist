@@ -19,7 +19,7 @@ DEFAULT_DB_NAME = "state.db"
 HELDOUT_DIR_ENV = "RESEARCH_AGENT_HELDOUT_DIR"
 CLAUDE_PROJECT_DIR_ENV = "CLAUDE_PROJECT_DIR"
 # ``RESEARCH_AGENT_WORKSPACE_ROOT`` is the documented v5.1 name. Keep the
-# shorter spelling as a compatibility alias for v5.1.0/5.1.1 callers.
+# shorter spelling as a compatibility alias for v5.1 callers.
 RESEARCH_AGENT_WORKSPACE_ROOT_ENV = "RESEARCH_AGENT_WORKSPACE_ROOT"
 RESEARCH_AGENT_WORKSPACE_ENV = "RESEARCH_AGENT_WORKSPACE"
 MIGRATION_SCHEMA = """
