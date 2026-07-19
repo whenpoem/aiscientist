@@ -1,11 +1,12 @@
 # ClaudeScientist 系统总览
 
 > English version: [overview.md](overview.md)
-> 五分钟建立完整心智模型。读完之后再去看 [architecture.zh-CN.md](architecture.zh-CN.md) 或 [tool-reference.zh-CN.md](tool-reference.zh-CN.md) 会顺畅很多。
+> 简要说明系统包含哪些组件、保存哪些数据，以及研究流程如何运行。建议在阅读 [architecture.zh-CN.md](architecture.zh-CN.md) 和 [tool-reference.zh-CN.md](tool-reference.zh-CN.md) 之前先看本文。
 
 ## 1. 一句话定位
 
-ClaudeScientist 是**给 Claude Code 或 Codex 加装的一层科研增强层**——让它具备持久记忆、可验证的实验结果、可干预的研究过程，以及实时的监控面板。
+ClaudeScientist 为 Claude Code 或 Codex 提供持久化研究记录、实验结果验证、用户
+干预和实时终端界面。
 
 AI 客户端负责对话、规划和工具调用；本项目在上面补四件事：**记忆（memory）、验证（verify）、统计证明生成（prove）、监控（cockpit）**。
 
@@ -31,7 +32,8 @@ AI 客户端负责对话、规划和工具调用；本项目在上面补四件�
         .research-agent/state.db   ← 一个 SQLite 文件
 ```
 
-**最关键的一点**：左右两个终端**不直接通信**，它们都是和中间那个 SQLite 文件对话。这是整个系统最重要的设计——所有模块通过共享一个数据库文件来协作，而不是通过网络。
+**最关键的一点**：左右两个终端**不直接通信**，而是读写同一个 SQLite 文件。
+各个模块通过这个本地数据库共享状态，不需要网络服务。
 
 ### 两个终端各自回答什么（v5.0）
 
@@ -45,19 +47,20 @@ AI 客户端负责对话、规划和工具调用；本项目在上面补四件�
 | 不显示什么 | 跨主干当前焦点、最近的拒绝/重定向干预 | Claude 具体的思考文本、文件 diff |
 | 你在这里做什么 | 回复 Claude，Ctrl-C 中断 | 拒绝 / 批准 / 写批注 / 排队干预 |
 | 存储 | AI 客户端自己的会话状态 | `.research-agent/state.db`（单个 SQLite） |
-| 用户姿态 | 对话伙伴 | 研究负责人——抬头监控 |
+| 用户操作 | 回复 Agent | 查看当前状态并提交干预 |
 
-简单说：终端 A 告诉你 AI 刚*做*了什么，终端 B 告诉你研究当前*是*什么状态。两者各有用处，互不重叠。
+终端 A 显示当前对话和工具调用，终端 B 汇总数据库中保存的研究状态。两者显示的
+信息不同。
 
 ## 3. 五个角色与它们的位置
 
-| 角色 | 在哪里 | 职责 | 类比 |
-|---|---|---|---|
-| **Claude Code / Codex** | 终端 A | 主指挥，理解你的需求，调用工具，写代码 | 项目经理 |
-| **MCP 服务器** | 后台子进程 | 给 Claude 提供"工具"——记忆、验证、文献检索 | 工具箱 |
-| **Hooks** | 由项目或插件挂载 | 在生命周期事件前后自动跑脚本，做安全闸和记账 | 安检门 |
-| **Cockpit TUI** | 终端 B | 实时显示状态，让你手动干预 | 监控大屏 |
-| **SQLite** | `.research-agent/state.db` | 存放一切：假说、证据、失败、评分、预注册、事件 | 共享黑板 |
+| 角色 | 在哪里 | 职责 |
+|---|---|---|
+| **Claude Code / Codex** | 终端 A | 读取用户要求、调用工具、编写代码并报告结果 |
+| **MCP 服务器** | 后台子进程 | 提供记忆、验证、证明、Cockpit 和可选文献工具 |
+| **Hooks** | 由项目或插件加载 | 在 Agent 生命周期的指定阶段执行检查并记录事件 |
+| **Cockpit TUI** | 终端 B | 显示已保存的研究状态，并接收用户干预 |
+| **SQLite** | `.research-agent/state.db` | 保存假说、证据、失败、评分、预注册和事件 |
 
 **MCP（Model Context Protocol）** 让 AI 调用外部工具。项目配置或 Codex 插件会
 启动 `memory_mcp`、`verify_mcp`、`prove_mcp`、`cockpit.mcp_server` 四个核心
@@ -131,7 +134,7 @@ sequenceDiagram
 只提供代码和 hooks，不会成为默认研究状态目录。memory、verify、cockpit、hooks
 各自拥有自己的表，跨模块通信通过 `cockpit_events` 完成。
 
-这样做的好处：
+这种设计有三个实际效果：
 - 备份整个系统状态只需要复制一个文件
 - 多个模块的操作写在同一个 SQL 事务里——要么全成功、要么全回滚
 - WAL 模式下，多个进程读写同一文件不会互相阻塞
@@ -144,7 +147,8 @@ sequenceDiagram
 2. **实验阶段**：预算门禁 → 安全检查 → 跑实验 → 多种子稳定性验证 → 公平性比较 → 溯源记录
 3. **写作阶段**：reviewer 审稿，对发布级核心数字核对 pin、稳定 seed、confirmatory 声明的 met 预注册、未漂移的 provenance；上下文数字和探索性结果要求清楚标注
 
-写作阶段的 reviewer 会拒绝无法回溯到相关证据锚点的发布级核心声明。这把硬门集中在用户真正会发表的结论上，同时保留探索笔记和运行上下文的可用性。
+写作阶段的 reviewer 会拒绝无法回溯到所需记录的发布级核心声明。探索笔记和运行
+上下文只要明确标注，仍然可以正常使用。
 
 ### 5.3 自动化只做可逆或可审计的事
 
@@ -154,7 +158,7 @@ sequenceDiagram
 - 反事实回放（`replay_counterfactual`）只写入独立的 `mem_replay_branches` 表，不污染主图
 - 预算消耗、held-out 查询、预注册解锁全部写入持久 ledger，留下审计痕迹
 
-## 6. 防数据泄漏的闭环路径
+## 6. Held-out 数据访问
 
 held-out 数据集（即测试集）受到双重保护：
 
@@ -186,9 +190,10 @@ Cockpit 干预会明确降级为 `monitor-only`，不会假装交付通道仍然
 - **不是多用户系统**。当前设计假定单用户单会话；多会话并发的乐观锁还在路线图上。
 - **还不能对外宣称 "production-ready"**。测试通过、ruff 干净，但生产就绪需要一次完整的端到端验证。
 
-## 8. 一句话心智模型
+## 8. 简要总结
 
-> **Claude 在前面跑，SQLite 在中间记账，Hooks 守着安全门，Cockpit 让你看着并能随时插话——所有模块的协作都通过那一个 .db 文件。**
+> **Claude Code 或 Codex 执行任务；MCP 和 hooks 读写项目数据库；Cockpit 显示
+> 已保存的状态并记录用户干预。**
 
 ## 9. 接下来读什么
 

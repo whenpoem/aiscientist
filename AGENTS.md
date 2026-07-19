@@ -89,8 +89,10 @@ Do not assume a PR exists unless you verify it. Do not force-push the branch unl
 
 This repository has shipped the v3.0 plan ([`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)). Do not casually rename that to "V1.0 complete" or "production-ready" without verifying the remaining product and operations expectations yourself.
 
-**v5.1.2 is the current version.** It retains the public marketplace source-pin
-fix and bundles opt-in arXiv and OpenAlex MCP definitions in the public plugin.
+**v5.1.3 is the current version.** It adds complete public-user documentation
+for installation, Cockpit, Doctor, optional literature MCPs, Lean, and the
+source-checkout setup wizard. It retains the public marketplace source-pin fix
+and bundles opt-in arXiv and OpenAlex MCP definitions in the public plugin.
 The v5.1 line adds order-invariant full-ledger BT MAP
 refits with explicitly uncalibrated intervals, fixed preregistration families,
 automatic code/Git/runtime manifests, protection-strength labels, installation

@@ -44,7 +44,7 @@ design and acceptance thresholds remain the substantive work.
 
 ---
 
-### Direction 2: Close the loop on meta-calibration
+### Direction 2: Use meta-calibration in decisions
 
 **Today**: The `meta_calibration` table records per-agent calibration data and can output reliability diagrams and Brier scores, but the data is display-only — it never feeds back into decisions.
 
@@ -54,7 +54,8 @@ design and acceptance thresholds remain the substantive work.
 weight *= 1 - calibration_error_at_bucket(judge_name, predicted_p)
 ```
 
-Well-calibrated judges keep full weight; poorly-calibrated ones get auto-downweighted.
+Judges with lower historical calibration error keep more weight; judges with
+higher error receive less weight.
 
 **Value**: Medium-high. Implements adaptive trust management for the system's own judgements. Multi-model collaboration scenarios (Sonnet for researcher, Opus for reviewer) get differentiated handling for free.
 
@@ -62,7 +63,7 @@ Well-calibrated judges keep full weight; poorly-calibrated ones get auto-downwei
 
 ---
 
-### Direction 3: Lineage-aware "genetic distance" propagation
+### Direction 3: Dependency-aware propagation between hypotheses
 
 **Today**: `suggest_pause_low_strength` evaluates each hypothesis's UCB independently. But the hypothesis graph is a tree — children share premises with their parents. When a parent is refuted, its descendants' priors should drop too.
 
@@ -138,7 +139,8 @@ could reduce noisy reruns after comment-only edits.
 - Hybrid ranking in `match_signatures`: `final = 0.6 * bm25_norm + 0.4 * cosine`
 - Periodic HDBSCAN clustering to auto-group similar failures
 
-**Value**: Medium-high. The failure ledger is "the part of the system that pays the most compound interest" — improving its recall translates directly to debugging time saved.
+**Value**: Medium-high. Better failure-record retrieval can reduce the time
+needed to diagnose repeated or closely related problems.
 
 **Complexity**: Medium. Adds a local embedding model dependency; the 0.6/0.4 weights need tuning.
 
@@ -146,18 +148,22 @@ could reduce noisy reruns after comment-only edits.
 
 ---
 
-### Direction 7: A "research rhythm" pane in the cockpit
+### Direction 7: Research activity trends in Cockpit
 
-**Today**: The Event Stream is a linear time series. Users can see "what happened" but cannot see at a glance "where the research is in its arc".
+**Today**: The Event Stream is a linear time series. Users can see individual
+events but do not get a compact summary of how activity changes over time.
 
-**Proposal**: Add a Rhythm Pane using Textual's built-in Sparkline widget to show several time series:
+**Proposal**: Add an activity-trends pane using Textual's built-in Sparkline
+widget to show several time series:
 
 - **Hypothesis production rate** (new hypotheses per hour) — exploration intensity
 - **Pruning rate** (refuted/paused per hour) — convergence trend
 - **Total BT uncertainty** (sum of `strength_var` across active hypotheses) — global confidence
 - **Budget consumption curves** (wallclock / token / sequestered queries as progress bars)
 
-Together they form an "EKG" of the research: at a glance you can tell whether you're in divergent exploration (high production, low pruning, high uncertainty) or convergent confirmation (low production, high pruning, rapidly dropping uncertainty).
+Together these series show whether current activity is closer to exploration
+(high hypothesis production and uncertainty) or confirmation (fewer new
+hypotheses and lower uncertainty).
 
 **Value**: Medium. Clear value for long-session users.
 
@@ -230,22 +236,31 @@ After extraction, the user manually confirms or rejects each candidate before it
 
 ## IV. Domain expansion (v4.0)
 
-### Direction 11: Proof trunk — NL primary path with Lean reinsurance
+### Direction 11: Proof domain — natural-language workflow with optional Lean verification
 
 **Today**: ClaudeScientist is a single-trunk system focused on ML empirical reproducibility. The `prover` agent has been a stub since v0.1 and Lean integration was previously listed under "do not pursue" (see superseded note at the bottom of this document).
 
-**Proposal**: Adopt a two-trunk architecture (formalised in [ADR 0008](adr/0008-two-trunk-domain-architecture.md)). The existing v3.0 surface becomes the **empirical trunk**; a new **proof trunk** is added in `src/prove_mcp/`. The proof trunk's primary path is StatProver-style: corpus retrieval (bidirectional max-matching, dual-keyword embeddings), draft generation, snippet segmentation, diagnosis against `mem_failures(domain='proof')`, delayed global correction. A Lean formalisation layer is bolted on as **reinsurance**, not as the main path: only propositions that pass `triage_for_formalization` are sent to the prover agent (now backed by `lean-lsp-mcp`); successful Lean verifications attach as strong evidence, failures feed back into the cross-domain failure ledger.
+**Proposal**: Adopt two domain sections, as formalised in [ADR 0008](adr/0008-two-trunk-domain-architecture.md). The existing v3.0 surface covers empirical work; `src/prove_mcp/` covers proof work. The proof workflow includes corpus retrieval, draft generation, snippet segmentation, diagnosis against `mem_failures(domain='proof')`, and correction. Lean is optional: only propositions that pass `triage_for_formalization` are sent to the prover agent through `lean-lsp-mcp`. Successful Lean verification is attached as formal evidence, and failed attempts are recorded in the cross-domain failure ledger.
 
-The two trunks share four cooperation interfaces (one tree, one failure ledger, one BT leaderboard, one reviewer with two checklists) and exactly four — see architecture.md §13.
+The two domain sections share four interfaces: the research graph, failure
+records, BT rankings, and one reviewer with two checklists. See architecture.md
+§13.
 
-**Value**: Very high. Statistical research projects mix theoretical and empirical work; bridging them under one toolchain is a real product-level differentiator. None of the current single-trunk competitors (StatProver, EvoScientist, AI Scientist v2) offer the cross-domain failure matching or the dual-checklist reviewer.
+**Value**: Very high. Statistical research projects often include both
+theoretical and empirical work. The listed alternatives (StatProver,
+EvoScientist, AI Scientist v2) do not provide both cross-domain failure
+matching and dual-checklist review.
 
-**Complexity**: High. ~10 weeks across six phases (P0 docs → P1 core domain-agnostic → P2 retrieval → P3 NL workflow → P4 Lean reinsurance → P5 cooperation surface). A new MCP server (`prove_mcp`) is added — the v3.0 default of "no new MCP server" is intentionally relaxed for this domain expansion.
+**Complexity**: High. About ten weeks across six phases (P0 documentation →
+P1 shared core → P2 retrieval → P3 natural-language workflow → P4 optional
+Lean verification → P5 shared interfaces). This domain expansion adds a new MCP
+server, `prove_mcp`.
 
 **Constraints**:
 - Layering doctrine ([ADR 0007](adr/0007-tools-skills-hooks-layering.md)) is binding from day one. New proof tools must remain atomic verbs; the StatProver pipeline lives in `prove-sop` skill markdown, not in code.
-- We will not match StatProver's 40k-corpus / 80k-error-repo scale. Our wedge is workflow integration, not retrieval quality.
-- Lean reinsurance is opt-in per proposition; we never gate the workflow on Lean success.
+- We will not match StatProver's 40k-corpus / 80k-error-repo scale. This project
+  prioritizes workflow integration over retrieval scale.
+- Lean verification is optional for each proposition; the natural-language workflow does not require Lean success.
 
 **Status**: alpha shipped in v4.0.0a0 (P0–P5 + Plan v2 cold-start data + Lean activation prep).
 
@@ -349,13 +364,10 @@ To avoid misinterpretation, here are directions I would not pursue:
 - **Support languages beyond English/Chinese**. No demand, and the
   i18n infrastructure can extend on demand.
 - ~~**Wire in Lean formal proofs**.~~ **Superseded by Direction 11
-  (v4.0)**: the proof trunk integrates Lean as a reinsurance layer
-  with NL as the primary path. The original objection (high cost,
-  narrow value) was correct in a single-trunk world; the two-trunk
-  architecture changes the calculus by sharing the existing
-  infrastructure (BT, calibration, provenance, replay, cockpit,
-  failure ledger) with the proof workflow at near-zero marginal
-  cost. See [ADR 0008](adr/0008-two-trunk-domain-architecture.md).
+  (v4.0)**: the proof workflow provides Lean as an optional verification step
+  and reuses the existing BT, calibration, provenance, replay, Cockpit, and
+  failure-record infrastructure. See
+  [ADR 0008](adr/0008-two-trunk-domain-architecture.md).
 
 ## Closing thought
 

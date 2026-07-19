@@ -83,8 +83,9 @@ Some things are deliberately not fixed here, because they are expected to evolve
 - **Cockpit pane layout.** The grid, modals, and keybindings can change as long as the data contract holds.
 - **Subagent prompts.** They can be revised freely, as long as the tool whitelist matches the role's contract (§4).
 - **External literature MCPs.** arXiv and OpenAlex are optional, version-pinned
-  integrations. We own only the `ingest_paper` compression layer in
-  `memory_mcp`; neither external server is bundled into the public plugin.
+  integrations. The public plugin includes their disabled launch definitions,
+  but downloads the third-party packages only when users enable them. We own
+  only the `ingest_paper` compression layer in `memory_mcp`.
 
 ### 6. How to break a contract
 
@@ -231,7 +232,9 @@ ClaudeScientist v4.0 separates the architecture into a **shared core** and **two
 
 #### What is in the shared core
 
-The core is everything that doesn't know whether the work in flight is empirical or theoretical. It's the moat — both trunks compound through it, and a single failure ledger across both is one of v4.0's real differentiators.
+The core contains code that does not depend on whether the current work is
+empirical or theoretical. Both domain sections use it, including one shared
+failure ledger.
 
 | Surface | Component | Why it is core |
 |---|---|---|

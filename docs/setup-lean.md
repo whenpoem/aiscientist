@@ -1,206 +1,229 @@
-# Setup: Lean reinsurance layer (P4)
+# Enable Lean formal verification
 
-> One-time setup so the proof trunk's `prover` subagent can call into a real Lean 4 toolchain via `lean-lsp-mcp`. Skip this guide if you only want the NL proof workflow (P2 + P3); the proof trunk is fully usable without Lean.
+> 中文版本：[setup-lean.zh-CN.md](setup-lean.zh-CN.md)
 
-This guide is **manual** by design. The third-party `lean-lsp-mcp`, the Lean toolchain, and mathlib4 are all heavyweight installs (~2-3 GB total, ~15 minutes of compile time on first import). Automating their install inside `uv sync` would punish every contributor who never wants Lean. Run this once when you want reinsurance.
+ClaudeScientist's natural-language proof workflow works without Lean. Complete
+this guide only when you need Lean 4 to check a formal proof.
 
-## 1. Install elan (the Lean version manager)
+Ordinary public-plugin users can use this rule:
 
-**Windows (PowerShell)**:
+- For proof drafting, checking, and correction only, use `$prove-sop` without
+  installing Lean.
+- For machine-checked Lean verification, complete sections 1–4 and then run the
+  test in section 7.
+- To stop using Lean, run `codex mcp remove lean` and start a new Codex task.
+
+`claudescientist setup --scope user` does not install or register Lean. The old
+`claudescientist setup --scope project` command only detects Lean; it does not
+replace the toolchain and mathlib setup in this guide.
+
+Lean support has three independent parts:
+
+1. `elan`, `lean`, and `lake` provide the Lean toolchain.
+2. A local mathlib project provides the definitions and theorems used by Lean.
+3. `lean-lsp-mcp` lets Codex or Claude Code call Lean through MCP.
+
+The first installation normally uses 2–3 GB and may take 10–20 minutes. None of
+these dependencies is installed by the normal ClaudeScientist setup.
+
+## 1. Install the Lean toolchain
+
+### Windows
+
+Run in PowerShell:
 
 ```powershell
-# Verify you have curl + tar from Windows. Most Win11 builds do.
 curl -L "https://raw.githubusercontent.com/leanprover/elan/master/elan-init.ps1" -o elan-init.ps1
 powershell -ExecutionPolicy Bypass -File elan-init.ps1 -y
-# Restart your shell so $env:PATH picks up %USERPROFILE%\.elan\bin
 ```
 
-**macOS / Linux**:
+Close and reopen PowerShell so `%USERPROFILE%\.elan\bin` is added to `PATH`.
+
+### macOS or Linux
 
 ```bash
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
 ```
 
-Verify:
+Check the installation:
 
 ```powershell
 elan --version
-lean --version   # should print "Lean (version 4.x...)"
+lean --version
+lake --version
 ```
 
-## 2. Install `lean-lsp-mcp`
+Do not continue until all three commands work.
 
-The MCP wrapper itself is a Python package on PyPI; it is small (~5 MB).
+## 2. Install the Lean MCP server
 
 ```powershell
 uv tool install lean-lsp-mcp
-```
-
-Verify:
-
-```powershell
 uv tool run lean-lsp-mcp --help
 ```
 
-If you get `command not found`, ensure `%USERPROFILE%\.local\bin` (or your platform equivalent) is on PATH.
+The second command should print the `lean-lsp-mcp` options. This does not yet
+register the server with Codex.
 
-## 3. Bootstrap a mathlib4 project for the prover
+## 3. Create a mathlib project in the research workspace
 
-The `prover` agent runs Lean inside a project that depends on mathlib4. Create a dedicated checkout under `.research-agent/lean/`:
+Open PowerShell in the project where you will use Codex:
 
 ```powershell
-# From the repo root
-mkdir -Force .research-agent\lean
+cd D:\path\to\your-research-project
+New-Item -ItemType Directory -Force .research-agent\lean
 cd .research-agent\lean
 lake new claudescientist-proofs math
 cd claudescientist-proofs
 lake update
-lake exe cache get   # downloads precompiled mathlib (~2 GB, ~10 minutes first time)
+lake exe cache get
 lake build
 ```
 
-The cache fetch is the long step. It only happens once per Lean toolchain version.
+`lake exe cache get` downloads the precompiled mathlib cache and is usually the
+longest step. The directory
+`.research-agent/lean/claudescientist-proofs` should contain `lakefile.lean`
+when setup finishes.
 
-## 4. Activate the lean MCP server
+Create one mathlib project in each research workspace that needs Lean, or use a
+full path to one shared mathlib project when registering the MCP.
 
-For Claude Code, **no settings.json edit is needed.** `.claude/settings.json`
-already registers a `lean` mcpServer that runs `scripts/lean_mcp_or_noop.py`.
-That wrapper checks at startup whether `lake` and `lean` are on PATH:
+## 4. Register Lean for an ordinary Codex plugin installation
 
-- toolchain present → wrapper forwards stdio to the real `lean-lsp-mcp`
-- toolchain absent → wrapper exits 0 with a clear stderr note; the prover agent sees no `mcp__lean__*` tools and aborts cleanly
-
-So once sections 1-3 are done, **just restart the Claude Code session** and the
-lean MCP comes online automatically. No JSON edits, no rename. If you ever
-uninstall elan / mathlib, the wrapper auto-falls-back; nothing to undo.
-
-For Codex, setup writes the same Lean MCP entry to `.codex/config.toml`, but
-keeps it disabled by default so a missing Lean install does not break Codex
-startup. After sections 1-3 are done, change:
-
-```toml
-[mcp_servers.lean]
-enabled = false
-```
-
-to:
-
-```toml
-[mcp_servers.lean]
-enabled = true
-```
-
-Then restart Codex from the repository root.
-
-## 4b. Pre-load the spike templates
-
-The repo ships five small statistical lemmas as Lean source templates under
-`.research-agent/lean/spikes-template/`. Copy them into your freshly-built
-lake project so they are available for the prover loop:
+The public ClaudeScientist plugin does not register Lean automatically. From
+the research workspace root, run:
 
 ```powershell
-# from inside .research-agent\lean\claudescientist-proofs:
-mkdir ClaudescientistProofs\Spikes -Force
-copy ..\spikes-template\*.lean ClaudescientistProofs\Spikes\
+codex mcp add lean -- uv tool run lean-lsp-mcp --lean-project-path .research-agent/lean/claudescientist-proofs
 ```
 
-Then add the imports to `ClaudescientistProofs.lean` (the library root file
-generated by `lake new`):
+Check the result:
 
-```lean
-import ClaudescientistProofs.Spikes.SampleMeanUnbiased
-import ClaudescientistProofs.Spikes.MarkovInequality
-import ClaudescientistProofs.Spikes.ChebyshevInequality
-import ClaudescientistProofs.Spikes.CauchySchwarz
-import ClaudescientistProofs.Spikes.BonferroniUnion
+```powershell
+codex mcp list
 ```
 
-Re-run `lake build`. The spike files are intentionally stubbed with `sorry`
-where the proof requires picking the right mathlib lemma name; that's what
-the prover loop is for.
+The list should show `lean` with status `enabled`. Then start a new Codex task
+from the same research workspace; an already-open task does not reload MCP
+configuration automatically.
 
-## 4c. Configure a budget for Lean attempts
+Start a new Codex task from the same workspace after registering the server.
+The relative `--lean-project-path` is resolved from the active workspace. If the
+mathlib project is stored elsewhere, replace it with the full path to the
+directory containing `lakefile.lean`.
 
-The `prover` agent (see `.claude/agents/prover.md` § Budget) refuses to
-launch a Lean attempt without a wallclock allowance in `res_budget_ledger`.
-Seed one once:
+This MCP entry is stored in the user's Codex configuration. When another
+workspace does not contain the relative mathlib path, remove the `lean` entry or
+use one shared absolute path before starting Codex there.
+
+If a `lean` MCP entry already exists and points to the wrong directory, remove
+and add it again:
+
+```powershell
+codex mcp remove lean
+codex mcp add lean -- uv tool run lean-lsp-mcp --lean-project-path D:\full\path\to\claudescientist-proofs
+```
+
+To stop using Lean, run:
+
+```powershell
+codex mcp remove lean
+```
+
+This removes only the Lean MCP entry from Codex. It does not delete the local
+mathlib project or existing proof records.
+
+## 5. Source-checkout and Claude Code configuration
+
+This section is only for users developing the ClaudeScientist repository.
+
+For Claude Code, `.claude/settings.json` already starts
+`scripts/lean_mcp_or_noop.py`. The script checks whether `lake` and `lean` are
+available:
+
+- If they are available, it starts `lean-lsp-mcp`.
+- If the toolchain is absent, it exits without making the Claude Code session
+  fail.
+
+After installing the toolchain and creating the mathlib project, restart Claude
+Code from the repository root.
+
+The old project setup wizard generates a disabled `[mcp_servers.lean]` entry in
+`.codex/config.toml` for project-local Codex development. After completing
+sections 1–3, change its `enabled` value to `true` and restart Codex. The wizard
+only detects the Lean toolchain; it does not install Lean or mathlib.
+
+## 6. Configure a time budget
+
+Long Lean attempts should have a wall-clock budget in the verification ledger.
+Ask Codex to make this MCP call before the first long attempt:
 
 ```text
 mcp__verify__budget_consume(
   scope='session',
   resource='wallclock_sec',
   amount=0,
-  limit_value=3600,           # 1 hour ceiling per session; tune to taste
+  limit_value=3600,
   window='daily'
 )
 ```
 
-(Run that as an MCP call from inside Claude Code, not from the shell.) Per
-attempt the prover will then `budget_check` first and `budget_consume` the
-actual `duration_sec` after the fact.
+This example sets a one-hour daily limit for the session scope. Adjust the limit
+to match the task. The prover checks the budget before a longer Lean run and
+records the actual duration afterward.
 
-## 5. Smoke test
+## 7. Test Lean from Codex
 
-Open Claude Code in the project. Ask the prover agent to verify the smallest possible spike lemma:
+Start a new Codex task in the research workspace and enter:
 
+```text
+$prove-sop Prove that addition of real numbers is commutative. Use Lean formal verification if the proposition is eligible.
 ```
-@prover prove that for any two real numbers a, b: a + b = b + a (use Lean's add_comm)
-```
 
-Expected behaviour:
+For a successful formal verification, the expected result includes:
 
-1. Triage returns `eligible=True` (short text, "real numbers" not blacklisted).
-2. `mcp__lean__lean_verify` accepts a one-liner like `theorem ex_addcomm (a b : ℝ) : a + b = b + a := add_comm a b`.
-3. Prover calls `record_lean_attempt(status='verified', ...)` and `attach_evidence(polarity='supports', ...)`.
-4. The cockpit Event Stream shows a `lean_proof_succeeded` event.
+1. `triage_for_formalization` reports that the proposition is eligible.
+2. A `mcp__lean__*` verification tool runs inside the configured mathlib project.
+3. `record_lean_attempt` records the result.
+4. Cockpit displays the Lean attempt event.
 
-If any step fails with a path or version error, see Troubleshooting below.
+If the Lean MCP is unavailable, the natural-language proof workflow can still
+finish, but the result must be marked as not formally verified.
 
-## 6. Spike lemma list (P4 exit criterion)
+## 8. Source-checkout proof examples
 
-The P4 phasing-plan goal is to verify at least 3 of the following 5 lemmas inside a 30-minute prover budget per lemma. These are deliberately chosen to be inside mathlib's coverage:
+The repository contains five Lean example files under
+`.research-agent/lean/spikes-template/`. These files and
+`scripts/run_spikes.py` are contributor validation materials; they are not
+included in the public Python package.
 
-1. `theorem sample_mean_linearity (n : ℕ) (X : Fin n → ℝ) : (1/n : ℝ) * ∑ i, X i = ∑ i, (1/n : ℝ) * X i`
-2. `theorem chebyshev_inequality {Ω : Type*} [MeasurableSpace Ω] (μ : Measure Ω) ...` (use `MeasureTheory.meas_ge_le_variance_div`)
-3. `theorem cauchy_schwarz_finite_l2 ...` (use `inner_mul_le_norm_mul_norm` from `Mathlib.Analysis.InnerProductSpace.Basic`)
-4. `theorem bonferroni_upper_bound (n : ℕ) (p : ℝ) : 1 - (1-p)^n ≤ n * p`
-5. `theorem markov_inequality (X : ℝ → ℝ) ...` (use `MeasureTheory.meas_ge_le_integral_div`)
-
-The exact statement choice depends on mathlib version. Use `mcp__lean__lean_leansearch` to discover the canonical name when drafting.
-
-### Batch validator
-
-After completing sections 1-4c you can run the bundled validator to walk
-all five spike templates in one go and write the results into
-`prv_lean_attempts`:
+Source contributors can copy the examples into the mathlib project and run:
 
 ```powershell
 uv run python scripts/run_spikes.py
 ```
 
-Behaviour:
-- Skips with a clear message if `lake` is not on PATH or the lake project
-  is not bootstrapped.
-- Copies the spike templates into the project's `ClaudescientistProofs/Spikes/`
-  directory if they are not already there.
-- Runs `lake build ClaudescientistProofs.Spikes.<name>` for each spike with
-  a 30-minute per-spike timeout.
-- Records each outcome via `prove_mcp.tools.lean_bridge.record_lean_attempt`,
-  so the audit trail is consistent with what the prover agent would write.
-- Exit code 0 iff at least 3 of the 5 spikes verified (the P4 phasing-plan
-  exit criterion).
-
-The script is idempotent. Re-running it appends new attempt rows; old
-attempts are left in place.
+The script builds each example and records the results in `prv_lean_attempts`.
+Ordinary plugin users do not need this step.
 
 ## Troubleshooting
 
-- **"lake: command not found"** -- elan didn't add itself to PATH. Re-source your shell or add `%USERPROFILE%\.elan\bin` manually.
-- **`lake exe cache get` is slow** -- expected first time (~10 min). Subsequent runs use the local cache.
-- **`lean-lsp-mcp` fails to start** -- check `LEAN_PROJECT_PATH` points at the directory containing `lakefile.lean`, not its parent.
-- **Mathlib import errors** -- run `lake build` once before invoking the prover; Lean's first-touch import builds proof obligations.
-- **Windows path with spaces** -- prefer a path under `D:\` with no spaces. The mathlib build tooling has historically been sensitive to spaces.
+- **`elan`, `lean`, or `lake` is not found:** close and reopen the terminal, or
+  add `%USERPROFILE%\.elan\bin` to `PATH`.
+- **`lake exe cache get` is slow:** the first mathlib cache download is large.
+  Later runs reuse the local cache.
+- **`lean-lsp-mcp` cannot find the project:** check that
+  `--lean-project-path` names the directory containing `lakefile.lean`.
+- **Mathlib import errors:** run `lake update`, `lake exe cache get`, and
+  `lake build` inside the mathlib project.
+- **Codex does not show Lean tools:** run `codex mcp list`, then start a new
+  task from the research workspace root.
+- **The project path contains spaces:** try a short path without spaces if the
+  Lean build reports path-related errors.
 
-## Why this is opt-in
+## Why Lean is optional
 
-ADR 0008 spells out: Lean is *reinsurance*, not the proof trunk's main path. The NL workflow (corpus retrieval, draft, segment, diagnose, correction) does not require any Lean machinery. A repo without lean-lsp-mcp installed should still pass `uv run pytest` and produce reviewer-acceptable proof manuscripts (with the proposition's `formal_proof_status` marked `unverified`). Lean is the strongest-possible-evidence ceiling, not the floor.
+Corpus retrieval, proof drafting, segmentation, diagnosis, and correction do
+not require Lean. Lean adds machine-checked verification for propositions that
+can be expressed with the installed mathlib version. Leaving Lean disabled does
+not disable the rest of the proof workflow.

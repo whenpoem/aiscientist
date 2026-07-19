@@ -87,7 +87,9 @@ Claude 的设置已经接好了下列 MCP 服务器：`memory`、`verify`、`coc
 
 ## 范围实情
 
-**v5.1.2 是当前版本。** 本补丁保留公开 marketplace 的源码标签固定修复，并把默认关闭的 arXiv 和 OpenAlex MCP 定义正式加入公开插件。v5.1 系列修正 BT 排名、固定预注册 family、自动记录代码与
+**v5.1.3 是当前版本。** 本补丁补充普通用户安装、Cockpit、Doctor、可选文献 MCP、
+Lean 和源码仓库向导的完整说明。它保留公开 marketplace 的源码标签固定修复，并把
+默认关闭的 arXiv 和 OpenAlex MCP 定义加入公开插件。v5.1 系列修正 BT 排名、固定预注册 family、自动记录代码与
 运行环境、区分保护强度，并加入公开 Codex 插件、统一 CLI/doctor 和完整 Cockpit
 支持。hooks 尚未被 Codex 信任时，Cockpit 会明确降级为只监控。核心 MCP 默认
 启用；插件内置但默认关闭的 arXiv、OpenAlex 以及独立的 Lean 集成都可选。下面的 v5.0 段落只记录仍然有效的 UI 架构，

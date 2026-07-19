@@ -1,47 +1,48 @@
 # 实操：第一次研究任务
 
 > English version: [first-research-task.md](first-research-task.md)
-> 完整端到端走一遍 ClaudeScientist 上的一次研究任务。如果还没读过 [`../overview.zh-CN.md`](../overview.zh-CN.md)，请先读那份。
+> 使用公开 Codex 插件完成一次研究任务。请先完成 [`../setup-codex-plugin.zh-CN.md`](../setup-codex-plugin.zh-CN.md) 中的安装步骤。
 
-本教程假设你已经跑过 `uv sync`，仓库已经配置好。我们会跑一个小但真实的任务：研究 per-head dropout 是否有助于 Vision Transformer 的扩展。具体研究主题不重要——重要的是工作流的形状。
+本教程假设 `claudescientist` 命令和公开 Codex 插件已经安装。示例任务是研究
+per-head dropout 是否有助于 Vision Transformer 扩展。你可以把示例替换成自己的
+研究问题。
 
 ## 0. 准备两个终端
 
-从仓库根目录打开两个终端。
+在准备交给 Codex 的研究项目中打开两个终端。这个目录不需要是 ClaudeScientist
+源码仓库。
 
 ```powershell
-# 终端 A：你选择的 AI 客户端（在仓库根目录）
-claude
-# 如果 setup 选择了 codex/both，也可以用：
+# 终端 A
+cd D:\你的研究项目
+claudescientist doctor --workspace .
 codex -C .
 
-# 终端 B：cockpit TUI（在仓库根目录）
-uv run python -m cockpit.tui
+# 终端 B
+cd D:\你的研究项目
+claudescientist cockpit --workspace . --lang zh
 ```
 
-此时你应该在右侧看到一棵空的假说树。下面所有操作都在终端 A 进行，除非另有说明。
+Codex 如果询问是否信任插件 hooks，请先检查再批准。终端 B 此时会显示 Cockpit；
+第一次研究事件写入前，界面可能没有内容。下面的操作都在终端 A 进行，除非另有说明。
 
 ## 1. 启动 research SOP
 
-如果终端 A 是 Claude Code，输入：
-
-```
-/research-sop 研究 per-head dropout 是否有助于 ViT 扩展
-```
-
-如果终端 A 是 Codex，输入：
+在 Codex 中输入：
 
 ```
 $research-sop 研究 per-head dropout 是否有助于 ViT 扩展
 ```
 
-这会启动 `research-sop`，由它按步骤推进研究。在 Codex 里也可以先输入 `/skills` 再选择它。`/research-sop` 是给 Claude Code 用的，通常不能在 Codex 里直接用。几秒之后，终端 B 应当出现以下变化：
+这会启动 `research-sop`，由它按步骤推进研究。也可以输入 `/skills` 再选择它。
+`/research-sop` 是 Claude Code 的写法，通常不能在 Codex 中直接使用。研究图创建后，
+终端 B 应当出现以下变化：
 
 - cockpit 的"问题"节点出现在树根
-- 三到五个假说节点在它下面长出
+- 下方出现三到五个假说节点
 - 事件流刷出若干 `graph_delta` 行
 
-幕后发生了什么：
+系统执行了以下操作：
 
 1. Claude 在失败记忆里查了一遍 `match_signatures("per-head dropout ViT scaling")`
 2. Claude 调用了 `query_literature(...)` 看看是否已经收录了相关论文
@@ -50,10 +51,10 @@ $research-sop 研究 per-head dropout 是否有助于 ViT 扩展
 
 ## 2. 跑一轮 Bradley-Terry 锦标赛
 
-由于至少有三个假说，`bt-tournament` skill 会自动触发。如果没有，手动触发：
+由于至少有三个假说，系统应当自动选择 `bt-tournament` Skill。如果没有，可以输入：
 
 ```
-/bt-tournament
+$bt-tournament 比较当前假说
 ```
 
 对每一对假说，Claude 会：
@@ -87,17 +88,17 @@ BT 排名只是选择证据之一。区间是未经校准的后验近似，不�
 如果下一次运行要支撑主结论，先锁定目标；如果还在探索，可以先跑，但必须把结果标成探索性，不能直接当成最终确认性结论。
 
 ```
-/preregister hyp_8a3f... metric=test_accuracy direction=higher_better threshold=0.85
+$preregister hyp_8a3f... metric=test_accuracy direction=higher_better threshold=0.85
 ```
 
 `preregister` 工具会写一行 `ver_preregistrations`，状态为 `open`，并发出 `prereg_locked` 事件。cockpit 的 "Claims" 标签现在显示一条待处理记录。
 
 ## 4. 实现实验
 
-把任务交给 engineer 子智能体：
+直接要求 Codex 实现实验：
 
 ```
-@engineer 把 dropout 干预实现为一个小的 MNIST-proxy 训练脚本，带 --seed 参数
+把 dropout 干预实现为一个小型 MNIST-proxy 训练脚本，并提供 --seed 参数。
 ```
 
 engineer 会写脚本。在它写的过程中，几个 hook 会自动触发：
@@ -107,7 +108,7 @@ engineer 会写脚本。在它写的过程中，几个 hook 会自动触发：
 
 接下来 engineer 会跑这个脚本。运行时：
 
-- `provenance_log.py`（PostToolUse）从 stdout 中抠出每个 `accuracy: 0.91` 这样的数字，写入 `ver_provenance`
+- `provenance_log.py`（PostToolUse）从 stdout 中提取 `accuracy: 0.91` 这类数字，写入 `ver_provenance`
 
 ## 5. 用多个种子验证
 
@@ -168,17 +169,20 @@ mcp__memory__suggest_pause_low_probability max_probability_best=0.05
 
 ## 9. 交给 writeup
 
-现在可以让 Claude 起草一份简短的总结：
+现在可以使用 writeup Skill 起草简短总结：
 
 ```
-@reviewer 准备一份 dropout 研究的一页总结
+$writeup-sop 准备一份 dropout 研究的一页总结
 ```
 
-reviewer agent 会对发布级核心声明执行 writeup 契约：中心 confirmatory 指标需要 metric pin、stable 的种子结论、met 的预注册、以及未漂移的 provenance。探索性结果和上下文数字要如实标注，而不是一律通过所有硬门。
+reviewer agent 会检查发布级核心声明：中心 confirmatory 指标需要 metric pin、
+stable 的种子结论、met 的预注册和未漂移的 provenance。探索性结果和上下文数字
+需要如实标注，但不要求满足确认性核心声明的全部条件。
 
 ## 10. 结束 session
 
-在终端 A 退出 Claude Code，然后在终端 B 退出 TUI（按 `q`）。重启二者。你应当看到整张图、所有 BT 评分、所有预注册、所有 metric pin 都和你离开时一模一样——SQLite 文件是唯一的状态来源。
+在终端 A 退出 Codex，然后在终端 B 按 `q` 退出 TUI。再从同一个研究项目启动二者。
+研究图、BT 评分、预注册和 metric pin 都保存在 `.research-agent/state.db` 中。
 
 ## 你刚才完成了什么
 
@@ -192,9 +196,10 @@ reviewer agent 会对发布级核心声明执行 writeup 契约：中心 confirm
 - 用 dry-run 方式剪掉了弱分支
 - 起草了一份强制满足以上全部条件的 writeup
 
-这就是完整的 v3.0 闭环。其他工作流（[写一篇论文](writing-a-paper.zh-CN.md)、[排查一个失败](debugging-a-failure.zh-CN.md)）覆盖了同一套机制的更窄切面。
+以上是完整研究流程。[写作指南](writing-a-paper.zh-CN.md)和
+[调试指南](debugging-a-failure.zh-CN.md)分别说明这两类任务的详细步骤。
 
-## 常见的"咦怎么这样"
+## 常见问题
 
 - **cockpit 滞后最多 1 秒** —— 这是轮询周期，不是 bug。
 - **在 cockpit 按 `n` 不会打断当前正在执行的工具** —— 干预会被排队，到下一个 `UserPromptSubmit` 或 `Stop` 事件时才送达。这是有意为之。

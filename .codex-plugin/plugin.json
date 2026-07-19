@@ -1,6 +1,6 @@
 {
   "name": "claudescientist",
-  "version": "5.1.2",
+  "version": "5.1.3",
   "description": "A trustworthy research-agent work layer with shared memory, verification, proofs, and a local Cockpit.",
   "author": {
     "name": "whenpoem",

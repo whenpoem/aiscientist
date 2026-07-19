@@ -4,7 +4,7 @@
 
 > v5.1 修正：方向 1 必须先完成 BT 覆盖率和误剪枝模拟；当
 > `interval_calibrated=False` 时，不得发布 Thompson Sampling。方向 4 的代码与环境
-> 运行清单基础闭环已经完成。方向 8 必须从可复现的多进程压力测试开始，因为固定的
+> 运行清单基础实现已经完成。方向 8 必须从可复现的多进程压力测试开始，因为固定的
 > 预注册 family 已不再依赖 `open_count`。
 > 这份文档汇总了 v3.0 之后的中长期发展方向。它不是承诺清单，而是设计判断：在已有架构基础上，下一步最值得做什么、为什么、以及可能的实现路径。每条方向都标注了"价值"与"复杂度"的初步评估。
 
@@ -42,7 +42,7 @@ ClaudeScientist v3.0 已经把"研究流程的工程化"做到了一个可用的
 
 ---
 
-### 方向 2：Meta-Calibration 闭环
+### 方向 2：把 Meta-Calibration 用于决策
 
 **当前**：`meta_calibration` 表记录了判断者的校准数据，可以输出 reliability diagram 和 Brier Score，但这些数据只供展示，未反馈到决策。
 
@@ -52,7 +52,7 @@ ClaudeScientist v3.0 已经把"研究流程的工程化"做到了一个可用的
 weight *= 1 - calibration_error_at_bucket(judge_name, predicted_p)
 ```
 
-校准好的 judge 权重不变，校准差的 judge 权重被自动降低。
+历史校准误差较低的 judge 保留较高权重，误差较高的 judge 获得较低权重。
 
 **价值**：中高。这实现了系统对自身判断质量的自适应信任管理。多模型协作场景（如 researcher 用 Sonnet、reviewer 用 Opus）的差异化处理也变得自然。
 
@@ -60,7 +60,7 @@ weight *= 1 - calibration_error_at_bucket(judge_name, predicted_p)
 
 ---
 
-### 方向 3：假说谱系的"遗传距离"传播
+### 方向 3：根据假说依赖关系传播评分变化
 
 **当前**：`suggest_pause_low_strength` 逐个假说独立判断 UCB。但假说图是树状的，子假说与父假说共享前提；父假说被证伪时，子假说的先验概率应当下调。
 
@@ -82,7 +82,7 @@ for child in descendants(H_parent):
 
 ---
 
-### 方向 4：细化自动运行清单（v5.1 已完成基础闭环）
+### 方向 4：细化自动运行清单（v5.1 已完成基础实现）
 
 **当前**：v5.1 已自动记录脚本、命令引用文件、显式输入/配置、依赖锁文件、Git 状态、运行时、种子和安全环境值；`refresh_claim` 会检查这些清单。
 
@@ -133,7 +133,7 @@ for child in descendants(H_parent):
 - 在 `match_signatures` 中做混合排名：`final = 0.6 * bm25_norm + 0.4 * cosine`
 - 定期跑 HDBSCAN 聚类，自动归类相似失败
 
-**价值**：中高。失败记忆是"复利最高的部分"，提升其召回率直接转化为 debug 时间的节省。
+**价值**：中高。提高失败记录的检索率，可以减少重复问题或相近问题的排查时间。
 
 **复杂度**：中。需要引入一个本地 embedding 模型依赖；权重 0.6/0.4 需要调参。
 
@@ -141,18 +141,18 @@ for child in descendants(H_parent):
 
 ---
 
-### 方向 7：Cockpit 增加"研究节奏"可视化
+### 方向 7：Cockpit 增加研究活动趋势
 
 **当前**：Event Stream 是线性时间流，能看到"发生了什么"，但无法一眼看出"研究处于什么阶段"。
 
-**建议**：新增一个 Rhythm Pane（节奏面板），用 Textual 自带的 Sparkline 展示几条时间序列：
+**建议**：新增一个活动趋势面板，用 Textual 自带的 Sparkline 展示几条时间序列：
 
 - **假说产出速率**（每小时新增假说数）—— 反映探索强度
 - **剪枝速率**（每小时被证伪/暂停的假说数）—— 反映收敛趋势
 - **BT 不确定性总量**（所有活跃假说的 strength_var 之和）—— 反映全局信心水平
 - **预算消耗曲线**（wallclock / token / heldout query 的进度条）
 
-合在一起就是一张研究的"心电图"，让用户一眼判断当前是发散探索期（高产出、低剪枝、高不确定性）还是收敛确认期（低产出、高剪枝、不确定性快速下降）。
+这些时间序列可以帮助用户判断当前更接近探索阶段，还是更接近确认阶段。
 
 **价值**：中。对长 session 用户价值明显。
 
@@ -221,22 +221,24 @@ WHERE prereg_id = ? AND version = ?;
 
 ## IV. 领域扩展（v4.0）
 
-### 方向 11：证明主干 —— NL 主路 + Lean 保险层
+### 方向 11：证明领域 —— 自然语言流程与可选 Lean 验证
 
 **现状**：ClaudeScientist 是单主干系统，专注于 ML 实证可重复性。`prover` agent 从 v0.1 开始就是 stub，Lean 接入此前位列"不做"清单（见本文件最后被划掉的那一条）。
 
-**提议**：采用两主干架构（已在 [ADR 0008](adr/0008-two-trunk-domain-architecture.md) 正式记录）。现有 v3.0 接口成为 **empirical 主干**；新增 **proof 主干**位于 `src/prove_mcp/`。proof 主干的主路径是 StatProver 风格的：语料检索（双向 max-matching、双关键词 embedding）、草稿生成、片段切片、对照 `mem_failures(domain='proof')` 诊断、延迟全局修正。Lean 形式化层作为**保险**而非主路径：只有通过 `triage_for_formalization` 触发规则的命题才被送给 prover agent（背后是 `lean-lsp-mcp`）；Lean 验证成功 = 强证据 attach；失败 = 反向写入跨域错题本。
+**提议**：采用两个领域部分，相关设计已记录在 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)。现有 v3.0 接口用于 empirical 工作；`src/prove_mcp/` 用于 proof 工作。证明流程包括语料检索、草稿生成、片段划分、对照 `mem_failures(domain='proof')` 诊断和修正。Lean 是可选功能：只有通过 `triage_for_formalization` 判断的命题才会交给基于 `lean-lsp-mcp` 的 prover agent。Lean 验证成功时附加形式化证据，失败时记录到跨领域失败记录中。
 
-两条主干通过且仅通过四个合作接口（一棵树 / 一本错题本 / 一张排行榜 / 一个评审两份清单）协作——见 architecture.md §13。
+两个领域部分只通过四类接口协作：共享研究图、共享失败记录、共享 BT 排名，以及使用两份检查清单的同一个 reviewer。详见 architecture.md §13。
 
-**价值**：极高。统计研究项目天然混合理论与实证；把它们放到同一套工具链里是产品级的差异化。当前所有单主干竞品（StatProver、EvoScientist、AI Scientist v2）都没有跨域错题本匹配，也没有双清单评审。
+**价值**：极高。统计研究项目通常同时包含理论和实证工作。当前列出的其他系统（StatProver、EvoScientist、AI Scientist v2）不同时提供跨领域失败匹配和双清单评审。
 
-**复杂度**：高。约 10 周分 6 期（P0 文档 → P1 内核 domain-agnostic → P2 检索 → P3 NL 工作流 → P4 Lean 保险层 → P5 合作面）。新增一个 MCP server（`prove_mcp`）——v3.0 默认的"不开新 MCP server"为这次领域扩展明确放宽。
+**复杂度**：高。约 10 周分 6 期（P0 文档 → P1 共享内核 → P2 检索 → P3
+自然语言工作流 → P4 可选 Lean 验证 → P5 共享接口）。这次领域扩展增加一个 MCP
+server：`prove_mcp`。
 
 **约束条件**：
 - 分层纪律（[ADR 0007](adr/0007-tools-skills-hooks-layering.md)）从 day 1 起即生效。新 proof 工具必须保持原子动词；StatProver 那 6 阶段流水线只活在 `prove-sop` skill 的 markdown 里，不进代码。
 - 我们不会去匹敌 StatProver 的 40k 语料 / 80k 错误库规模。我们的差异化点是工作流整合，不是检索质量。
-- Lean 保险层按命题逐个 opt-in；任何工作流都不会卡在 Lean 成功才放行。
+- Lean 验证按命题选择是否启用；自然语言证明流程不要求 Lean 成功。
 
 **状态**：v4.0.0a0 alpha 已发布（P0–P5 + Plan v2 冷启动数据 + Lean 激活准备）。
 
@@ -253,10 +255,10 @@ WHERE prereg_id = ? AND version = ?;
 如果要从今天开始执行，我建议的顺序是：
 
 1. **方向 1（BT 校准模拟）** —— 主动选择的前置条件
-2. **方向 4（语义运行清单细化）** —— v5.1 基础闭环后的可选降噪
-3. **方向 7（节奏面板）** —— 短平快，提升用户体验
-4. **方向 6（语义化失败匹配）** —— 中期投入，长期复利
-5. **方向 2（Meta-Calibration 闭环）** —— 在多模型场景成熟前不急
+2. **方向 4（语义运行清单细化）** —— v5.1 基础实现后的可选降噪
+3. **方向 7（研究活动趋势）** —— 工作量较小，可以改善信息展示
+4. **方向 6（语义化失败匹配）** —— 中期投入，长期减少重复排查
+5. **方向 2（在决策中使用 Meta-Calibration）** —— 在多模型场景成熟前不急
 6. **方向 5（序贯分析）** —— 数学需要小心设计，但收益巨大
 7. **方向 3（谱系传播）** —— 等研究树长起来再做最划算
 8. **方向 8（并发控制）** —— 等真有多用户需求时再做
@@ -326,7 +328,7 @@ v5.0.0 把 cockpit 改造成研究动作监控，用活动级别的阅读视图�
   `tmux split-window`。
 - **替换 SQLite 为 Postgres**：单文件状态边界是项目的核心优势之一
 - **支持多语言（除中英之外）**：目前没有需求，且 i18n 基础设施已具备，按需扩展即可
-- ~~**接入 Lean 形式化证明**~~：**已被方向 11（v4.0）取代**——proof 主干把 Lean 作为保险层接入，主路径走 NL。原本"成本高、收益狭窄"的判断在单主干假设下是对的；两主干架构改变了成本结构——proof 工作流复用现有基础设施（BT、校准、provenance、replay、cockpit、错题本）的边际成本几乎为零。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)。
+- ~~**接入 Lean 形式化证明**~~：**已被方向 11（v4.0）取代**。Proof 工作流将 Lean 作为可选验证方式，并复用现有的 BT、校准、provenance、replay、Cockpit 和失败记录。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)。
 
 ## 写在最后
 

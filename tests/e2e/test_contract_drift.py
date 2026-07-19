@@ -95,7 +95,7 @@ def test_external_mcp_optional_edges_are_documented():
     assert settings["mcpServers"]["openalex"]["args"][-1] == (
         "openalex-research-mcp@0.5.0"
     )
-    assert "toolchain absent" in setup_lean
+    assert "toolchain is absent" in setup_lean
     assert "npx" in readme
     assert "arxiv-mcp-server" in readme
 

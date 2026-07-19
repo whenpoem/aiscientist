@@ -78,7 +78,7 @@ def test_doctor_parses_real_codex_plugin_json(monkeypatch):
             {
                 "pluginId": "claudescientist@personal",
                 "name": "claudescientist",
-                "version": "5.1.2",
+                "version": "5.1.3",
                 "installed": True,
                 "enabled": True,
             }
@@ -97,7 +97,7 @@ def test_doctor_parses_real_codex_plugin_json(monkeypatch):
     result = doctor._codex_plugin_status()  # noqa: SLF001
     assert result["installed"] is True
     assert result["enabled"] is True
-    assert result["versions"] == ["5.1.2"]
+    assert result["versions"] == ["5.1.3"]
 
 
 def test_doctor_hook_trust_honours_codex_home(tmp_path, monkeypatch):
@@ -223,7 +223,7 @@ def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch)
     result = plugin_setup.install_user_plugin(runner=fake_runner)
 
     assert result["ok"] is True
-    assert result["ref"] == "v5.1.2"
+    assert result["ref"] == "v5.1.3"
     assert commands == [
         [
             "codex.cmd",
@@ -232,7 +232,7 @@ def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch)
             "add",
             "whenpoem/aiscientist",
             "--ref",
-            "v5.1.2",
+            "v5.1.3",
             "--json",
         ],
         [
@@ -338,7 +338,7 @@ def test_user_setup_omits_git_ref_for_local_marketplace(tmp_path, monkeypatch):
     assert "--ref" not in commands[0]
     assert commands[1][-2] == "claudescientist@local-research-tools"
     assert result["ref"] is None
-    assert result["requested_ref"] == "v5.1.2"
+    assert result["requested_ref"] == "v5.1.3"
 
 
 def test_project_setup_cli_forwards_wizard_flags(tmp_path, monkeypatch):

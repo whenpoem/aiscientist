@@ -1,13 +1,12 @@
 # ClaudeScientist System Overview
 
 > 中文版本: [overview.zh-CN.md](overview.zh-CN.md)
-> Five minutes to a complete mental model. After this, [architecture.md](architecture.md) and [tool-reference.md](tool-reference.md) will read much more smoothly.
+> A short description of the components, stored data, and research workflow. Read this before [architecture.md](architecture.md) and [tool-reference.md](tool-reference.md).
 
 ## 1. One-line positioning
 
-ClaudeScientist plugs into Claude Code or Codex as **a research augmentation
-layer** — it adds persistent memory, verifiable experiment results, an
-interruptible research loop, and a real-time cockpit.
+ClaudeScientist adds persistent research records, experiment verification,
+user intervention, and a real-time terminal interface to Claude Code or Codex.
 
 The AI client already handles dialogue, planning, and tool invocation. This
 project fills in four things on top: **memory, verification, statistical proof
@@ -35,7 +34,9 @@ Open two terminal windows side by side:
         .research-agent/state.db   ← one SQLite file
 ```
 
-**The single most important point**: the two terminals **do not talk to each other directly**. Both of them talk to the SQLite file in the middle. This is the central design choice of the entire system — every module collaborates through a shared database file rather than over the network.
+**The main point**: the two terminals **do not communicate directly**. Both read
+and write the same SQLite file. The modules therefore share state through a
+local database file rather than through a network service.
 
 ### What each terminal answers (v5.0)
 
@@ -52,20 +53,20 @@ feeling redundant.
 | What it does NOT show | Cross-trunk current focus, recent reject/redirect interventions | Claude's specific thinking text, file diffs |
 | What you do here | Reply to Claude, Ctrl-C to halt | Reject / approve / inject note / queue intervention |
 | Storage | AI client session state | `.research-agent/state.db` (single SQLite) |
-| User posture | Conversation partner | Research lead — eyes-up monitor |
+| User action | Reply to the agent | Review current state and submit interventions |
 
-If Terminal A is what the AI just *did*, Terminal B is what's *true*
-about the research right now. Both are useful; they don't overlap.
+Terminal A shows the current conversation and tool calls. Terminal B summarizes
+the stored research state. The two views contain different information.
 
 ## 3. The five roles and where they live
 
-| Role | Where | Job | Analogy |
-|---|---|---|---|
-| **Claude Code / Codex** | Terminal A | Main conductor. Reads your intent, calls tools, writes code | Project manager |
-| **MCP servers** | Background subprocesses | Provide "tools" — memory, verification, literature search | Toolbox |
-| **Hooks** | Mounted by the project or plugin | Run scripts automatically around lifecycle events; act as safety gates and bookkeepers | Security checkpoint |
-| **Cockpit TUI** | Terminal B | Live state display; lets you intervene by hand | Monitoring screen |
-| **SQLite** | `.research-agent/state.db` | Stores everything: hypotheses, evidence, failures, ratings, preregistrations, events | Shared blackboard |
+| Role | Where | Responsibility |
+|---|---|---|
+| **Claude Code / Codex** | Terminal A | Reads the request, calls tools, writes code, and reports results |
+| **MCP servers** | Background subprocesses | Provide memory, verification, proof, Cockpit, and optional literature tools |
+| **Hooks** | Loaded by the project or plugin | Run checks and record events at defined points in the agent lifecycle |
+| **Cockpit TUI** | Terminal B | Displays stored state and accepts user interventions |
+| **SQLite** | `.research-agent/state.db` | Stores hypotheses, evidence, failures, ratings, preregistrations, and events |
 
 **MCP (Model Context Protocol)** lets an AI invoke external tools. Project-local
 Claude settings or the Codex plugin start the four core subprocesses:
@@ -144,7 +145,7 @@ hooks; it never becomes the default research-state directory. Memory, verify,
 cockpit, and hooks each own their own tables, while cross-module signaling goes
 through `cockpit_events`.
 
-What this buys you:
+This design has three practical effects:
 
 - Back up the entire system by copying one file
 - Multi-module operations land in one SQL transaction — all or nothing
@@ -158,7 +159,9 @@ The research mainline is split into three phases that must run in order:
 2. **Experiment phase**: budget gate → safety check → run experiment → multi-seed stability check → fairness comparison → provenance record
 3. **Writeup phase**: the reviewer agent classifies numeric claims. Central confirmatory metrics need the full chain: pinned metric, stable seed verdict, met preregistration, and non-stale provenance. Exploratory claims and context numbers are labelled instead of blocked by default.
 
-The reviewer rejects publication-critical numbers that cannot trace back to the relevant anchors. This keeps the hard gate focused on claims users would actually publish, while letting exploratory notes and operational context remain usable.
+The reviewer rejects publication-critical numbers that cannot be traced to the
+required records. Exploratory notes and operational context remain usable when
+they are clearly labelled.
 
 ### 5.3 Automation only does things that are reversible or auditable
 
@@ -168,7 +171,7 @@ The reviewer rejects publication-critical numbers that cannot trace back to the 
 - Counterfactual replay (`replay_counterfactual`) writes only to a separate `mem_replay_branches` table; it never touches the main graph
 - Budget consumption, held-out queries, and preregistration resolutions all land in persistent ledgers, leaving an audit trail
 
-## 6. The closed-loop path against data leakage
+## 6. Held-out data access
 
 Held-out data (i.e. test sets) is protected by two complementary mechanisms:
 
@@ -202,9 +205,11 @@ To avoid misinterpretation, here are a few common misreads:
 - **Not a multi-user system.** The current design assumes one user, one session. Multi-session concurrency is on the roadmap.
 - **Not yet "production-ready."** Tests pass and ruff is clean, but production readiness needs a fresh end-to-end validation pass.
 
-## 8. One-sentence mental model
+## 8. Summary
 
-> **Claude runs out front, SQLite keeps the books in the middle, Hooks guard the safety gates, and the Cockpit lets you watch and chime in — every module collaborates through that one .db file.**
+> **Claude Code or Codex runs the task. MCP servers and hooks read and write the
+> project database. Cockpit displays the stored state and records user
+> interventions.**
 
 ## 9. Where to read next
 

@@ -1,4 +1,4 @@
-# MCP Tool Reference (v5.1.2)
+# MCP Tool Reference (v5.1.3)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -9,8 +9,8 @@
   - [Hypothesis graph](#hypothesis-graph) · [Failures](#failures) · [BT ranking](#bradley-terry-ranking) · [Calibration](#calibration) · [Replay](#replay) · [Snapshots](#snapshots) · [Literature](#literature)
 - **verify MCP** — 13 tools for leakage, provenance, metrics, preregistration, held-out, and budget
   - [Leakage](#leakage) · [Provenance](#provenance) · [Pinned metrics](#pinned-metrics) · [Seed and fairness](#seed-and-fairness) · [Held-out](#held-out) · [Preregistration](#preregistration) · [Resource budget](#resource-budget)
-- **prove MCP** *(v4.0)* — 18 tools for the proof trunk: corpus retrieval, NL workflow, Lean reinsurance
-  - [Corpus + retrieval](#corpus-and-retrieval) · [Proof nodes](#proof-nodes) · [Segmentation + diagnosis](#segmentation-and-diagnosis) · [Correction](#correction) · [Lean reinsurance](#lean-reinsurance)
+- **prove MCP** *(v4.0)* — 18 tools for proof work: corpus retrieval, natural-language workflow, and optional Lean verification
+  - [Corpus + retrieval](#corpus-and-retrieval) · [Proof nodes](#proof-nodes) · [Segmentation + diagnosis](#segmentation-and-diagnosis) · [Correction](#correction) · [Lean verification](#lean-verification)
 - **cockpit MCP** — 5 tools that let Claude push to the cockpit
   - [Cockpit bridge](#cockpit-bridge) · [Activity streaming (v5.0)](#activity-streaming-v50)
 
@@ -418,7 +418,11 @@ Generate a cockpit report file from current SQLite state. Thin facade over `cock
 
 ## prove MCP *(v4.0)*
 
-Backed by the `prv_*` tables and the cross-domain `mem_failures.domain` column. Exposed via `mcp__prove__<name>`. The proof trunk's primary path is StatProver-style (corpus retrieval -> draft -> segment -> diagnose -> correct); Lean is reinsurance on top. See [ADR 0008](adr/0008-two-trunk-domain-architecture.md) and [architecture.md §13](architecture.md#13-core-vs-domain-trunks-v40).
+Backed by the `prv_*` tables and the cross-domain `mem_failures.domain` column.
+Exposed via `mcp__prove__<name>`. The main workflow is corpus retrieval, draft,
+segmentation, diagnosis, and correction. Lean verification is optional. See
+[ADR 0008](adr/0008-two-trunk-domain-architecture.md) and
+[architecture.md §13](architecture.md#13-core-vs-domain-trunks-v40).
 
 ### Corpus and retrieval
 
@@ -509,7 +513,7 @@ Persist the corrected draft as a new `proof_skeleton` revision and mark the mani
 
 **Returns**: `{new_draft_id, old_draft_id, manifest_id, manifest_status}`
 
-### Lean reinsurance
+### Lean verification
 
 #### `triage_for_formalization(proposition_id)`
 Decide whether to hand a proposition to the prover agent. Returns `{eligible, reasons, estimated_difficulty, whitelist_hits, blacklist_hits, length}`. Pure read; the agent inspects `eligible` before spawning prover.
@@ -569,7 +573,7 @@ Write an `agent_narration` event. `text` is 1–500 characters after stripping w
 
 ## External MCPs
 
-These run as third-party packages; we do not own their schemas. The v5.1.2
+These run as third-party packages; we do not own their schemas. The v5.1.3
 public plugin bundles both definitions in the disabled state.
 
 | Server | Source | Use |

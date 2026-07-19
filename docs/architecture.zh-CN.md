@@ -77,8 +77,9 @@ held-out 数据（通常是测试集）受到双重保护。两层保护必须�
 - **MCP 工具的具体集合。** 按照 v3.0 计划，新工具落地到现有的 memory 和 verify 服务器，无需新建 MCP 服务器。
 - **Cockpit 面板布局。** 只要数据契约不变，网格、模态框、快捷键都可以调整。
 - **子智能体 prompt。** 可以自由修改，前提是工具白名单与角色契约保持一致（§4）。
-- **外部文献 MCP。** arXiv 与 OpenAlex 是可选且锁定版本的集成；我们只拥有
-  `memory_mcp` 中的 `ingest_paper` 压缩层。公开插件不默认捆绑这两个外部服务。
+- **外部文献 MCP。** arXiv 与 OpenAlex 是可选且锁定版本的集成。公开插件包含
+  默认关闭的启动定义，只有启用后才会下载第三方包。项目只负责 `memory_mcp` 中的
+  `ingest_paper` 压缩层。
 
 ### 6. 何时打破契约
 
@@ -192,7 +193,7 @@ Hook 是系统的机械保证。它们作为短命子进程，由 Claude Code �
 |---|---|---|
 | `PreToolUse` (Write/Edit/Bash) | `leakage_guard.py` | 拒绝任何路径解析到 held-out 目录下的工具调用 |
 | `PreToolUse` (Bash) | `destructive_bash_guard.py` | 拒绝破坏性命令，除非命令中出现 `# CONFIRM_DESTRUCTIVE` 标记 |
-| `PostToolUse` (Bash) | `provenance_log.py` | 从 stdout 中抠出数值 token 写入 `ver_provenance` |
+| `PostToolUse` (Bash) | `provenance_log.py` | 从 stdout 中提取数值 token 并写入 `ver_provenance` |
 | `UserPromptSubmit` | `intervention_pump.py` | 排空 `cockpit_interventions`，注入到下一轮主 agent 的 `additionalContext` |
 | `Stop` | `intervention_pump.py` + `stop_flush.py` | 同样排空，并额外发出一个 `turn_end` 事件 |
 
@@ -212,13 +213,14 @@ ClaudeScientist v4.0 把架构显式拆成**一个共用内核**加**两条领�
 
 #### 内核里有什么
 
-内核就是**不知道当前工作是 ML 实证还是统计证明**的那部分。它是项目的护城河——两条主干都靠它复利，跨域共用一本错题本本身就是 v4.0 的真实差异化。
+内核包含不依赖当前工作属于 ML 实证还是统计证明的代码。两个领域部分共同使用这些
+代码，也共同使用一套失败记录。
 
 | 接口 | 组件 | 为什么属于内核 |
 |---|---|---|
 | `claudescientist.runtime` | 路径、SQLite、迁移、事件 | 与领域无关的基础设施 |
 | `mem_nodes` / `mem_edges` | 假设/命题图 | `kind` 字段携带领域；表本身不区分 |
-| `mem_failures` + FTS5 | 跨域错题本 | 新增 `domain` 列做过滤；匹配算法本身领域无关 |
+| `mem_failures` + FTS5 | 跨域失败记录 | 新增 `domain` 列做过滤；匹配算法本身领域无关 |
 | `mem_bt_ratings` + 锦标赛工具 | 排序 + 近似后验区间 | 跨 kind 比较仍被禁止；同 kind 比较对 `hypothesis` 与 `proof_skeleton` 同样适用 |
 | `meta_calibration` | 单 agent 可靠性 | 校准按裁判记录，与领域无关 |
 | `mem_replay_branches` | 反事实快照 | 领域无关 |
@@ -254,7 +256,7 @@ v4.0 新增；位于 [`src/prove_mcp/`](../src/prove_mcp/)：
 两条主干通过**且仅通过**这四个共享接口合作。任何想加第五个的人，请先写一份覆盖 ADR 0008 的新 ADR。
 
 1. **同一棵树。** `mem_nodes.kind` 接受 `proposition`、`proof_skeleton`、`proof_snippet` 与原有 empirical kind。命题节点可以与 hypothesis 节点作为同一个 question 节点的兄弟。
-2. **同一本错题本。** `mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
+2. **共享失败记录。** `mem_failures.domain` 给记录分域；`match_signatures` 接受可选 `domain` 过滤，默认跨域查询。脚本崩溃留下的 off-by-one 签名可以匹配证明片段里的 off-by-one 签名。
 3. **同一张排行榜。** BT 比较同时接受 `hypothesis` 与 `proof_skeleton`（仅同 kind）。跨 kind 比较仍被禁止以避免语义混乱。
 4. **同一个评审，两份清单。** `reviewer.md` 按 manuscript 内容自动切清单——empirical 中心声明使用相关证据锚点（pin / seed verdict / confirmatory 声明的 met preregistration / 未变旧 provenance）；theorem 断言新增"诊断 manifest 为空 + 已 Lean 验证或显式 `unverified` 标记"两条。`unverified` 是 manuscript 级标注，不是 `prv_diagnostic_manifests.status` 的取值。
 

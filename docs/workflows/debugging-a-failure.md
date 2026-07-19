@@ -127,4 +127,6 @@ This keeps the hypothesis graph honest about what we know now versus what we kne
 
 ## A closing note
 
-The failure ledger is the part of the system that pays the most compound interest. Every recorded failure is permanent leverage against future repetition. It costs you ten seconds; it can save you days.
+Failure records can reduce the time needed to diagnose similar problems later.
+Recording the symptoms, cause, and solution usually takes little time and can
+prevent the same investigation from being repeated.

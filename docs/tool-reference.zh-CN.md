@@ -1,4 +1,4 @@
-# MCP 工具参考（v5.1.2）
+# MCP 工具参考（v5.1.3）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。
@@ -9,8 +9,8 @@
   - [假说图](#假说图) · [失败记忆](#失败记忆) · [BT 排名](#bradley-terry-排名) · [校准](#校准) · [回放](#回放) · [快照](#快照) · [文献](#文献)
 - **verify MCP** — 13 个工具，覆盖泄漏、溯源、指标、预注册、held-out、预算
   - [泄漏检测](#泄漏检测) · [溯源](#溯源) · [指标 pin](#指标-pin) · [种子与公平性](#种子与公平性) · [Held-out](#held-out) · [预注册](#预注册) · [资源预算](#资源预算)
-- **prove MCP** *(v4.0)* — 18 个工具，覆盖证明主干：语料检索、NL 工作流、Lean 形式化保险层
-  - [语料与检索](#语料与检索) · [证明节点](#证明节点) · [切片与诊断](#切片与诊断) · [修正](#修正) · [Lean 形式化保险层](#lean-形式化保险层)
+- **prove MCP** *(v4.0)* — 18 个证明工具，覆盖语料检索、自然语言工作流和可选 Lean 验证
+  - [语料与检索](#语料与检索) · [证明节点](#证明节点) · [切片与诊断](#切片与诊断) · [修正](#修正) · [Lean 验证](#lean-验证)
 - **cockpit MCP** — 5 个工具，让 Claude 向 cockpit 推送
   - [Cockpit 桥](#cockpit-桥) · [活动流式工具 (v5.0)](#活动流式工具v50)
 
@@ -45,7 +45,9 @@
 3. `find_contradictions` — 查图里有没有互相矛盾的结论
 4. `baseline_fairness` — 确认 baseline 比较是公平的
 
-`reviewer` agent 会对发布级核心声明自动调用这些工具。中心 confirmatory 指标需要 pin、稳定 seed、met 预注册和未变旧的 provenance；上下文数字和探索性结果应明确标注，而不是一律当作硬门。
+`reviewer` agent 会对发布级核心声明自动调用这些工具。中心 confirmatory 指标需要
+pin、稳定 seed、met 预注册和未变旧的 provenance；上下文数字和探索性结果需要
+明确标注，但不要求满足核心确认性声明的全部条件。
 
 ### 出了问题怎么办
 
@@ -59,7 +61,7 @@
 1. `retrieve_skeletons` — 在语料库里找结构相似的证明
 2. `propose_proposition` + `propose_proof_skeleton` — 建证明目标和候选骨架
 3. `segment_proof` — 把草稿切成片段
-4. `diagnose_snippet` — 拿每个片段去错题本里比对
+4. `diagnose_snippet` — 把每个片段与失败记录比较
 5. `apply_correction` — 修复诊断出的问题
 6. `triage_for_formalization` — 如果符合条件，交给 prover agent 做 Lean 验证
 
@@ -322,7 +324,11 @@
 ### 种子与公平性
 
 #### `seed_perturb(script_path, seed_arg="--seed", seeds=None, metric_pattern=..., metric_pin_id=None, timeout_sec=600, stability_tol=0.01, stability_mode="auto", seed_env="PYTHONHASHSEED", extra_env=None, input_files=None, config_files=None)`
-对每个种子（默认 `[0, 1, 2]`）跑一遍 `script_path`。从每次的 stdout 抠出指标，计算均值和标准差，把 verdict 分类为 `stable` 或 `unstable`。`stability_mode="auto"` 对小型有界指标使用绝对容差，对大尺度指标使用相对容差；调用方也可以强制 `absolute` 或 `relative`。提供 `metric_pin_id` 时，本次种子运行会被关联到那个 pin，这样写作检查能找到它。
+对每个种子（默认 `[0, 1, 2]`）运行一次 `script_path`。从每次的 stdout 提取指标，
+计算均值和标准差，把 verdict 分类为 `stable` 或 `unstable`。
+`stability_mode="auto"` 对小型有界指标使用绝对容差，对大尺度指标使用相对容差；
+调用方也可以指定 `absolute` 或 `relative`。提供 `metric_pin_id` 时，本次种子运行会
+关联到对应的 pin，供写作检查使用。
 
 保存的运行清单会记录脚本、引用文件、种子、Git 状态、运行时和脱敏后的环境覆盖。
 
@@ -403,7 +409,10 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ## prove MCP *(v4.0)*
 
-由 `prv_*` 表 + 跨域的 `mem_failures.domain` 列支撑。通过 `mcp__prove__<name>` 暴露。证明主干的主路是 StatProver 风格的（语料检索 → 起草 → 切片 → 诊断 → 修正）；Lean 是顶在上面的形式化保险层。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md) 与 [architecture.zh-CN.md §13](architecture.zh-CN.md#13-共用内核与领域主干v40)。
+这些工具使用 `prv_*` 表和跨领域的 `mem_failures.domain` 列，并通过
+`mcp__prove__<name>` 提供。主要流程包括语料检索、起草、片段划分、诊断和修正；
+Lean 验证是可选步骤。详见 [ADR 0008](adr/0008-two-trunk-domain-architecture.md)
+和 [architecture.zh-CN.md §13](architecture.zh-CN.md#13-共用内核与领域主干v40)。
 
 ### 语料与检索
 
@@ -494,7 +503,7 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 **返回**：`{new_draft_id, old_draft_id, manifest_id, manifest_status}`
 
-### Lean 形式化保险层
+### Lean 验证
 
 #### `triage_for_formalization(proposition_id)`
 判断要不要把命题交给 prover agent。返回 `{eligible, reasons, estimated_difficulty, whitelist_hits, blacklist_hits, length}`。纯只读；主模型在 spawn prover 之前自己看 `eligible`。
@@ -554,7 +563,7 @@ held-out 数据的唯一合法访问路径。在执行**之前**先预留预算�
 
 ## 外部 MCP
 
-下列服务器以第三方包的形式运行，我们不拥有它们的 schema。v5.1.2 公开插件已
+下列服务器以第三方包的形式运行，我们不拥有它们的 schema。v5.1.3 公开插件已
 携带这两个定义，但默认关闭。
 
 | 服务器 | 来源 | 用途 |

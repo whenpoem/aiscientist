@@ -3,7 +3,8 @@
 > English version: [writing-a-paper.md](writing-a-paper.md)
 > 如何利用验证栈起草一份"核心结果可追溯"的手稿。如果还没读过 [`first-research-task.zh-CN.md`](first-research-task.zh-CN.md)，请先读那份——本教程假设你已经做完实验、pin 好了指标。
 
-`reviewer` 子智能体对发布级核心声明执行严格契约。日期、版本号、seed 数、baseline 数、模型大小等上下文数字应该准确，但它们本身不是硬门。
+`reviewer` 子智能体严格检查发布级核心声明。日期、版本号、seed 数、baseline 数、
+模型大小等上下文数字应当准确，但不要求满足核心确认性声明的全部验证条件。
 
 ## 证据锚点
 

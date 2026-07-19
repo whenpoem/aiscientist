@@ -1,16 +1,21 @@
 # ClaudeScientist
 
-**A research co-pilot that remembers, verifies, and lets you steer.**
+**为 Claude Code 和 Codex 提供研究记录、结果验证和本地监控界面。**
 
-[![version](https://img.shields.io/badge/version-v5.1.2-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.3-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > English version: [README.md](README.md)
 
-ClaudeScientist 给 Claude Code 或 Codex 装上了 AI 科研系统普遍缺少的几样东西：记住你试过什么、验证你的数字是否靠谱、给你一个终端仪表盘让你实时盯着研究进展、随时插手。
+ClaudeScientist 为 Claude Code 和 Codex 提供持久化研究记录、结果检查、统计证明
+工具和终端监控界面。每个研究项目都有自己的本地 SQLite 数据库，用来保存假说、
+证据、比较记录、实验结果和用户干预。
 
-你丢给 agent 一个研究问题，它会生成假说、让假说互相比赛排名、跑实验（自带安全检查），并且给每一个产出的数字记录来龙去脉。你在旁边的终端窗口全程看着，随时可以否决、改方向、放行。
+Agent 可以根据这些记录比较假说、运行带检查的实验，并核对报告中的结果。用户可以
+在第二个终端查看当前研究状态，也可以在任务运行期间批准、否决或修改研究方向。
 
-**当前版本**：v5.1.2 在 v5.1.1 源码标签固定修复的基础上，把默认关闭的 arXiv 和 OpenAlex MCP 定义正式加入公开插件；v5.1 是一次可信性校准与可移植性升级。BT 排名改为从完整
+**当前版本**：v5.1.3 更新了公开安装和使用文档，分别说明 Python 包与 Codex
+插件的作用，并补充 Cockpit、Doctor、arXiv、OpenAlex 和 Lean 的完整启用步骤。
+它保留 v5.1.2 的公开插件集成以及 v5.1 的可信性校准与可移植性改动。BT 排名改为从完整
 比较账本联合拟合，不再依赖写入顺序；区间明确标记为未经校准的近似。Bonferroni
 family 在锁定时固定。核心运行会自动记录代码、输入、Git 状态、依赖、种子和运行
 环境。公开 Codex 插件把核心 MCP、Skills、hooks 和本地 Cockpit 打包在一起，
@@ -20,7 +25,7 @@ family 在锁定时固定。核心运行会自动记录代码、输入、Git 状
 
 ## 长什么样
 
-并排打开两个终端窗口，就是全部界面。
+打开两个终端：一个运行 Codex 或 Claude Code，另一个运行 Cockpit。
 
 <picture>
   <img alt="Cockpit TUI 截图" src="docs/assets/image2.png" width="800">
@@ -28,11 +33,12 @@ family 在锁定时固定。核心运行会自动记录代码、输入、Git 状
 
 *Cockpit TUI —— 假说树、证据、评分、事件流，一个终端窗口搞定。*
 
-左右两个终端不直接通信——它们都跟中间那个 SQLite 文件打交道。这是整个系统最核心的设计：所有模块通过一个共享数据库协作，不走网络。
+左右两个终端不直接通信，而是读写同一个 SQLite 文件。各个模块通过这个本地数据库
+共享状态，不需要网络服务。
 
 | 角色 | 在哪里 | 干什么 |
 |---|---|---|
-| **Claude Code / Codex** | 终端 A | 研究主力：理解你的问题，调工具，写代码跑实验 |
+| **Claude Code / Codex** | 终端 A | 读取你的问题，调用工具，编写并运行代码 |
 | **MCP 服务器** | 后台进程 | 给 agent 提供工具——记忆、验证、文献检索、证明生成 |
 | **Hooks** | 启动时自动加载 | 每次工具调用前后自动跑安全检查（拦截数据泄漏、记录溯源） |
 | **Cockpit TUI** | 终端 B | 实时显示状态；你可以在这里批准、否决、改方向 |
@@ -40,44 +46,70 @@ family 在锁定时固定。核心运行会自动记录代码、输入、Git 状
 
 ## 你能用它做什么
 
-- **记住你的研究思路。** 每一个假说、每一条证据、每一次分支决策都持久保存在图里。读过的论文也会被压缩索引。下周回来，一切都还在。想回顾之前剪掉的方向？跑一次反事实回放，不动实际数据。
-- **给竞争中的想法排名。** Bradley-Terry 锦标赛产出与比较顺序无关的排行榜，
+- **保存研究决策。** 每一个假说、每一条证据和每一次分支决策都会持久保存在图中。已导入的论文可以检索。反事实回放可以检查以前的决策，同时不修改当前研究图。
+- **对候选想法排序。** Bradley-Terry 比较会生成与比较顺序无关的排行榜，
   并明确给出未经校准的近似后验区间。它要和比较覆盖、领域证据一起使用，不能当成
   显著性检验。
 - **实验之前先锁定标准。** 预注册机制要求你在看到结果之前就定好要看的指标、方向和阈值。多重比较校正自动完成。
-- **让你的数字站得住脚。** 每个上报的数字都会被核查：换随机种子还能复现吗？是哪些文件产出的？之后有没有改动过？baseline 比较有没有用相当的计算预算？审稿 agent 会拦下任何未经验证的数字。
-- **不让同样的错误犯两次。** 错题本记住你每一次调试经历。下次碰到类似问题，系统会把上次的修复方案翻出来。
-- **实时盯着、随时插手。** Cockpit TUI 实时展示假说树、评分和事件流。按一个键就能否决某个假说或者写一条批注——干预会在下一轮被 Claude 拾取。
+- **检查报告中的数字。** 系统会检查随机种子稳定性、输入文件、代码和环境变化，以及 baseline 是否使用相当的计算预算。审稿 agent 会拒绝没有充分验证的核心数字。
+- **保存调试记录。** 失败记录会保存问题特征、诊断过程和解决方法。再次遇到相似问题时，系统可以检索这些记录。
+- **监控并提交干预。** Cockpit TUI 显示假说树、评分和事件流。用户可以否决假说或添加批注；Codex 会在下一个受支持的 hook 事件接收干预。
 - **生成和验证统计证明**（v4.0）。证明主干负责起草、切片、对照历史错误模式做诊断，还可以选装 Lean 4 做形式化验证。
 
 ## 快速开始
 
-### 安装公开 Codex 插件
+### 为 Codex 安装
 
-插件可以在任意研究项目中使用，不需要从 ClaudeScientist 源码仓库启动 Codex。
+推荐先永久安装 `claudescientist` 命令，再安装对应版本的 Codex 插件。请先安装
+`uv` 和 Codex，并确认两个命令都可用：
 
 ```powershell
-uv tool run --from claudescientist==5.1.2 claudescientist setup --scope user
+uv --version
+codex --version
 ```
 
-这条命令会安装与 Python 包版本一致的 `v5.1.2` Git 标签，并让插件源码固定在同一标签。公开命令
-生效前，Python 包和 Git 标签必须都已正式发布；只在源码仓库中验证通过不能代替发布。
-等价的手动命令见 [docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md)。
+安装 Python 包和公开插件：
+
+```powershell
+uv tool install claudescientist==5.1.3
+claudescientist setup --scope user
+```
+
+第一条命令安装命令行工具、MCP 后端、Doctor 和 Cockpit。第二条命令从 GitHub
+的 `v5.1.3` 标签安装 Codex 插件。插件包含 Skills、hooks 和 MCP 配置。安装完成后，
+可以在任意研究项目中使用，不需要从 ClaudeScientist 源码仓库启动 Codex。
 
 安装后新建一个 Codex 任务，并在 Codex 提示时信任插件 hooks。即使 hooks 尚未
 信任，MCP 与 Cockpit 仍能监控；但 Cockpit 干预只能处于 `monitor-only` 状态。
 
-在要研究的项目目录运行：
+进入准备研究的项目目录并检查安装：
 
 ```powershell
-uv tool run --from claudescientist==5.1.2 claudescientist doctor --workspace .
-uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace . --lang zh
+cd D:\你的研究项目
+claudescientist doctor --workspace .
 ```
 
-每个项目都使用自己的 `.research-agent/state.db`。插件默认只启用 `memory`、
-`verify`、`prove`、`cockpit` 四个本地核心 MCP。v5.1.2 同时携带已固定版本、
+在这个项目中启动 Codex，并在第二个终端用同一个目录打开 Cockpit：
+
+```powershell
+codex -C .
+
+# 在第二个终端运行
+claudescientist cockpit --workspace . --lang zh
+```
+
+在 Codex 中输入 `$research-sop <研究问题>` 可以启动完整研究流程，也可以通过
+`/skills` 选择具体 Skill。每个项目的状态独立保存在 `.research-agent/state.db`。
+
+插件默认只启用 `memory`、`verify`、`prove`、`cockpit` 四个本地核心 MCP。
+v5.1.3 同时携带已固定版本、
 默认关闭的 arXiv 和 OpenAlex MCP 定义；用户可以直接在 Codex 的 MCP 设置中开启，
-不必手工新增服务器。Lean 仍为单独的显式可选项。
+不必手工新增服务器。Lean 需要另外安装 Lean 工具链并手动注册 `lean-lsp-mcp`。
+详细步骤见 [Codex 安装与使用指南](docs/setup-codex-plugin.zh-CN.md) 和
+[Lean 安装指南](docs/setup-lean.zh-CN.md)。
+
+普通插件用户不要运行 `claudescientist setup --scope project`。这个命令是下文介绍的
+源码仓库向导，会生成项目级开发配置，不是公开插件安装后的必做步骤。
 
 ### 从源码仓库开发
 
@@ -99,7 +131,7 @@ uv run python -m claudescientist.setup
 启动；OpenAlex 通过 `npx -y openalex-research-mcp@0.5.0` 启动，所以如果要用
 OpenAlex 相关 librarian 工具，需要先安装 Node.js/npm。当前开发分支的插件已携带
 这两个定义，但默认保持关闭；启用方法见
-[docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md#可选文献集成)。
+[docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md#可选功能)。
 
 <details><summary>手动安装（不用向导）</summary>
 
@@ -152,7 +184,7 @@ Lean 形式化验证需要单独安装。Codex 生成的 Lean MCP 默认是关�
 
 新手建议按这个顺序：
 
-1. **[`docs/overview.zh-CN.md`](docs/overview.zh-CN.md)** — 完整的心智模型：各部分怎么配合、一次研究任务从头到尾走一遍、三条设计原则
+1. **[`docs/overview.zh-CN.md`](docs/overview.zh-CN.md)** — 各个组件如何配合，以及研究任务如何被记录
 2. **[`docs/workflows/first-research-task.zh-CN.md`](docs/workflows/first-research-task.zh-CN.md)** — 跟着一个完整任务从头做到尾
 3. **[`docs/architecture.zh-CN.md`](docs/architecture.zh-CN.md)** — 模块间的契约（写代码前必读）
 4. **[`docs/tool-reference.zh-CN.md`](docs/tool-reference.zh-CN.md)** — 所有 MCP 工具，附签名和用法说明
@@ -203,7 +235,7 @@ uv run python -c "import memory_mcp.server; import verify_mcp.server; import pro
 
 - **自动剪枝默认只是建议。** 设置 `RESEARCH_AGENT_AUTO_PRUNE=1` 才会真正暂停弱势分支。
 - **Cockpit 只有终端界面。** 没有浏览器前端，没有 Web 服务器。
-- **Prover agent 不装 Lean 也能用。** NL 证明工作流独立运行；Lean 是可以后装的额外保险，见 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md)。
+- **Prover agent 不装 Lean 也能用。** 自然语言证明流程可以独立运行；Lean 是可以后续配置的形式化验证工具，见 [`docs/setup-lean.zh-CN.md`](docs/setup-lean.zh-CN.md)。
 - **`mem_nodes.elo_score` 是遗留列。** 新代码应该读 `mem_bt_ratings.strength`。
 
 保护强度会明确标注：`enforced` 表示代码会机械拦截；`agent_gated` 表示 agent

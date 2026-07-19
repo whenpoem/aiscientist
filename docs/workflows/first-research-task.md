@@ -1,47 +1,50 @@
 # Walkthrough: Your First Research Task
 
 > 中文版本: [first-research-task.zh-CN.md](first-research-task.zh-CN.md)
-> A complete, end-to-end walkthrough of one research task running through ClaudeScientist. Read [`../overview.md`](../overview.md) first if you have not yet.
+> A complete walkthrough of one research task using the public Codex plugin. Complete [`../setup-codex-plugin.md`](../setup-codex-plugin.md) first.
 
-This walkthrough assumes you already have `uv sync` complete and the repository configured. We will run a small but realistic task: investigating whether per-head dropout helps Vision Transformer scaling. The exact subject does not matter — what matters is the shape of the workflow.
+This walkthrough assumes that the `claudescientist` command and public Codex
+plugin are installed. We will use a small example task: investigating whether
+per-head dropout helps Vision Transformer scaling. You can replace the example
+with your own research question.
 
 ## 0. Prepare two terminals
 
-Open two terminals from the repository root.
+Open two terminals in the research project that Codex will work on. This does
+not need to be the ClaudeScientist source checkout.
 
 ```powershell
-# Terminal A: the AI client you selected (from the repo root)
-claude
-# Or, if setup selected codex/both:
+# Terminal A
+cd D:\path\to\your-research-project
+claudescientist doctor --workspace .
 codex -C .
 
-# Terminal B: the cockpit TUI (from the repo root)
-uv run python -m cockpit.tui
+# Terminal B
+cd D:\path\to\your-research-project
+claudescientist cockpit --workspace .
 ```
 
-You should now see the empty hypothesis tree on the right. Everything below happens in Terminal A unless noted.
+If Codex asks whether to trust the plugin hooks, review and approve them. You
+should now see Cockpit in Terminal B. It may be empty until the first research
+event is recorded. Everything below happens in Terminal A unless noted.
 
 ## 1. Kick off the research SOP
 
-If Terminal A is Claude Code, type:
-
-```
-/research-sop investigate whether per-head dropout helps ViT scaling
-```
-
-If Terminal A is Codex, type:
+In Codex, type:
 
 ```
 $research-sop investigate whether per-head dropout helps ViT scaling
 ```
 
-This starts `research-sop`, which runs the research steps. In Codex, you can also choose it from `/skills`. `/research-sop` is for Claude Code and usually fails in Codex. Within a few seconds you should see, in Terminal B:
+This starts `research-sop`, which runs the research steps. You can also choose
+it from `/skills`. The `/research-sop` form is for Claude Code and usually does
+not work in Codex. After the research graph is created, Terminal B should show:
 
 - The cockpit's question node appears at the root of the tree
-- Three to five hypothesis nodes spawn under it
+- Three to five hypothesis nodes below it
 - The event stream fills with `graph_delta` lines
 
-What just happened under the hood:
+The following actions occurred:
 
 1. Claude looked up `match_signatures("per-head dropout ViT scaling")` in the failure ledger
 2. Claude called `query_literature(...)` to see whether prior papers were already ingested
@@ -50,10 +53,11 @@ What just happened under the hood:
 
 ## 2. Run a Bradley-Terry tournament
 
-The `bt-tournament` skill should fire automatically because there are at least three hypotheses. If it does not, type:
+The `bt-tournament` Skill should be selected automatically because there are at
+least three hypotheses. If it is not selected, type:
 
 ```
-/bt-tournament
+$bt-tournament compare the current hypotheses
 ```
 
 For each pair of hypotheses, Claude will:
@@ -79,24 +83,27 @@ You will see something like:
 ...
 ```
 
-The top hypothesis with non-overlapping intervals against the runner-up is the candidate to move forward.
+The intervals are uncalibrated posterior approximations. Do not treat
+non-overlap as statistical significance. Select the next candidate using the
+ranking together with comparison coverage, ranking stability, and subject-area
+evidence.
 
 ## 3. Preregister confirmatory experiments
 
 If the next run is meant to support a main confirmatory claim, lock the target before running it. If you are still exploring, label the run exploratory and do not present it as a final claim.
 
 ```
-/preregister hyp_8a3f... metric=test_accuracy direction=higher_better threshold=0.85
+$preregister hyp_8a3f... metric=test_accuracy direction=higher_better threshold=0.85
 ```
 
 The `preregister` tool writes a `ver_preregistrations` row with `status='open'` and emits a `prereg_locked` event. The cockpit's "Claims" tab now shows a pending entry.
 
 ## 4. Implement the experiment
 
-Hand off to the engineer subagent:
+Ask Codex to implement the experiment:
 
 ```
-@engineer implement the dropout intervention as a small MNIST-proxy training script with --seed argument
+Implement the dropout intervention as a small MNIST-proxy training script with a --seed argument.
 ```
 
 The engineer will write the script. Several hooks fire automatically as it does:
@@ -171,17 +178,19 @@ and uncalibrated, and every pause remains reversible with
 
 ## 9. Hand off to writeup
 
-Now you can ask Claude to draft a short writeup:
+Now use the writeup Skill to draft a short summary:
 
 ```
-@reviewer prepare a one-page summary of the dropout investigation
+$writeup-sop prepare a one-page summary of the dropout investigation
 ```
 
 The reviewer agent enforces the writeup contract for publication-critical claims: central confirmatory metrics need a metric pin, stable seed verdict, met preregistration, and non-stale provenance. Exploratory claims and context numbers must be labelled honestly rather than forced through every gate.
 
 ## 10. End the session
 
-Quit Claude Code in Terminal A, then quit the TUI in Terminal B (press `q`). Restart both. You should see the entire graph, all BT ratings, all preregistrations, and all metric pins persist exactly as you left them — the SQLite file is the only state.
+Quit Codex in Terminal A, then quit the TUI in Terminal B by pressing `q`.
+Restart both from the same research project. The graph, BT ratings,
+preregistrations, and metric pins remain in `.research-agent/state.db`.
 
 ## What you have just done
 
@@ -195,9 +204,11 @@ Quit Claude Code in Terminal A, then quit the TUI in Terminal B (press `q`). Res
 - Pruned weak branches in dry-run
 - Drafted a writeup that enforces all of the above
 
-This is the full v3.0 loop. Other workflows ([writing a paper](writing-a-paper.md), [debugging a failure](debugging-a-failure.md)) cover narrower slices of the same machinery.
+This is the complete research workflow. The [writing guide](writing-a-paper.md)
+and [debugging guide](debugging-a-failure.md) describe those tasks in more
+detail.
 
-## Common surprises
+## Common questions
 
 - **The cockpit lags by up to one second** — that is the polling interval, not a bug.
 - **Pressing `n` in the cockpit does not interrupt the current tool call** — interventions are queued and delivered at the next `UserPromptSubmit` or `Stop` event. This is intentional.

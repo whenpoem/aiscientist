@@ -1,18 +1,25 @@
 # ClaudeScientist
 
-**A research co-pilot that remembers, verifies, and lets you steer.**
+**Research memory, result verification, and a local monitoring interface for Claude Code and Codex.**
 
-[![version](https://img.shields.io/badge/version-v5.1.2-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.3-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
-ClaudeScientist plugs into Claude Code or Codex and adds what most AI scientist systems leave out: it remembers what you've tried, verifies your numbers before you publish them, and gives you a live terminal dashboard where you can watch the research unfold and step in at any time.
+ClaudeScientist adds persistent research records, result checks, statistical
+proof tools, and a terminal monitoring interface to Claude Code and Codex.
+It stores hypotheses, evidence, comparisons, experiment records, and user
+interventions in a local SQLite database inside each research project.
 
-You give the agent a research question. It generates hypotheses, ranks them in a tournament, runs experiments with built-in safety checks, and tracks provenance for every number it produces. You watch the whole process in a second terminal and can reject, redirect, or approve at any point.
+The agent can use these records to compare hypotheses, run checked experiments,
+and verify reported results. A second terminal can display the current research
+state and accept user decisions while the agent is working.
 
-**Current version**: v5.1.2 is the public-plugin update for the v5.1
-trust-calibration and portability release. It includes the v5.1.1 source-pin
-fix and bundles opt-in arXiv and OpenAlex MCP definitions.
+**Current version**: v5.1.3 updates the public installation and usage
+documentation. It explains the Python package and Codex plugin separately,
+documents Cockpit and Doctor, and gives explicit setup paths for arXiv,
+OpenAlex, and Lean. It retains the v5.1.2 public-plugin integrations and the
+v5.1 trust-calibration and portability changes.
 Bradley-Terry rankings are refit from the complete ledger and no longer depend
 on comparison order; their intervals are honestly labelled as uncalibrated
 approximations. Bonferroni families are fixed when locked. Every central run
@@ -26,7 +33,7 @@ activity-streaming Cockpit remains intact; see
 
 ## What it looks like
 
-Open two terminals side by side. That's the whole UI.
+Open one terminal for Codex or Claude Code and a second terminal for Cockpit.
 
 <picture>
   <img alt="Cockpit TUI screenshot" src="docs/assets/image2.png" width="800">
@@ -34,11 +41,13 @@ Open two terminals side by side. That's the whole UI.
 
 *The cockpit TUI — hypothesis tree, evidence, ratings, and event stream in one terminal.*
 
-The two terminals don't talk to each other directly — they both read and write the same SQLite file. This is the central design choice: every module collaborates through a shared database, not over the network.
+The two terminals do not communicate directly. They both read and write the same
+SQLite file. The modules therefore share local state through a database file,
+not through a network service.
 
 | Role | Where | What it does |
 |---|---|---|
-| **Claude Code / Codex** | Terminal A | Drives the research: understands your question, calls tools, writes and runs code |
+| **Claude Code / Codex** | Terminal A | Reads your question, calls tools, and writes and runs code |
 | **MCP servers** | Background | Provide the tools the agent calls — memory, verification, literature search, proof generation |
 | **Hooks** | Auto-loaded at startup | Run safety checks before/after every tool call (block data leaks, log provenance) |
 | **Cockpit TUI** | Terminal B | Shows live state; lets you approve, reject, or redirect hypotheses |
@@ -46,51 +55,79 @@ The two terminals don't talk to each other directly — they both read and write
 
 ## What you can do with it
 
-- **Track your research thinking.** Every hypothesis, piece of evidence, and branching decision lives in a persistent graph. Papers you read along the way are compressed and searchable. Come back next week — it's all there. Want to revisit a direction you pruned? Run a counterfactual replay without touching the live state.
-- **Rank competing ideas.** A Bradley-Terry tournament compares hypotheses
+- **Store research decisions.** Every hypothesis, piece of evidence, and branch decision is saved in a persistent graph. Ingested papers are searchable. Counterfactual replay can examine an earlier decision without changing the active graph.
+- **Rank competing ideas.** Bradley-Terry comparisons produce
   head-to-head and produces an order-invariant leaderboard with explicitly
   uncalibrated approximate posterior intervals. Use it with comparison coverage
   and domain evidence, not as a significance test.
-- **Lock your goalposts before experimenting.** Preregistration makes you commit to a metric, direction, and threshold before you see results. Multiple-comparison correction is applied automatically.
+- **Set confirmatory criteria before experimenting.** Preregistration records the metric, direction, and threshold before results are observed. Multiple-comparison correction is applied automatically.
 - **Make your numbers trustworthy.** Every reported number gets checked: Is it reproducible across random seeds? Which files produced it? Has anything changed since? Baseline comparisons are checked for fair compute budgets. A reviewer agent blocks any unverified claim from reaching a writeup.
-- **Catch mistakes before they compound.** A failure ledger remembers every debugging session. Next time you hit a similar problem, the system surfaces how you fixed it before.
-- **Watch and steer in real time.** The cockpit TUI shows the hypothesis tree, ratings, and event stream live. Press a key to reject a bad hypothesis or inject a note — interventions are picked up at the next turn.
+- **Reuse debugging records.** The failure ledger stores previous problems and their solutions. Similar records can be retrieved during later debugging.
+- **Monitor and intervene.** Cockpit shows the hypothesis tree, ratings, and event stream. You can reject a hypothesis or add a note; Codex receives the intervention at the next supported hook event.
 - **Generate and verify statistical proofs** *(v4.0).* A proof trunk handles drafting, segmentation, diagnosis against known error patterns, and optional Lean 4 formal verification.
 
 ## Quick start
 
-### Install the public Codex plugin
+### Install for Codex
 
-The plugin works from any research project; Codex does not need to start inside
-the ClaudeScientist source checkout.
+The recommended installation keeps the `claudescientist` command available and
+then installs the matching Codex plugin. Install `uv` and Codex first, and check
+that both commands are available:
 
 ```powershell
-uv tool run --from claudescientist==5.1.2 claudescientist setup --scope user
+uv --version
+codex --version
 ```
 
-This command installs the marketplace and root plugin at the matching `v5.1.2` Git tag and
-then installs the plugin. The Python package and Git tag must both be published
-before this public command can work; source-checkout testing does not replace
-that release step. See [docs/setup-codex-plugin.md](docs/setup-codex-plugin.md)
-for the equivalent manual commands.
+Install the Python package and the public plugin:
+
+```powershell
+uv tool install claudescientist==5.1.3
+claudescientist setup --scope user
+```
+
+The first command installs the CLI, MCP backends, Doctor, and Cockpit. The
+second command installs the Codex plugin from the matching GitHub `v5.1.3` tag.
+The plugin contains Skills, hooks, and MCP configuration. Codex can then use the
+same installation from any research project; it does not need to start inside
+this source checkout.
 
 Start a new Codex task after installation. Approve/trust the plugin hooks when
 Codex asks. MCP monitoring works without hook trust, but Cockpit interventions
 remain **monitor-only** until the hooks are trusted.
 
-From the research project you want to monitor:
+Open a terminal in the research project and check the installation:
 
 ```powershell
-uv tool run --from claudescientist==5.1.2 claudescientist doctor --workspace .
-uv tool run --from claudescientist==5.1.2 claudescientist cockpit --workspace . --lang zh
+cd D:\path\to\your-research-project
+claudescientist doctor --workspace .
 ```
 
-Each project keeps independent state in its own `.research-agent/state.db`.
+Start Codex in that project. In a second terminal, open Cockpit with the same
+workspace path:
+
+```powershell
+codex -C .
+
+# Run this in the second terminal
+claudescientist cockpit --workspace .
+```
+
+Use `$research-sop <question>` in Codex to start the full research workflow, or
+choose a Skill from `/skills`. Each project keeps independent state in
+`.research-agent/state.db`.
+
 The plugin enables only the four local core MCPs (`memory`, `verify`, `prove`,
-`cockpit`) by default. v5.1.2 also bundles version-pinned arXiv and OpenAlex MCP
+`cockpit`) by default. v5.1.3 also bundles version-pinned arXiv and OpenAlex MCP
 definitions in the disabled state. Users can enable either source from Codex
 MCP settings without adding a server by hand. Lean remains a separate explicit
-opt-in.
+opt-in and requires a Lean toolchain plus a manually registered `lean-lsp-mcp`
+server. See the detailed [Codex installation and use guide](docs/setup-codex-plugin.md)
+and [Lean setup guide](docs/setup-lean.md).
+
+Do not run `claudescientist setup --scope project` for an ordinary portable
+plugin installation. That command is the older source-checkout wizard described
+below; it writes project-local development configuration.
 
 ### Develop from this checkout
 
@@ -116,7 +153,7 @@ Literature search uses two external MCPs. arXiv is launched through
 `npx -y openalex-research-mcp@0.5.0`, so install Node.js/npm if you want the
 OpenAlex-backed librarian tools. The current development plugin carries both
 definitions but keeps them disabled until selected; see
-[docs/setup-codex-plugin.md](docs/setup-codex-plugin.md#optional-literature-integrations).
+[docs/setup-codex-plugin.md](docs/setup-codex-plugin.md#optional-integrations).
 
 <details><summary>Manual setup (without the wizard)</summary>
 
@@ -171,7 +208,7 @@ Lean MCP server is disabled until you finish that setup. See
 
 If you're new, read in this order:
 
-1. **[`docs/overview.md`](docs/overview.md)** — the complete mental model: how the pieces fit, what happens end-to-end, the three design principles
+1. **[`docs/overview.md`](docs/overview.md)** — how the components work together and how a task is recorded
 2. **[`docs/workflows/first-research-task.md`](docs/workflows/first-research-task.md)** — walk through one full task from start to finish
 3. **[`docs/architecture.md`](docs/architecture.md)** — the contracts between modules (treat as binding)
 4. **[`docs/tool-reference.md`](docs/tool-reference.md)** — every MCP tool, with signature and usage guidance
@@ -223,7 +260,7 @@ A few things to know:
 
 - **Auto-prune is dry-run by default.** Set `RESEARCH_AGENT_AUTO_PRUNE=1` to let it actually pause weak branches.
 - **The cockpit is terminal-only.** No browser frontend, no web server.
-- **The prover agent works without Lean.** The NL proof workflow runs on its own; Lean is extra insurance you can set up later via [`docs/setup-lean.md`](docs/setup-lean.md).
+- **The prover agent works without Lean.** The natural-language proof workflow runs on its own; Lean is an optional formal-verification tool that can be configured later through [`docs/setup-lean.md`](docs/setup-lean.md).
 - **`mem_nodes.elo_score` is a legacy column.** New code should read `mem_bt_ratings.strength`.
 
 Protection labels are deliberately explicit: `enforced` means code blocks the
