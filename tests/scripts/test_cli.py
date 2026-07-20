@@ -161,6 +161,7 @@ enabled = false
 
 def test_doctor_reports_optional_runtime_readiness(tmp_path, monkeypatch):
     workspace = tmp_path / "research-project"
+    monkeypatch.setenv("RESEARCH_AGENT_EMBED_BACKEND", "local")
     config = workspace / ".codex" / "config.toml"
     config.parent.mkdir(parents=True)
     config.write_text(
