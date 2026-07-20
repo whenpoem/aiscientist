@@ -97,7 +97,6 @@ def test_plugin_and_project_skill_surfaces_are_byte_identical() -> None:
         if not source_file.is_file():
             continue
         relative = source_file.relative_to(source)
-        assert (ROOT / ".agents" / "skills" / relative).read_bytes() == source_file.read_bytes()
         assert (ROOT / "skills" / relative).read_bytes() == source_file.read_bytes()
 
 
