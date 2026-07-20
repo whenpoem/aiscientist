@@ -87,12 +87,15 @@ Claude 的设置已经接好了下列 MCP 服务器：`memory`、`verify`、`coc
 
 ## 范围实情
 
-**v5.1.3 是当前版本。** 本补丁补充普通用户安装、Cockpit、Doctor、可选文献 MCP、
-Lean 和源码仓库向导的完整说明。它保留公开 marketplace 的源码标签固定修复，并把
-默认关闭的 arXiv 和 OpenAlex MCP 定义加入公开插件。v5.1 系列修正 BT 排名、固定预注册 family、自动记录代码与
+**v5.1.4 是当前版本。** 本版本把公开插件安装、每个工作区的配置和源码开发分开。
+它保留公开 marketplace 的源码标签固定修复，并把
+默认关闭的 arXiv、OpenAlex 和 Lean MCP 定义加入公开插件。普通插件用户通过
+`claudescientist configure --workspace .` 为每个研究项目写入
+`.research-agent/config.toml` 中的非敏感设置；源码贡献者使用
+`claudescientist dev-setup`，`setup --scope project` 已弃用。v5.1 系列修正 BT 排名、固定预注册 family、自动记录代码与
 运行环境、区分保护强度，并加入公开 Codex 插件、统一 CLI/doctor 和完整 Cockpit
 支持。hooks 尚未被 Codex 信任时，Cockpit 会明确降级为只监控。核心 MCP 默认
-启用；插件内置但默认关闭的 arXiv、OpenAlex 以及独立的 Lean 集成都可选。下面的 v5.0 段落只记录仍然有效的 UI 架构，
+启用；插件内置但默认关闭的 arXiv、OpenAlex 和 Lean 都是可选功能。下面的 v5.0 段落只记录仍然有效的 UI 架构，
 不再表示当前发行版本。
 
 本仓库已经交付了 v3.0 计划（[`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)）。不要在没有亲自验证剩余产品和运维预期的情况下，把它随便改写成 "V1.0 complete" 或 "production-ready"。

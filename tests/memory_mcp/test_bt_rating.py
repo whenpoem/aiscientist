@@ -5,6 +5,15 @@ import math
 import pytest
 
 
+def test_rounded_probability_distribution_preserves_total(workspace):
+    bt = workspace["memory_mcp.tools.bt"]
+    rounded = bt._rounded_probability_distribution(  # noqa: SLF001
+        {"a": 0.3333334, "b": 0.3333334, "c": 0.3333332, "missing": None}
+    )
+    assert rounded["missing"] is None
+    assert sum(value for value in rounded.values() if value is not None) == 1.0
+
+
 def test_propose_hypothesis_seeds_bt_row(workspace):
     impl = workspace["memory_mcp.impl"]
     db = workspace["memory_mcp.db"]

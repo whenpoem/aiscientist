@@ -7,6 +7,11 @@ from pathlib import Path
 from claudescientist import cli, doctor, plugin_setup
 
 
+def test_setup_defaults_to_user_scope() -> None:
+    args = cli.build_parser().parse_args(["setup"])
+    assert args.scope == "user"
+
+
 def test_cockpit_cli_targets_explicit_external_workspace(tmp_path, capsys, monkeypatch):
     workspace = tmp_path / "research-project"
     workspace.mkdir()
@@ -78,7 +83,7 @@ def test_doctor_parses_real_codex_plugin_json(monkeypatch):
             {
                 "pluginId": "claudescientist@personal",
                 "name": "claudescientist",
-                "version": "5.1.3",
+                "version": "5.1.4",
                 "installed": True,
                 "enabled": True,
             }
@@ -97,7 +102,7 @@ def test_doctor_parses_real_codex_plugin_json(monkeypatch):
     result = doctor._codex_plugin_status()  # noqa: SLF001
     assert result["installed"] is True
     assert result["enabled"] is True
-    assert result["versions"] == ["5.1.3"]
+    assert result["versions"] == ["5.1.4"]
 
 
 def test_doctor_hook_trust_honours_codex_home(tmp_path, monkeypatch):
@@ -109,6 +114,31 @@ def test_doctor_hook_trust_honours_codex_home(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     assert doctor._trusted_claudescientist_hooks() is True  # noqa: SLF001
+
+
+def test_doctor_reports_python_plugin_version_mismatch(tmp_path, monkeypatch):
+    workspace = tmp_path / "research-project"
+    workspace.mkdir()
+    monkeypatch.setenv("RESEARCH_AGENT_EMBED_BACKEND", "mock")
+    monkeypatch.setattr(
+        doctor,
+        "_codex_plugin_status",
+        lambda: {
+            "available": True,
+            "installed": True,
+            "enabled": True,
+            "versions": ["5.1.1"],
+        },
+    )
+    monkeypatch.setattr(doctor, "_trusted_claudescientist_hooks", lambda: True)
+
+    result = doctor.run_doctor(workspace)
+    plugin = result["checks"]["codex_plugin"]
+    assert result["overall"] == "degraded"
+    assert plugin["status"] == "degraded"
+    assert plugin["version_match"] is False
+    assert plugin["expected_version"] == "5.1.4"
+    assert "does not match" in plugin["detail"]
 
 
 def test_doctor_reads_plugin_mcp_enable_overrides(tmp_path, monkeypatch):
@@ -163,7 +193,9 @@ enabled = true
     assert checks["literature_arxiv"]["status"] == "degraded"
     assert checks["literature_openalex"]["status"] == "degraded"
     assert checks["lean_reinsurance"]["status"] == "degraded"
-    assert checks["embedding_backend"]["status"] == "degraded"
+    assert checks["embedding_backend"]["status"] == "ok"
+    assert checks["embedding_backend"]["current_process_ready"] is False
+    assert checks["embedding_backend"]["plugin_managed_dependencies"] is True
 
 
 def test_doctor_optional_tools_do_not_degrade_when_disabled(tmp_path, monkeypatch):
@@ -223,7 +255,7 @@ def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch)
     result = plugin_setup.install_user_plugin(runner=fake_runner)
 
     assert result["ok"] is True
-    assert result["ref"] == "v5.1.3"
+    assert result["ref"] == "v5.1.4"
     assert commands == [
         [
             "codex.cmd",
@@ -232,7 +264,7 @@ def test_user_setup_installs_version_matched_marketplace_and_plugin(monkeypatch)
             "add",
             "whenpoem/aiscientist",
             "--ref",
-            "v5.1.3",
+            "v5.1.4",
             "--json",
         ],
         [
@@ -338,10 +370,10 @@ def test_user_setup_omits_git_ref_for_local_marketplace(tmp_path, monkeypatch):
     assert "--ref" not in commands[0]
     assert commands[1][-2] == "claudescientist@local-research-tools"
     assert result["ref"] is None
-    assert result["requested_ref"] == "v5.1.3"
+    assert result["requested_ref"] == "v5.1.4"
 
 
-def test_project_setup_cli_forwards_wizard_flags(tmp_path, monkeypatch):
+def test_deprecated_project_setup_forwards_wizard_flags(tmp_path, monkeypatch):
     captured: list[str] = []
 
     def fake_setup_main(argv):
@@ -371,3 +403,40 @@ def test_project_setup_cli_forwards_wizard_flags(tmp_path, monkeypatch):
         "--repo-root",
         str(tmp_path),
     ]
+
+
+def test_dev_setup_command_forwards_to_legacy_wizard(tmp_path, monkeypatch):
+    captured: list[str] = []
+
+    def fake_setup_main(argv):
+        captured.extend(argv)
+        return 0
+
+    import claudescientist.setup as setup_module
+
+    monkeypatch.setattr(setup_module, "main", fake_setup_main)
+    assert (
+        cli.main(
+            [
+                "dev-setup",
+                "--non-interactive",
+                "--repo-root",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    assert captured == ["--non-interactive", "--repo-root", str(tmp_path)]
+
+
+def test_deprecated_project_setup_prints_replacement(tmp_path, monkeypatch, capsys):
+    import claudescientist.setup as setup_module
+
+    monkeypatch.setattr(setup_module, "main", lambda _argv: 0)
+    assert (
+        cli.main(["setup", "--scope", "project", "--repo-root", str(tmp_path)])
+        == 0
+    )
+    error = capsys.readouterr().err
+    assert "deprecated" in error
+    assert "dev-setup" in error

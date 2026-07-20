@@ -89,18 +89,22 @@ Do not assume a PR exists unless you verify it. Do not force-push the branch unl
 
 This repository has shipped the v3.0 plan ([`docs/archive/plan-v3.0.md`](docs/archive/plan-v3.0.md)). Do not casually rename that to "V1.0 complete" or "production-ready" without verifying the remaining product and operations expectations yourself.
 
-**v5.1.3 is the current version.** It adds complete public-user documentation
-for installation, Cockpit, Doctor, optional literature MCPs, Lean, and the
-source-checkout setup wizard. It retains the public marketplace source-pin fix
-and bundles opt-in arXiv and OpenAlex MCP definitions in the public plugin.
+**v5.1.4 is the current version.** It separates public plugin installation,
+per-workspace configuration, and source-checkout development. It retains the
+public marketplace source-pin fix
+and bundles opt-in arXiv, OpenAlex, and Lean MCP definitions in the public
+plugin. Ordinary plugin users configure each research project through
+`claudescientist configure --workspace .`, which writes non-secret settings to
+`.research-agent/config.toml`. Source contributors use
+`claudescientist dev-setup`; `setup --scope project` is deprecated.
 The v5.1 line adds order-invariant full-ledger BT MAP
 refits with explicitly uncalibrated intervals, fixed preregistration families,
 automatic code/Git/runtime manifests, protection-strength labels, installation
 root versus workspace root separation, a portable public Codex plugin, the
 `claudescientist` CLI/doctor, and expanded core Skills. The public plugin keeps
 Cockpit monitoring and intervention; intervention is monitor-only until Codex
-trusts its hooks. Core MCPs are enabled by default; bundled arXiv and OpenAlex
-definitions and the separate Lean integration are opt-in. v5.0's
+trusts its hooks. Core MCPs are enabled by default; bundled arXiv, OpenAlex,
+and Lean definitions are opt-in. v5.0's
 activity-streaming Cockpit remains the current UI architecture;
 see [ADR 0011](docs/adr/0011-cockpit-activity-streaming.md).
 

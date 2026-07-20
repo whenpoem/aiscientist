@@ -556,6 +556,37 @@ def _probability_best_by_node(
     return {**unavailable, **probabilities}, fit_state
 
 
+def _rounded_probability_distribution(
+    probabilities: dict[str, float | None], *, digits: int = 6
+) -> dict[str, float | None]:
+    """Round a complete probability distribution without changing its total.
+
+    Rounding every entry independently can make an otherwise exact Monte Carlo
+    distribution sum to 0.999999 or 1.000001. Assign the small rounding residual
+    to the largest entry so public leaderboard rows remain a valid distribution.
+    """
+
+    available = {
+        node_id: float(probability)
+        for node_id, probability in probabilities.items()
+        if probability is not None
+    }
+    if not available:
+        return dict(probabilities)
+    rounded = {
+        node_id: round(probability, digits)
+        for node_id, probability in available.items()
+    }
+    residual = round(1.0 - sum(rounded.values()), digits)
+    if residual:
+        target = max(available, key=available.get)
+        rounded[target] = round(rounded[target] + residual, digits)
+    return {
+        node_id: rounded.get(node_id) if probability is not None else None
+        for node_id, probability in probabilities.items()
+    }
+
+
 # ---------- public tools ----------
 
 
@@ -765,6 +796,7 @@ def get_bt_leaderboard(
             kind=kind,
             eligible_node_ids=eligible_ids,
         )
+        rounded_probability_best = _rounded_probability_distribution(probability_best)
     finally:
         con.close()
 
@@ -789,8 +821,8 @@ def get_bt_leaderboard(
                 "interval_method": "laplace_map_centered_approximate_posterior",
                 "interval_calibrated": False,
                 "probability_best": (
-                    round(float(probability_best[str(row["node_id"])]), 6)
-                    if probability_best[str(row["node_id"])] is not None
+                    rounded_probability_best[str(row["node_id"])]
+                    if rounded_probability_best[str(row["node_id"])] is not None
                     else None
                 ),
                 "probability_best_method": "laplace_monte_carlo",

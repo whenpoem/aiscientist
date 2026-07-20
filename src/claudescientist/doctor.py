@@ -14,6 +14,7 @@ from typing import Any
 from . import __version__
 from .codex_cli import codex_command_prefix, codex_home
 from .runtime import installation_root, state_db_path, workspace_root
+from .workspace_config import configured_environment, read_workspace_config
 
 CORE_IMPORTS = (
     "memory_mcp.server",
@@ -162,7 +163,9 @@ def _mcp_enabled(root: Path, server_name: str) -> bool:
     return _project_mcp_enabled(root, server_name) or _plugin_mcp_enabled(server_name)
 
 
-def _optional_runtime_checks(root: Path) -> dict[str, dict[str, Any]]:
+def _optional_runtime_checks(
+    root: Path, *, plugin_managed_dependencies: bool = False
+) -> dict[str, dict[str, Any]]:
     node_path = shutil.which("node")
     npm_path = shutil.which("npm") or shutil.which("npm.cmd")
     npx_path = shutil.which("npx") or shutil.which("npx.cmd")
@@ -170,37 +173,67 @@ def _optional_runtime_checks(root: Path) -> dict[str, dict[str, Any]]:
 
     arxiv_enabled = _mcp_enabled(root, "arxiv")
     openalex_enabled = _mcp_enabled(root, "openalex")
-    lean_enabled = _mcp_enabled(root, "lean")
+    lean_mcp_enabled = _mcp_enabled(root, "lean")
+    lean_requested = os.environ.get("RESEARCH_AGENT_LEAN_ENABLED", "").strip().lower()
+    lean_workspace_enabled = (
+        lean_requested in {"1", "true", "yes", "on"}
+        if lean_requested
+        else lean_mcp_enabled
+    )
 
     lean_tools = {
         name: shutil.which(name)
         for name in ("elan", "lake", "lean")
     }
     lean_ready = all(lean_tools.values())
+    lean_project_value = os.environ.get("LEAN_PROJECT_PATH", "").strip()
+    lean_project = Path(lean_project_value) if lean_project_value else None
+    lean_project_ready = bool(
+        lean_project is not None and (lean_project / "lakefile.lean").is_file()
+    )
+    lean_active = lean_mcp_enabled and lean_workspace_enabled
+    lean_complete = lean_ready and lean_project_ready
 
     backend = os.environ.get("RESEARCH_AGENT_EMBED_BACKEND", "local").strip().lower()
     model = os.environ.get("RESEARCH_AGENT_EMBED_MODEL", "")
     if backend == "mock":
         embedding_ready = True
+        current_process_ready = True
         embedding_detail = "Deterministic mock backend selected."
     elif backend == "local":
-        embedding_ready = importlib.util.find_spec("sentence_transformers") is not None
+        current_process_ready = (
+            importlib.util.find_spec("sentence_transformers") is not None
+        )
+        embedding_ready = current_process_ready or plugin_managed_dependencies
         embedding_detail = (
             "Local sentence-transformers backend is importable."
-            if embedding_ready
-            else "Install the proof extra or select another embedding backend."
+            if current_process_ready
+            else (
+                "The public plugin resolves the proof dependencies in its pinned "
+                "prove MCP environment."
+                if plugin_managed_dependencies
+                else "Install the proof extra or select another embedding backend."
+            )
         )
     elif backend == "openai":
         client_ready = importlib.util.find_spec("openai") is not None
         credential_present = bool(os.environ.get("OPENAI_API_KEY"))
-        embedding_ready = client_ready and credential_present
+        current_process_ready = client_ready and credential_present
+        embedding_ready = (
+            client_ready or plugin_managed_dependencies
+        ) and credential_present
         embedding_detail = (
             "OpenAI-compatible client and credential are present."
-            if embedding_ready
-            else "The OpenAI-compatible backend needs the client and OPENAI_API_KEY."
+            if current_process_ready
+            else (
+                "The plugin provides the client, but OPENAI_API_KEY is still required."
+                if plugin_managed_dependencies and not credential_present
+                else "The OpenAI-compatible backend needs the client and OPENAI_API_KEY."
+            )
         )
     else:
         embedding_ready = False
+        current_process_ready = False
         embedding_detail = f"Unknown embedding backend: {backend!r}."
 
     return {
@@ -230,17 +263,27 @@ def _optional_runtime_checks(root: Path) -> dict[str, dict[str, Any]]:
             "network_checked": False,
         },
         "lean_reinsurance": {
-            "status": "ok" if lean_ready or not lean_enabled else "degraded",
-            "enabled": lean_enabled,
-            "ready": lean_ready,
+            "status": "ok" if lean_complete or not lean_active else "degraded",
+            "enabled": lean_active,
+            "mcp_enabled": lean_mcp_enabled,
+            "workspace_enabled": lean_workspace_enabled,
+            "ready": lean_complete,
             "tools": lean_tools,
-            "detail": "Lean is optional; the natural-language proof trunk remains usable.",
+            "project_path": str(lean_project) if lean_project else None,
+            "project_ready": lean_project_ready,
+            "detail": (
+                "Lean is ready for this workspace."
+                if lean_complete and lean_active
+                else "Lean is optional; the natural-language proof trunk remains usable."
+            ),
         },
         "embedding_backend": {
             "status": "ok" if embedding_ready else "degraded",
             "backend": backend,
             "model": model or None,
             "ready": embedding_ready,
+            "current_process_ready": current_process_ready,
+            "plugin_managed_dependencies": plugin_managed_dependencies,
             "detail": embedding_detail,
         },
     }
@@ -252,7 +295,13 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
         if workspace is not None
         else workspace_root()
     )
-    if workspace is not None and not os.environ.get("RESEARCH_AGENT_DB_PATH"):
+    loaded = read_workspace_config(root)
+    with configured_environment(root):
+        return _run_doctor(root, loaded)
+
+
+def _run_doctor(root: Path, loaded_config) -> dict[str, Any]:
+    if not os.environ.get("RESEARCH_AGENT_DB_PATH"):
         state_dir = os.environ.get("RESEARCH_AGENT_STATE_DIR")
         database = (
             Path(state_dir).expanduser() / "state.db"
@@ -265,6 +314,9 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
     import_errors = _module_errors()
 
     plugin = _codex_plugin_status()
+    plugin_versions = [str(version) for version in plugin.get("versions", [])]
+    plugin_version_match = not plugin_versions or __version__ in plugin_versions
+    plugin_enabled = bool(plugin.get("enabled"))
     project_hooks = _project_hook_config(root)
     hook_trusted = _trusted_claudescientist_hooks()
     hook_configured = project_hooks or bool(plugin.get("enabled"))
@@ -278,6 +330,19 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
             "status": "ok" if root.is_dir() else "error",
             "path": str(root),
             "writable": os.access(root, os.W_OK) if root.exists() else False,
+        },
+        "workspace_configuration": {
+            "status": "error" if loaded_config.errors else (
+                "ok" if loaded_config.exists else "degraded"
+            ),
+            "path": str(loaded_config.path),
+            "exists": loaded_config.exists,
+            "errors": list(loaded_config.errors),
+            "detail": (
+                "Run `claudescientist configure --workspace .` in this project."
+                if not loaded_config.exists
+                else "Workspace configuration loaded."
+            ),
         },
         "state_database": {
             "status": "error" if misplaced_database else "ok",
@@ -297,8 +362,16 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
             "errors": import_errors,
         },
         "codex_plugin": {
-            "status": "ok" if plugin.get("enabled") else "degraded",
+            "status": "ok" if plugin_enabled and plugin_version_match else "degraded",
             **plugin,
+            "version_match": plugin_version_match,
+            "expected_version": __version__,
+            "detail": (
+                f"Installed plugin version {', '.join(plugin_versions)} does not "
+                f"match Python package {__version__}."
+                if plugin_enabled and not plugin_version_match
+                else plugin.get("detail", "")
+            ),
         },
         "hook_delivery": {
             "status": "ok" if intervention_ok else "degraded",
@@ -317,7 +390,10 @@ def run_doctor(workspace: str | Path | None = None) -> dict[str, Any]:
             "status": "ok" if not import_errors else "error",
             "database": str(database),
         },
-        **_optional_runtime_checks(root),
+        **_optional_runtime_checks(
+            root,
+            plugin_managed_dependencies=plugin_enabled and plugin_version_match,
+        ),
     }
     statuses = {check["status"] for check in checks.values()}
     overall = "error" if "error" in statuses else ("degraded" if "degraded" in statuses else "ok")

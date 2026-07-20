@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -27,6 +30,37 @@ def _workspace_context(value: str | None):
 
 
 def _run_mcp(server: str) -> int:
+    if server == "lean":
+        enabled = os.environ.get("RESEARCH_AGENT_LEAN_ENABLED", "0").strip().lower()
+        if enabled not in {"1", "true", "yes", "on"}:
+            print(
+                "Lean is disabled for this workspace. Run "
+                "`claudescientist configure --workspace .` first.",
+                file=sys.stderr,
+            )
+            return 2
+        project = os.environ.get("LEAN_PROJECT_PATH", "").strip()
+        if not project or not (Path(project) / "lakefile.lean").is_file():
+            print(
+                "Lean project is not ready. Configure a directory containing "
+                "lakefile.lean.",
+                file=sys.stderr,
+            )
+            return 2
+        uv = shutil.which("uv") or shutil.which("uv.exe")
+        if uv is None:
+            print("uv is required to start lean-lsp-mcp.", file=sys.stderr)
+            return 2
+        return subprocess.call(
+            [
+                uv,
+                "tool",
+                "run",
+                "lean-lsp-mcp",
+                "--lean-project-path",
+                project,
+            ]
+        )
     if server == "cockpit":
         from cockpit.mcp_server import main
 
@@ -61,14 +95,42 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--json", action="store_true", dest="as_json")
 
     mcp = commands.add_parser("mcp", help="run one bundled MCP server over stdio")
-    mcp.add_argument("server", choices=("memory", "verify", "prove", "cockpit"))
+    mcp.add_argument(
+        "server", choices=("memory", "verify", "prove", "cockpit", "lean")
+    )
     mcp.add_argument("--workspace")
 
     hook = commands.add_parser("hook", help="run one bundled lifecycle hook")
     hook.add_argument("hook_args", nargs=argparse.REMAINDER)
 
-    setup = commands.add_parser("setup", help="configure project or user installation")
-    setup.add_argument("--scope", choices=("project", "user"), default="project")
+    configure = commands.add_parser(
+        "configure", help="configure ClaudeScientist for one research workspace"
+    )
+    configure.add_argument("--workspace", default=".")
+    configure.add_argument("--non-interactive", action="store_true")
+    configure.add_argument(
+        "--embedding-backend", choices=("local", "openai", "mock")
+    )
+    configure.add_argument("--embedding-model")
+    configure.add_argument("--embedding-base-url")
+    configure.add_argument("--heldout-dir")
+    configure.add_argument(
+        "--auto-prune", action=argparse.BooleanOptionalAction, default=None
+    )
+    configure.add_argument("--lean", action=argparse.BooleanOptionalAction, default=None)
+    configure.add_argument("--lean-project")
+    configure.add_argument("--json", action="store_true", dest="as_json")
+
+    dev_setup = commands.add_parser(
+        "dev-setup", help="configure a ClaudeScientist source checkout"
+    )
+    dev_setup.add_argument("--non-interactive", action="store_true")
+    dev_setup.add_argument("--reset", action="store_true")
+    dev_setup.add_argument("--skip-deps", action="store_true")
+    dev_setup.add_argument("--repo-root")
+
+    setup = commands.add_parser("setup", help="install the public Codex plugin")
+    setup.add_argument("--scope", choices=("project", "user"), default="user")
     setup.add_argument("--non-interactive", action="store_true")
     setup.add_argument("--reset", action="store_true")
     setup.add_argument("--skip-deps", action="store_true")
@@ -115,20 +177,50 @@ def _dispatch(args: argparse.Namespace) -> int:
         from .codex_hooks import main as hook_main
 
         return hook_main(args.hook_args)
-    if args.command == "setup":
-        if args.scope == "project":
-            forwarded: list[str] = []
-            if args.non_interactive:
-                forwarded.append("--non-interactive")
-            if args.reset:
-                forwarded.append("--reset")
-            if args.skip_deps:
-                forwarded.append("--skip-deps")
-            if args.repo_root:
-                forwarded.extend(["--repo-root", args.repo_root])
-            from .setup import main as setup_main
+    if args.command == "configure":
+        forwarded = ["--workspace", args.workspace]
+        for flag, value in (
+            ("--embedding-backend", args.embedding_backend),
+            ("--embedding-model", args.embedding_model),
+            ("--embedding-base-url", args.embedding_base_url),
+            ("--heldout-dir", args.heldout_dir),
+            ("--lean-project", args.lean_project),
+        ):
+            if value is not None:
+                forwarded.extend([flag, value])
+        if args.non_interactive:
+            forwarded.append("--non-interactive")
+        if args.auto_prune is not None:
+            forwarded.append("--auto-prune" if args.auto_prune else "--no-auto-prune")
+        if args.lean is not None:
+            forwarded.append("--lean" if args.lean else "--no-lean")
+        if args.as_json:
+            forwarded.append("--json")
+        from .configure import main as configure_main
 
-            return setup_main(forwarded)
+        return configure_main(forwarded)
+    if args.command in {"dev-setup", "setup"} and (
+        args.command == "dev-setup" or args.scope == "project"
+    ):
+        forwarded: list[str] = []
+        if args.non_interactive:
+            forwarded.append("--non-interactive")
+        if args.reset:
+            forwarded.append("--reset")
+        if args.skip_deps:
+            forwarded.append("--skip-deps")
+        if args.repo_root:
+            forwarded.extend(["--repo-root", args.repo_root])
+        if args.command == "setup":
+            print(
+                "Warning: `setup --scope project` is deprecated; use "
+                "`claudescientist dev-setup` instead.",
+                file=sys.stderr,
+            )
+        from .setup import main as setup_main
+
+        return setup_main(forwarded)
+    if args.command == "setup":
 
         from .plugin_setup import install_user_plugin
 
@@ -156,6 +248,16 @@ def _dispatch(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     with _workspace_context(getattr(args, "workspace", None)):
+        if args.command in {"cockpit", "doctor", "mcp", "hook"}:
+            from .workspace_config import configured_environment
+
+            with configured_environment() as loaded:
+                for error in loaded.errors:
+                    print(
+                        f"ClaudeScientist config warning ({loaded.path}): {error}",
+                        file=sys.stderr,
+                    )
+                return _dispatch(args)
         return _dispatch(args)
 
 

@@ -2,7 +2,7 @@
 
 **Research memory, result verification, and a local monitoring interface for Claude Code and Codex.**
 
-[![version](https://img.shields.io/badge/version-v5.1.3-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.4-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > 中文版本: [README.zh-CN.md](README.zh-CN.md)
 
@@ -15,11 +15,11 @@ The agent can use these records to compare hypotheses, run checked experiments,
 and verify reported results. A second terminal can display the current research
 state and accept user decisions while the agent is working.
 
-**Current version**: v5.1.3 updates the public installation and usage
-documentation. It explains the Python package and Codex plugin separately,
-documents Cockpit and Doctor, and gives explicit setup paths for arXiv,
-OpenAlex, and Lean. It retains the v5.1.2 public-plugin integrations and the
-v5.1 trust-calibration and portability changes.
+**Current version**: v5.1.4 separates public installation, per-workspace
+configuration, and source development. It adds `claudescientist configure`,
+loads `.research-agent/config.toml` automatically, packages Lean as a disabled
+optional MCP, and keeps the older project wizard under `dev-setup` for source
+contributors. It retains the v5.1 trust-calibration and portability changes.
 Bradley-Terry rankings are refit from the complete ledger and no longer depend
 on comparison order; their intervals are honestly labelled as uncalibrated
 approximations. Bonferroni families are fixed when locked. Every central run
@@ -82,26 +82,33 @@ codex --version
 Install the Python package and the public plugin:
 
 ```powershell
-uv tool install claudescientist==5.1.3
+uv tool install claudescientist==5.1.4
 claudescientist setup --scope user
 ```
 
 The first command installs the CLI, MCP backends, Doctor, and Cockpit. The
-second command installs the Codex plugin from the matching GitHub `v5.1.3` tag.
+second command installs the Codex plugin from the matching GitHub `v5.1.4` tag.
 The plugin contains Skills, hooks, and MCP configuration. Codex can then use the
 same installation from any research project; it does not need to start inside
 this source checkout.
 
-Start a new Codex task after installation. Approve/trust the plugin hooks when
-Codex asks. MCP monitoring works without hook trust, but Cockpit interventions
-remain **monitor-only** until the hooks are trusted.
-
-Open a terminal in the research project and check the installation:
+Open a terminal in each research project and configure that workspace once:
 
 ```powershell
 cd D:\path\to\your-research-project
+claudescientist configure --workspace .
 claudescientist doctor --workspace .
 ```
+
+The configuration command writes non-secret project settings to
+`.research-agent/config.toml`. It covers the embedding backend, held-out data
+directory, auto-prune, and the optional Lean project path. ClaudeScientist
+loads this file automatically; ordinary plugin users do not need a project
+`.env` file.
+
+Start a new Codex task after installation or configuration. Approve/trust the
+plugin hooks when Codex asks. MCP monitoring works without hook trust, but
+Cockpit interventions remain **monitor-only** until the hooks are trusted.
 
 Start Codex in that project. In a second terminal, open Cockpit with the same
 workspace path:
@@ -117,17 +124,15 @@ Use `$research-sop <question>` in Codex to start the full research workflow, or
 choose a Skill from `/skills`. Each project keeps independent state in
 `.research-agent/state.db`.
 
-The plugin enables only the four local core MCPs (`memory`, `verify`, `prove`,
-`cockpit`) by default. v5.1.3 also bundles version-pinned arXiv and OpenAlex MCP
-definitions in the disabled state. Users can enable either source from Codex
-MCP settings without adding a server by hand. Lean remains a separate explicit
-opt-in and requires a Lean toolchain plus a manually registered `lean-lsp-mcp`
-server. See the detailed [Codex installation and use guide](docs/setup-codex-plugin.md)
-and [Lean setup guide](docs/setup-lean.md).
+The plugin enables the four local core MCPs (`memory`, `verify`, `prove`,
+`cockpit`) by default. It also bundles version-pinned arXiv, OpenAlex, and Lean
+MCP definitions in the disabled state. Enable them in Codex only when needed.
+Lean also requires a local toolchain and mathlib project. See the detailed
+[Codex installation and use guide](docs/setup-codex-plugin.md) and
+[Lean setup guide](docs/setup-lean.md).
 
-Do not run `claudescientist setup --scope project` for an ordinary portable
-plugin installation. That command is the older source-checkout wizard described
-below; it writes project-local development configuration.
+Do not run `claudescientist dev-setup` for an ordinary plugin installation.
+`setup --scope project` remains only as a deprecated compatibility alias.
 
 ### Develop from this checkout
 
@@ -135,7 +140,7 @@ Install and run the setup wizard:
 
 ```powershell
 uv sync
-uv run python -m claudescientist.setup
+uv run claudescientist dev-setup
 ```
 
 The wizard walks you through AI client selection (`claude`, `codex`, or
@@ -153,7 +158,7 @@ Literature search uses two external MCPs. arXiv is launched through
 `npx -y openalex-research-mcp@0.5.0`, so install Node.js/npm if you want the
 OpenAlex-backed librarian tools. The current development plugin carries both
 definitions but keeps them disabled until selected; see
-[docs/setup-codex-plugin.md](docs/setup-codex-plugin.md#optional-integrations).
+[docs/setup-codex-plugin.md](docs/setup-codex-plugin.md).
 
 <details><summary>Manual setup (without the wizard)</summary>
 

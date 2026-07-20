@@ -2,22 +2,22 @@
   "mcpServers": {
   "memory": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.3", "claudescientist", "mcp", "memory"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.4", "claudescientist", "mcp", "memory"],
     "startup_timeout_sec": 30
   },
   "verify": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.3", "claudescientist", "mcp", "verify"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.4", "claudescientist", "mcp", "verify"],
     "startup_timeout_sec": 30
   },
   "prove": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.3", "claudescientist", "mcp", "prove"],
+    "args": ["tool", "run", "--from", "claudescientist[all]==5.1.4", "claudescientist", "mcp", "prove"],
     "startup_timeout_sec": 30
   },
   "cockpit": {
     "command": "uv",
-    "args": ["tool", "run", "--from", "claudescientist==5.1.3", "claudescientist", "mcp", "cockpit"],
+    "args": ["tool", "run", "--from", "claudescientist==5.1.4", "claudescientist", "mcp", "cockpit"],
     "startup_timeout_sec": 30
   },
   "arxiv": {
@@ -30,6 +30,13 @@
   "openalex": {
     "command": "npx",
     "args": ["-y", "openalex-research-mcp@0.5.0"],
+    "startup_timeout_sec": 60,
+    "enabled": false,
+    "required": false
+  },
+  "lean": {
+    "command": "uv",
+    "args": ["tool", "run", "--from", "claudescientist==5.1.4", "claudescientist", "mcp", "lean"],
     "startup_timeout_sec": 60,
     "enabled": false,
     "required": false

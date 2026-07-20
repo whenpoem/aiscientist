@@ -9,11 +9,10 @@ ClaudeScientist 的自然语言证明流程不依赖 Lean。只有需要 Lean 4 
 
 - 只需要证明起草、检查和修改：不需要安装 Lean，直接使用 `$prove-sop`。
 - 需要 Lean 机器验证：完成第 1–4 节，然后按第 7 节测试。
-- 暂时不再使用 Lean：运行 `codex mcp remove lean`，再新建 Codex 任务。
+- 当前工作区不再使用 Lean：重新运行配置命令并加上 `--no-lean`，再新建 Codex 任务。
 
-`claudescientist setup --scope user` 不会安装或注册 Lean。旧的
-`claudescientist setup --scope project` 也只检查 Lean 是否存在，不会代替本文的
-工具链和 mathlib 安装步骤。
+`claudescientist setup --scope user` 会安装一个默认关闭的 Lean MCP 定义，但不会安装
+Lean 工具链、`lean-lsp-mcp` 或 mathlib。
 
 Lean 支持由三个独立部分组成：
 
@@ -83,44 +82,37 @@ lake build
 每个需要 Lean 的研究项目可以分别建立一个 mathlib 项目。也可以共用一个 mathlib
 项目，但注册 MCP 时必须使用它的完整路径。
 
-## 4. 普通 Codex 插件用户注册 Lean
+## 4. 普通 Codex 插件用户配置 Lean
 
-公开 ClaudeScientist 插件不会自动注册 Lean。从研究项目根目录运行：
+回到研究项目根目录，保存当前项目的 Lean 路径：
 
 ```powershell
-codex mcp add lean -- uv tool run lean-lsp-mcp --lean-project-path .research-agent/lean/claudescientist-proofs
+claudescientist configure --workspace . --lean `
+  --lean-project .research-agent\lean\claudescientist-proofs
 ```
 
-检查结果：
+然后打开 Codex 设置，在 ClaudeScientist 插件的 MCP 列表中启用 `lean`，再从当前工作区
+新建 Codex 任务。已经打开的任务不会自动重新读取 MCP 配置。
+
+插件会启动 `claudescientist mcp lean`。这个命令读取当前项目的
+`.research-agent/config.toml`，再把其中的 mathlib 路径交给 `lean-lsp-mcp`。因此，
+不同研究项目可以使用各自的 Lean 项目。
+
+检查完整配置：
 
 ```powershell
+claudescientist doctor --workspace .
 codex mcp list
 ```
 
-列表中应当出现状态为 `enabled` 的 `lean`。然后从同一研究项目新建 Codex 任务；
-已经打开的任务不会自动重新读取 MCP 配置。
-
-注册后，从同一个研究项目新建 Codex 任务。相对路径
-`--lean-project-path` 以当前研究项目为起点。如果 mathlib 项目放在其他位置，请改成
-包含 `lakefile.lean` 的目录的完整路径。
-
-这个 MCP 条目保存在用户级 Codex 配置中。如果另一个研究项目没有对应的相对路径，
-请先移除 `lean` 条目，或者改成一个所有项目都能访问的完整路径。
-
-如果已经存在路径错误的 `lean` MCP，可以删除后重新添加：
+当前项目不再使用 Lean 时，运行：
 
 ```powershell
-codex mcp remove lean
-codex mcp add lean -- uv tool run lean-lsp-mcp --lean-project-path D:\完整路径\claudescientist-proofs
+claudescientist configure --workspace . --no-lean
 ```
 
-如果暂时不再使用 Lean，只运行下面的命令即可：
-
-```powershell
-codex mcp remove lean
-```
-
-这只删除 Codex 中的 Lean MCP 配置，不会删除本地 mathlib 项目或已有证明记录。
+也可以在 Codex 插件 MCP 设置中关闭 `lean`，对所有工作区停用。两种操作都不会删除
+mathlib 项目或已有证明记录。
 
 ## 5. 源码仓库和 Claude Code 配置
 
@@ -134,7 +126,7 @@ Claude Code 的 `.claude/settings.json` 已经配置
 
 安装工具链并创建 mathlib 项目后，从源码仓库根目录重新启动 Claude Code 即可。
 
-旧的项目级设置向导会在 `.codex/config.toml` 中生成默认关闭的
+`claudescientist dev-setup` 开发向导会在 `.codex/config.toml` 中生成默认关闭的
 `[mcp_servers.lean]`。完成第 1–3 节后，把 `enabled` 改成 `true`，再重新启动 Codex。
 向导只检查 Lean 是否存在，不会安装 Lean 或 mathlib。
 

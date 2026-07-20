@@ -15,7 +15,7 @@ def test_plugin_manifest_and_python_package_versions_match() -> None:
     manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text())
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert manifest["name"] == project["project"]["name"] == "claudescientist"
-    assert manifest["version"] == project["project"]["version"] == "5.1.3"
+    assert manifest["version"] == project["project"]["version"] == "5.1.4"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert (ROOT / "hooks" / "hooks.json").is_file()
@@ -42,14 +42,19 @@ def test_public_marketplace_points_to_repository_root_plugin() -> None:
     }
 
 
-def test_plugin_enables_core_mcps_and_bundles_disabled_literature_mcps() -> None:
+def test_plugin_enables_core_mcps_and_bundles_disabled_optional_mcps() -> None:
     config = json.loads((ROOT / ".mcp.json").read_text())["mcpServers"]
     core_names = {"memory", "verify", "prove", "cockpit"}
-    assert set(config) == {*core_names, "arxiv", "openalex"}
+    assert set(config) == {*core_names, "arxiv", "openalex", "lean"}
     for name in core_names:
         server = config[name]
         assert server["command"] == "uv"
-        assert "claudescientist==5.1.3" in server["args"]
+        expected_package = (
+            "claudescientist[all]==5.1.4"
+            if name == "prove"
+            else "claudescientist==5.1.4"
+        )
+        assert expected_package in server["args"]
         assert server["args"][-2:] == ["mcp", name]
         assert server.get("enabled", True) is True
 
@@ -65,6 +70,13 @@ def test_plugin_enables_core_mcps_and_bundles_disabled_literature_mcps() -> None
     assert openalex["enabled"] is False
     assert openalex["required"] is False
 
+    lean = config["lean"]
+    assert lean["command"] == "uv"
+    assert "claudescientist==5.1.4" in lean["args"]
+    assert lean["args"][-2:] == ["mcp", "lean"]
+    assert lean["enabled"] is False
+    assert lean["required"] is False
+
 
 def test_plugin_hooks_are_version_pinned_and_include_intervention_bridge() -> None:
     hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]
@@ -75,7 +87,7 @@ def test_plugin_hooks_are_version_pinned_and_include_intervention_bridge() -> No
         for hook in group["hooks"]
     ]
     assert commands
-    assert all("claudescientist==5.1.3" in command for command in commands)
+    assert all("claudescientist==5.1.4" in command for command in commands)
     assert any("intervention_pump" in command for command in commands)
 
 

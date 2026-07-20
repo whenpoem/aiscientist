@@ -1,4 +1,4 @@
-"""Interactive setup wizard for a fresh claudescientist clone.
+"""Development setup wizard for a fresh claudescientist source checkout.
 
 Walks the user through 8 install-time decisions that the README otherwise
 scatters across multiple sections:
@@ -17,9 +17,9 @@ adapter files when the selected host is ``codex`` or ``both``. The wizard does
 NOT modify ``.claude/settings.json``, the user's shell rc, or any global config.
 
 Usage:
-    uv run python -m claudescientist.setup
-    uv run python -m claudescientist.setup --non-interactive
-    uv run python -m claudescientist.setup --reset
+    uv run claudescientist dev-setup
+    uv run claudescientist dev-setup --non-interactive
+    uv run claudescientist dev-setup --reset
 
 Non-interactive mode reads answers from these env vars:
     CLAUDESCIENTIST_SETUP_AGENT_HOST    claude | codex | both (default: claude)
@@ -132,8 +132,8 @@ class SetupState:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m claudescientist.setup",
-        description="Interactive setup wizard for a claudescientist clone.",
+        prog="claudescientist dev-setup",
+        description="Development setup wizard for a claudescientist clone.",
     )
     parser.add_argument(
         "--non-interactive",
@@ -168,7 +168,7 @@ def _print_banner() -> None:
     _console.print(
         Panel.fit(
             Text.assemble(
-                ("claudescientist setup\n", "bold"),
+                ("claudescientist dev-setup\n", "bold"),
                 "Configure AI client, embed backend, held-out paths, proof corpus, and Lean.\n",
                 ("Output: ", "dim"),
                 (".env plus optional Codex adapter files.", "dim italic"),

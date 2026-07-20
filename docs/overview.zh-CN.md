@@ -67,6 +67,11 @@ AI 客户端负责对话、规划和工具调用；本项目在上面补四件�
 进程；arXiv、OpenAlex、Lean 均为可选。它们通过标准输入输出通信，本地核心状态
 汇入同一个工作区 SQLite 文件。
 
+普通插件用户需要在每个研究项目中运行一次
+`claudescientist configure --workspace .`。生成的
+`.research-agent/config.toml` 为核心 MCP、hooks、Doctor 和 Cockpit 提供非敏感的
+运行设置；需要临时调整时，可以用环境变量覆盖。
+
 ## 4. 一次研究任务的完整流程
 
 在 Codex 里，在终端 A 输入：`$research-sop 研究 dropout 对 ViT 是否有影响`。

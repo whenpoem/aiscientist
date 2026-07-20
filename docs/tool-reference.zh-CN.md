@@ -1,4 +1,4 @@
-# MCP 工具参考（v5.1.3）
+# MCP 工具参考（v5.1.4）
 
 > English version: [tool-reference.md](tool-reference.md)
 > 项目内置的全部 MCP 工具的完整目录。工具按服务器分组。每个条目都给出了函数签名、用途、它会动到哪些状态、以及在什么场景下应该调用它。底层契约请参考 [`architecture.zh-CN.md`](architecture.zh-CN.md)；端到端流程请参考 [`workflows/`](workflows/)。
@@ -563,13 +563,14 @@ Lean 验证是可选步骤。详见 [ADR 0008](adr/0008-two-trunk-domain-archite
 
 ## 外部 MCP
 
-下列服务器以第三方包的形式运行，我们不拥有它们的 schema。v5.1.3 公开插件已
-携带这两个定义，但默认关闭。
+下列服务器以第三方包的形式运行，我们不拥有它们的 schema。公开插件携带这三个
+定义，但默认关闭。
 
 | 服务器 | 来源 | 用途 |
 |---|---|---|
 | `arxiv` | `arxiv-mcp-server==0.5.0` | 插件已携带、默认关闭；搜索和拉取 arXiv 论文 |
 | `openalex` | `openalex-research-mcp@0.5.0`（npx） | 插件已携带、默认关闭；搜索和拉取 OpenAlex 文献 |
+| `lean` | 由 `claudescientist mcp lean` 启动 `lean-lsp-mcp` | 插件已携带、默认关闭；在当前工作区配置的 mathlib 项目中机器验证证明 |
 
 ---
 

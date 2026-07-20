@@ -11,11 +11,11 @@ Ordinary public-plugin users can use this rule:
   installing Lean.
 - For machine-checked Lean verification, complete sections 1–4 and then run the
   test in section 7.
-- To stop using Lean, run `codex mcp remove lean` and start a new Codex task.
+- To stop using Lean in one workspace, run its configuration again with
+  `--no-lean` and start a new Codex task.
 
-`claudescientist setup --scope user` does not install or register Lean. The old
-`claudescientist setup --scope project` command only detects Lean; it does not
-replace the toolchain and mathlib setup in this guide.
+`claudescientist setup --scope user` installs a disabled Lean MCP definition,
+but it does not install the Lean toolchain, `lean-lsp-mcp`, or mathlib.
 
 Lean support has three independent parts:
 
@@ -88,50 +88,38 @@ when setup finishes.
 Create one mathlib project in each research workspace that needs Lean, or use a
 full path to one shared mathlib project when registering the MCP.
 
-## 4. Register Lean for an ordinary Codex plugin installation
+## 4. Configure Lean for an ordinary Codex plugin installation
 
-The public ClaudeScientist plugin does not register Lean automatically. From
-the research workspace root, run:
+Return to the research workspace root and save its Lean project path:
 
 ```powershell
-codex mcp add lean -- uv tool run lean-lsp-mcp --lean-project-path .research-agent/lean/claudescientist-proofs
+claudescientist configure --workspace . --lean `
+  --lean-project .research-agent\lean\claudescientist-proofs
 ```
 
-Check the result:
+Next, open Codex settings, find the ClaudeScientist plugin MCPs, and enable
+`lean`. Start a new Codex task from this workspace. An already-open task does
+not reload MCP configuration automatically.
+
+The plugin starts `claudescientist mcp lean`. That command reads the current
+workspace's `.research-agent/config.toml` and passes its mathlib path to
+`lean-lsp-mcp`. Each workspace can therefore use a different Lean project.
+
+Check the complete setup:
 
 ```powershell
+claudescientist doctor --workspace .
 codex mcp list
 ```
 
-The list should show `lean` with status `enabled`. Then start a new Codex task
-from the same research workspace; an already-open task does not reload MCP
-configuration automatically.
-
-Start a new Codex task from the same workspace after registering the server.
-The relative `--lean-project-path` is resolved from the active workspace. If the
-mathlib project is stored elsewhere, replace it with the full path to the
-directory containing `lakefile.lean`.
-
-This MCP entry is stored in the user's Codex configuration. When another
-workspace does not contain the relative mathlib path, remove the `lean` entry or
-use one shared absolute path before starting Codex there.
-
-If a `lean` MCP entry already exists and points to the wrong directory, remove
-and add it again:
+To stop using Lean in this workspace, run:
 
 ```powershell
-codex mcp remove lean
-codex mcp add lean -- uv tool run lean-lsp-mcp --lean-project-path D:\full\path\to\claudescientist-proofs
+claudescientist configure --workspace . --no-lean
 ```
 
-To stop using Lean, run:
-
-```powershell
-codex mcp remove lean
-```
-
-This removes only the Lean MCP entry from Codex. It does not delete the local
-mathlib project or existing proof records.
+You can also disable `lean` in the plugin MCP settings to stop it for all
+workspaces. Neither action deletes the mathlib project or proof records.
 
 ## 5. Source-checkout and Claude Code configuration
 
@@ -148,7 +136,8 @@ available:
 After installing the toolchain and creating the mathlib project, restart Claude
 Code from the repository root.
 
-The old project setup wizard generates a disabled `[mcp_servers.lean]` entry in
+The `claudescientist dev-setup` wizard generates a disabled
+`[mcp_servers.lean]` entry in
 `.codex/config.toml` for project-local Codex development. After completing
 sections 1–3, change its `enabled` value to `true` and restart Codex. The wizard
 only detects the Lean toolchain; it does not install Lean or mathlib.

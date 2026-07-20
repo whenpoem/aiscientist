@@ -33,6 +33,12 @@ packages, plugin assets, and hooks; the active research workspace supplies state
 and reports. Code must use `installation_root()` and `workspace_root()` rather
 than assuming those locations are the same.
 
+Installed entrypoints load `<workspace>/.research-agent/config.toml` through
+`claudescientist.workspace_config` before starting MCPs, hooks, Doctor, or
+Cockpit. The file maps validated non-secret settings onto the existing runtime
+environment contract. Explicit environment variables take priority. API keys
+must not be stored in the workspace file.
+
 ### 2. The state file
 
 `.research-agent/state.db` is the **single local state boundary** for memory, verification, the cockpit, and hooks. Two rules:
@@ -111,6 +117,9 @@ The `claudescientist.runtime` module owns the four pieces of cross-module infras
   to locate resources. Feature packages must not duplicate path resolution.
   `PLUGIN_ROOT` may identify installed plugin assets, while
   `RESEARCH_AGENT_WORKSPACE` identifies the active research project.
+- **Workspace configuration.** `claudescientist.workspace_config` is the only
+  supported reader and writer for `.research-agent/config.toml`. New settings
+  must be validated, documented, mapped explicitly, and covered by tests.
 - **SQLite connection setup.** `connect_sqlite()` enables WAL mode, foreign keys, row factories, and a 5-second busy timeout. `connect_existing_sqlite()` is the hook-safe variant: it returns `None` instead of creating the DB when state is missing or malformed.
 - **Schema migration bookkeeping.** The `ra_migrations` table records, per component, the schema version, schema hash, apply status, and any failure text. Structural upgrades that cannot be expressed by `CREATE TABLE IF NOT EXISTS` must use explicit compatibility helpers and ship with tests.
 - **Cockpit event insertion.** `emit_cockpit_event()` is the canonical way to push something to the cockpit. Producers should call it inside the same transaction as the underlying state change.

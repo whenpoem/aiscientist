@@ -23,11 +23,19 @@ The backend reads three environment variables:
 | `RESEARCH_AGENT_EMBED_MODEL` | The model identifier the provider expects |
 | `OPENAI_API_KEY` | The provider's API key (every compatible provider accepts it through this variable) |
 
-The setup wizard writes these to `.env` for you. Switching providers
-later is a matter of editing `.env` (or re-running
-`uv run python -m claudescientist.setup --reset`) and running
-`uv run python scripts/reindex_proof_corpus.py` so any stored corpus
-re-encodes under the new model.
+Ordinary plugin users set the first three values with:
+
+```powershell
+claudescientist configure --workspace . --embedding-backend openai
+```
+
+The command writes non-secret values to `.research-agent/config.toml` and
+leaves `OPENAI_API_KEY` in the environment. Source contributors can still use
+`claudescientist dev-setup`, which writes the checkout's `.env`.
+
+After changing the provider or model, reindex any existing proof corpus before
+using retrieval results from the new backend. Source contributors can run
+`uv run python scripts/reindex_proof_corpus.py`.
 
 ## Tested presets
 

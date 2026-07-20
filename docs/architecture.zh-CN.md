@@ -31,6 +31,11 @@ ClaudeScientist 由四个运行时层和一个共享状态文件组成。
 包、插件资源和 hooks；当前研究工作区提供状态与报告。代码必须通过
 `installation_root()` 和 `workspace_root()` 区分两者，不能假设它们是同一目录。
 
+已安装的入口会在启动 MCP、hooks、Doctor 或 Cockpit 前，通过
+`claudescientist.workspace_config` 读取
+`<workspace>/.research-agent/config.toml`。这个文件只保存经过校验的非敏感设置，
+并映射到现有运行时环境变量；显式环境变量优先。API Key 不得写入项目配置文件。
+
 ### 2. 状态文件
 
 `.research-agent/state.db` 是 memory、verify、cockpit、hooks 四个模块的**唯一本地状态边界**。两条规则：
@@ -103,6 +108,9 @@ held-out 数据（通常是测试集）受到双重保护。两层保护必须�
 - **路径解析。** `installation_root()`、`workspace_root()`、`state_db_path()`、
   `heldout_root()` 等函数是定位资源的唯一合法途径。`PLUGIN_ROOT` 可以指向安装的
   插件资源；`RESEARCH_AGENT_WORKSPACE` 指向当前研究项目。
+- **项目配置。** `.research-agent/config.toml` 只能通过
+  `claudescientist.workspace_config` 读写。新增设置必须有校验、文档、明确的环境变量
+  映射和测试。
 - **SQLite 连接配置。** `connect_sqlite()` 启用 WAL 模式、外键约束、row factory 和 5 秒 busy timeout。`connect_existing_sqlite()` 是 hook 安全变体：状态缺失或损坏时返回 `None`，不创建新 DB。
 - **Schema 迁移记账。** `ra_migrations` 表按组件记录 schema 版本号、schema 哈希、应用状态和失败错误信息。无法用 `CREATE TABLE IF NOT EXISTS` 表达的结构性升级必须使用显式兼容性辅助函数，并附带测试。
 - **Cockpit 事件写入。** `emit_cockpit_event()` 是向 cockpit 推送事件的标准方式。生产者应当在与底层状态变更相同的事务里调用它。

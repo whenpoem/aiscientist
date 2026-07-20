@@ -267,7 +267,7 @@ def update_env_file(path: Path, updates: dict[str, str]) -> None:
         # our appended block so the diff is readable.
         if output and output[-1].strip() != "":
             output.append("")
-        output.append("# Appended by claudescientist setup")
+        output.append("# Appended by claudescientist dev-setup")
         for k in new_keys:
             output.append(f"{k}={updates[k]}")
 

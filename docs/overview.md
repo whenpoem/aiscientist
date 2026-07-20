@@ -74,6 +74,11 @@ Claude settings or the Codex plugin start the four core subprocesses:
 OpenAlex, and Lean are optional. They communicate over stdio, while local core
 state converges on the same workspace SQLite file.
 
+Ordinary plugin users run `claudescientist configure --workspace .` once in
+each research project. The resulting `.research-agent/config.toml` supplies
+non-secret runtime settings to the core MCPs, hooks, Doctor, and Cockpit.
+Environment variables can override those values for one launch.
+
 ## 4. End-to-end flow of a research task
 
 In Codex, type into Terminal A:

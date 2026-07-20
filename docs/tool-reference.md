@@ -1,4 +1,4 @@
-# MCP Tool Reference (v5.1.3)
+# MCP Tool Reference (v5.1.4)
 
 > 中文版本: [tool-reference.zh-CN.md](tool-reference.zh-CN.md)
 > Complete catalog of every MCP tool the project ships. Tools are grouped by server. Each entry lists the signature, what it does, what state it touches, and when you should call it. For the underlying contracts see [`architecture.md`](architecture.md); for end-to-end flows see [`workflows/`](workflows/).
@@ -573,13 +573,14 @@ Write an `agent_narration` event. `text` is 1–500 characters after stripping w
 
 ## External MCPs
 
-These run as third-party packages; we do not own their schemas. The v5.1.3
-public plugin bundles both definitions in the disabled state.
+These run as third-party packages; we do not own their schemas. The public
+plugin bundles all three definitions in the disabled state.
 
 | Server | Source | Use |
 |---|---|---|
 | `arxiv` | `arxiv-mcp-server==0.5.0` | Plugin-bundled, disabled by default; search and fetch arXiv papers |
 | `openalex` | `openalex-research-mcp@0.5.0` (npx) | Plugin-bundled, disabled by default; search and fetch OpenAlex works |
+| `lean` | `lean-lsp-mcp` through `claudescientist mcp lean` | Plugin-bundled, disabled by default; machine-check proofs in the workspace's configured mathlib project |
 
 ---
 

@@ -2,7 +2,7 @@
 
 **为 Claude Code 和 Codex 提供研究记录、结果验证和本地监控界面。**
 
-[![version](https://img.shields.io/badge/version-v5.1.3-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+[![version](https://img.shields.io/badge/version-v5.1.4-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 > English version: [README.md](README.md)
 
@@ -13,9 +13,10 @@ ClaudeScientist 为 Claude Code 和 Codex 提供持久化研究记录、结果�
 Agent 可以根据这些记录比较假说、运行带检查的实验，并核对报告中的结果。用户可以
 在第二个终端查看当前研究状态，也可以在任务运行期间批准、否决或修改研究方向。
 
-**当前版本**：v5.1.3 更新了公开安装和使用文档，分别说明 Python 包与 Codex
-插件的作用，并补充 Cockpit、Doctor、arXiv、OpenAlex 和 Lean 的完整启用步骤。
-它保留 v5.1.2 的公开插件集成以及 v5.1 的可信性校准与可移植性改动。BT 排名改为从完整
+**当前版本**：v5.1.4 把公开安装、每个研究项目的配置和源码开发分开。新增
+`claudescientist configure`，自动读取 `.research-agent/config.toml`，把 Lean 作为
+默认关闭的可选 MCP 加入插件，并把旧项目向导保留在 `dev-setup` 中供源码贡献者使用。
+它保留 v5.1 的可信性校准与可移植性改动。BT 排名改为从完整
 比较账本联合拟合，不再依赖写入顺序；区间明确标记为未经校准的近似。Bonferroni
 family 在锁定时固定。核心运行会自动记录代码、输入、Git 状态、依赖、种子和运行
 环境。公开 Codex 插件把核心 MCP、Skills、hooks 和本地 Cockpit 打包在一起，
@@ -71,23 +72,29 @@ codex --version
 安装 Python 包和公开插件：
 
 ```powershell
-uv tool install claudescientist==5.1.3
+uv tool install claudescientist==5.1.4
 claudescientist setup --scope user
 ```
 
 第一条命令安装命令行工具、MCP 后端、Doctor 和 Cockpit。第二条命令从 GitHub
-的 `v5.1.3` 标签安装 Codex 插件。插件包含 Skills、hooks 和 MCP 配置。安装完成后，
+的 `v5.1.4` 标签安装 Codex 插件。插件包含 Skills、hooks 和 MCP 配置。安装完成后，
 可以在任意研究项目中使用，不需要从 ClaudeScientist 源码仓库启动 Codex。
 
-安装后新建一个 Codex 任务，并在 Codex 提示时信任插件 hooks。即使 hooks 尚未
-信任，MCP 与 Cockpit 仍能监控；但 Cockpit 干预只能处于 `monitor-only` 状态。
-
-进入准备研究的项目目录并检查安装：
+进入每个研究项目后，为这个工作区配置一次，再运行检查：
 
 ```powershell
 cd D:\你的研究项目
+claudescientist configure --workspace .
 claudescientist doctor --workspace .
 ```
+
+配置命令会把非敏感的项目设置写入 `.research-agent/config.toml`，包括 embedding
+后端、held-out 数据目录、自动剪枝和可选的 Lean 项目路径。ClaudeScientist 会自动
+读取这个文件，普通插件用户不需要手动加载项目 `.env`。
+
+安装或修改配置后，新建一个 Codex 任务，并在 Codex 提示时查看和信任插件 hooks。
+即使 hooks 尚未信任，MCP 与 Cockpit 仍能监控；但 Cockpit 干预只能处于
+`monitor-only` 状态。
 
 在这个项目中启动 Codex，并在第二个终端用同一个目录打开 Cockpit：
 
@@ -101,15 +108,14 @@ claudescientist cockpit --workspace . --lang zh
 在 Codex 中输入 `$research-sop <研究问题>` 可以启动完整研究流程，也可以通过
 `/skills` 选择具体 Skill。每个项目的状态独立保存在 `.research-agent/state.db`。
 
-插件默认只启用 `memory`、`verify`、`prove`、`cockpit` 四个本地核心 MCP。
-v5.1.3 同时携带已固定版本、
-默认关闭的 arXiv 和 OpenAlex MCP 定义；用户可以直接在 Codex 的 MCP 设置中开启，
-不必手工新增服务器。Lean 需要另外安装 Lean 工具链并手动注册 `lean-lsp-mcp`。
+插件默认只启用 `memory`、`verify`、`prove`、`cockpit` 四个本地核心 MCP，同时携带
+已固定版本、默认关闭的 arXiv、OpenAlex 和 Lean MCP 定义。用户可以直接在 Codex
+设置中按需开启。Lean 还需要另行安装工具链并创建 mathlib 项目。
 详细步骤见 [Codex 安装与使用指南](docs/setup-codex-plugin.zh-CN.md) 和
 [Lean 安装指南](docs/setup-lean.zh-CN.md)。
 
-普通插件用户不要运行 `claudescientist setup --scope project`。这个命令是下文介绍的
-源码仓库向导，会生成项目级开发配置，不是公开插件安装后的必做步骤。
+普通插件用户不要运行 `claudescientist dev-setup`。旧命令
+`claudescientist setup --scope project` 暂时保留为兼容入口，但会显示弃用提示。
 
 ### 从源码仓库开发
 
@@ -117,7 +123,7 @@ v5.1.3 同时携带已固定版本、
 
 ```powershell
 uv sync
-uv run python -m claudescientist.setup
+uv run claudescientist dev-setup
 ```
 
 向导会一步步引导你完成 AI 客户端选择（`claude`、`codex` 或 `both`）、embedding 后端、证明语料灌入、隔离数据目录、Lean 工具链和自动剪枝等配置。随时可以重新运行；已完成的步骤会自动跳过。
@@ -131,7 +137,7 @@ uv run python -m claudescientist.setup
 启动；OpenAlex 通过 `npx -y openalex-research-mcp@0.5.0` 启动，所以如果要用
 OpenAlex 相关 librarian 工具，需要先安装 Node.js/npm。当前开发分支的插件已携带
 这两个定义，但默认保持关闭；启用方法见
-[docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md#可选功能)。
+[docs/setup-codex-plugin.zh-CN.md](docs/setup-codex-plugin.zh-CN.md)。
 
 <details><summary>手动安装（不用向导）</summary>
 

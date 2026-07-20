@@ -21,10 +21,18 @@ ClaudeScientist 的 `openai` 嵌入后端可以对接任何提供 OpenAI
 | `RESEARCH_AGENT_EMBED_MODEL` | 服务商要求的模型名 |
 | `OPENAI_API_KEY` | 服务商的 API key（兼容服务商都通过这个变量接收 key）|
 
-设置向导会把这些值写进 `.env`。日后想换服务商，改 `.env` 就行（或者
-重跑 `uv run python -m claudescientist.setup --reset`），改完后跑
-`uv run python scripts/reindex_proof_corpus.py` 把已有语料在新模型下
-重新编码。
+普通插件用户通过下面的命令设置前三项：
+
+```powershell
+claudescientist configure --workspace . --embedding-backend openai
+```
+
+命令会把非敏感设置写入 `.research-agent/config.toml`，`OPENAI_API_KEY` 仍由环境变量
+提供。源码贡献者可以继续使用 `claudescientist dev-setup`，它会写入源码仓库的
+`.env`。
+
+更换服务商或模型后，应当先用新后端重新索引已有证明语料。源码贡献者可以运行
+`uv run python scripts/reindex_proof_corpus.py`。
 
 ## 已测试的预设方案
 
