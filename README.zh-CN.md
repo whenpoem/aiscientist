@@ -1,5 +1,8 @@
 # ClaudeScientist
 
+> [!WARNING]
+> **已归档。** 由于大语言模型（LLM）能力和 harness 的快速进步，此项目已经失去继续维护和开发的意义，现暂时归档并停止维护，待确定下一步的开发方向后再取消归档。归档期间，仍可以从本仓库或 [PyPI](https://pypi.org/project/claudescientist/) 下载和使用现有版本（v5.1.4）；如需继续开发，可以 fork 本仓库。
+
 **为 Claude Code 和 Codex 提供研究记录、结果验证和本地监控界面。**
 
 [![version](https://img.shields.io/badge/version-v5.1.4-blue)](https://github.com/whenpoem/aiscientist/releases) [![python](https://img.shields.io/badge/python-%E2%89%A53.11-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![CI](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml/badge.svg)](https://github.com/whenpoem/aiscientist/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
